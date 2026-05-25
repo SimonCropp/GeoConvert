@@ -61,10 +61,10 @@ public class ParquetInternalsTests
     public async Task Rle_decodes_rle_runs()
     {
         // Hand-crafted RLE run: header (5 << 1) | 0, value 1, bit width 1 → five 1s.
-        await Assert.That(ParquetEncoding.DecodeRle([0x0A, 0x01], 0, 5, 1)).IsEquivalentTo(new[] { 1, 1, 1, 1, 1 });
+        await Assert.That(ParquetEncoding.DecodeRle([0x0A, 0x01], 0, 5, 1)).IsEquivalentTo([1, 1, 1, 1, 1]);
 
         // Bit width 0: RLE run of three zeros, no value bytes.
-        await Assert.That(ParquetEncoding.DecodeRle([0x06], 0, 3, 0)).IsEquivalentTo(new[] { 0, 0, 0 });
+        await Assert.That(ParquetEncoding.DecodeRle([0x06], 0, 3, 0)).IsEquivalentTo([0, 0, 0]);
     }
 
     [Test]

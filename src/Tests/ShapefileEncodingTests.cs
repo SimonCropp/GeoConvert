@@ -46,8 +46,13 @@ public class ShapefileEncodingTests
     {
         var shpPath = Path.Combine(directory, "x.shp");
         var collection = new FeatureCollection();
-        var feature = new Feature(new Point(new Position(1, 2)));
-        feature.Properties["NAME"] = "x";
+        var feature = new Feature(new Point(new(1, 2)))
+        {
+            Properties =
+            {
+                ["NAME"] = "x"
+            }
+        };
         collection.Add(feature);
         Shapefile.Write(shpPath, collection);
         return shpPath;
@@ -56,7 +61,7 @@ public class ShapefileEncodingTests
     [Test]
     public async Task Dbf_decodes_text_with_the_supplied_encoding()
     {
-        var record = Padded(Encoding.UTF8.GetBytes("Zürich"), 10);
+        var record = Padded("Zürich"u8.ToArray(), 10);
         var bytes = BuildDbf("NAME", 10, record);
 
         var utf8 = Dbf.Read(new MemoryStream(bytes), Encoding.UTF8);
@@ -72,8 +77,8 @@ public class ShapefileEncodingTests
     {
         using var directory = new TempDirectory();
         var shpPath = WriteOnePointShapefile(directory);
-        File.WriteAllBytes(Path.ChangeExtension(shpPath, ".dbf"), BuildDbf("NAME", 10, Padded(Encoding.UTF8.GetBytes("Zürich"), 10)));
-        File.WriteAllText(Path.ChangeExtension(shpPath, ".cpg"), "UTF-8");
+        await File.WriteAllBytesAsync(Path.ChangeExtension(shpPath, ".dbf"), BuildDbf("NAME", 10, Padded("Zürich"u8.ToArray(), 10)));
+        await File.WriteAllTextAsync(Path.ChangeExtension(shpPath, ".cpg"), "UTF-8");
 
         var read = Shapefile.Read(shpPath);
         await Assert.That(read.Features[0].Properties["NAME"]).IsEqualTo("Zürich");
@@ -84,8 +89,8 @@ public class ShapefileEncodingTests
     {
         using var directory = new TempDirectory();
         var shpPath = WriteOnePointShapefile(directory);
-        File.WriteAllBytes(Path.ChangeExtension(shpPath, ".dbf"), BuildDbf("NAME", 10, Padded(Encoding.Latin1.GetBytes("Zürich"), 10)));
-        File.WriteAllText(Path.ChangeExtension(shpPath, ".cpg"), "ISO-8859-1");
+        await File.WriteAllBytesAsync(Path.ChangeExtension(shpPath, ".dbf"), BuildDbf("NAME", 10, Padded(Encoding.Latin1.GetBytes("Zürich"), 10)));
+        await File.WriteAllTextAsync(Path.ChangeExtension(shpPath, ".cpg"), "ISO-8859-1");
 
         var read = Shapefile.Read(shpPath);
         await Assert.That(read.Features[0].Properties["NAME"]).IsEqualTo("Zürich");

@@ -12,7 +12,7 @@ namespace GeoConvert;
 public static class GeoParquet
 {
     // "PAR1"
-    static readonly byte[] magic = [0x50, 0x41, 0x52, 0x31];
+    static readonly byte[] magic = "PAR1"u8.ToArray();
     const string geometryColumnName = "geometry";
     const int defaultCodec = ParquetMetadata.CodecSnappy;
 
@@ -198,9 +198,7 @@ public static class GeoParquet
                 }
             }
 
-            var present = definitions == null
-                ? header.NumValues
-                : definitions.Count(level => level == maxDefinition);
+            var present = definitions?.Count(level => level == maxDefinition) ?? header.NumValues;
             var pageValues = DecodePageValues(body, valueOffset, present, type, header, dictionary);
 
             var valueIndex = 0;

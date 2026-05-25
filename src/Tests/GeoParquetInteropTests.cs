@@ -44,7 +44,7 @@ public class GeoParquetInteropTests
         {
             writer.CustomMetadata = new Dictionary<string, string> { ["geo"] = geo };
             using var rowGroup = writer.CreateRowGroup();
-            await rowGroup.WriteAsync(geometryField, new[] { Wkb.ToBytes(new Point(new(8, 9))) });
+            await rowGroup.WriteAsync(geometryField, [Wkb.ToBytes(new Point(new(8, 9)))]);
         }
 
         stream.Position = 0;
@@ -73,9 +73,9 @@ public class GeoParquetInteropTests
             using var rowGroup = writer.CreateRowGroup();
             var first = Wkb.ToBytes(new Point(new(1, 2)));
             var second = Wkb.ToBytes(new Point(new(3, 4)));
-            await rowGroup.WriteAsync(geometryField, new[] { first, second });
+            await rowGroup.WriteAsync(geometryField, [first, second]);
             // Repeated string values push Parquet.Net to dictionary-encode the column.
-            await rowGroup.WriteAsync(nameField, new[] { "town", "town" });
+            await rowGroup.WriteAsync(nameField, ["town", "town"]);
             await rowGroup.WriteAsync(popField, (ReadOnlyMemory<long?>)new long?[] { 5, null });
             await rowGroup.WriteAsync(countField, (ReadOnlyMemory<int>)new[] { 7, 8 });
         }
