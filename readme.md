@@ -120,7 +120,7 @@ geoconvert world.geojson europe.png --bbox -10,35,30,60 --size 1200x900
 
 All Australian suburbs
 
-<img src="/src/Tests/PngTests.Render_RealMap.verified.png" height="1000px">
+<img src="/src/Tests/PngTests.Render_RealMap.verified.png" height="1100px">
 
 
 ## Command line
