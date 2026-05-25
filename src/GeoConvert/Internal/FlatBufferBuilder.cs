@@ -138,12 +138,12 @@ sealed class FlatBufferBuilder
 
     public int CreateString(string value)
     {
-        var utf8 = Encoding.UTF8.GetBytes(value);
-        Prep(4, utf8.Length + 1);
+        var byteCount = Encoding.UTF8.GetByteCount(value);
+        Prep(4, byteCount + 1);
         buffer[--space] = 0; // null terminator
-        space -= utf8.Length;
-        utf8.CopyTo(buffer.AsSpan(space));
-        vectorElements = utf8.Length;
+        space -= byteCount;
+        Encoding.UTF8.GetBytes(value, buffer.AsSpan(space, byteCount));
+        vectorElements = byteCount;
         return EndVector();
     }
 

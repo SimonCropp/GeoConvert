@@ -33,4 +33,27 @@ static class SampleData
 
         return collection;
     }
+
+    /// <summary>Points carrying many attribute columns — stresses the .dbf field-inference path.</summary>
+    public static FeatureCollection WidePoints(int count, int columns)
+    {
+        var collection = new FeatureCollection();
+        for (var i = 0; i < count; i++)
+        {
+            var feature = new Feature(new Point(i % 360 - 180, i % 180 - 90));
+            for (var c = 0; c < columns; c++)
+            {
+                feature.Properties[$"col{c}"] = (c % 3) switch
+                {
+                    0 => (long)(i * c),
+                    1 => i * 0.125 + c,
+                    _ => $"value-{i}-{c}",
+                };
+            }
+
+            collection.Add(feature);
+        }
+
+        return collection;
+    }
 }
