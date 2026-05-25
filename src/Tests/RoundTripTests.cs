@@ -31,6 +31,10 @@ public class RoundTripTests
         VerifyRoundTrip(GeoFormat.Csv, Sample.Mixed());
 
     [Test]
+    public Task Roundtrip_geoparquet() =>
+        VerifyRoundTrip(GeoFormat.GeoParquet, Sample.Mixed());
+
+    [Test]
     public Task Roundtrip_flatgeobuf() =>
         VerifyRoundTrip(GeoFormat.FlatGeobuf, Sample.Mixed());
 

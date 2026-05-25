@@ -13,5 +13,7 @@
     <PackageVersion Include="Verify.TUnit" Version="31.17.0" />
     <PackageVersion Include="Verify.DiffPlex" Version="3.1.2" />
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
+    <!-- Test-only: cross-validates the hand-rolled GeoParquet codec against an independent reader/writer. -->
+    <PackageVersion Include="Parquet.Net" Version="6.0.3" />
   </ItemGroup>
 </Project>

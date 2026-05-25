@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net11.0</TargetFramework>
     <OutputType>Exe</OutputType>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
@@ -12,6 +12,7 @@
     <PackageReference Include="TUnit" />
     <PackageReference Include="Verify.TUnit" />
     <PackageReference Include="Verify.DiffPlex" />
+    <PackageReference Include="Parquet.Net" />
     <!-- Polyfill is consumed from GeoConvert via InternalsVisibleTo; a second copy here would clash. -->
     <PackageReference Include="MarkdownSnippets.MsBuild" PrivateAssets="all" />
     <PackageReference Include="ProjectDefaults" PrivateAssets="all" />

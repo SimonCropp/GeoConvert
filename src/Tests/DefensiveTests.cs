@@ -17,6 +17,7 @@ public class DefensiveTests
         await Assert.That(G.ThrowsGeo(() => Write(Bad(), GeoFormat.Kml))).IsTrue();
         await Assert.That(G.ThrowsGeo(() => Write(Bad(), GeoFormat.Gpx))).IsTrue();
         await Assert.That(G.ThrowsGeo(() => Write(Bad(), GeoFormat.FlatGeobuf))).IsTrue();
+        await Assert.That(G.ThrowsGeo(() => Write(Bad(), GeoFormat.GeoParquet))).IsTrue();
         await Assert.That(G.ThrowsGeo(WriteBadShapefile)).IsTrue();
     }
 
@@ -59,6 +60,22 @@ public class DefensiveTests
     {
         using var stream = new MemoryStream([1, 2, 3, 4, 5, 6, 7, 8]);
         await Assert.That(G.ThrowsGeo(() => FlatGeobuf.Read(stream))).IsTrue();
+    }
+
+    [Test]
+    public async Task GeoParquet_rejects_bad_magic()
+    {
+        using var stream = new MemoryStream([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+        await Assert.That(G.ThrowsGeo(() => GeoParquet.Read(stream))).IsTrue();
+    }
+
+    [Test]
+    public async Task GeoParquet_rejects_corrupt_footer()
+    {
+        // Valid PAR1 magic at both ends but a footer length that points outside the buffer.
+        byte[] data = [0x50, 0x41, 0x52, 0x31, 0xFF, 0xFF, 0xFF, 0x7F, 0x50, 0x41, 0x52, 0x31];
+        using var stream = new MemoryStream(data);
+        await Assert.That(G.ThrowsGeo(() => GeoParquet.Read(stream))).IsTrue();
     }
 
     [Test]

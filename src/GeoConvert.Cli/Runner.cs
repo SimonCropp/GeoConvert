@@ -21,6 +21,8 @@ public static class Runner
         ["wkt"] = GeoFormat.Wkt,
         ["wkb"] = GeoFormat.Wkb,
         ["csv"] = GeoFormat.Csv,
+        ["geoparquet"] = GeoFormat.GeoParquet,
+        ["parquet"] = GeoFormat.GeoParquet,
         ["png"] = GeoFormat.Png,
     };
 
@@ -243,6 +245,7 @@ public static class Runner
               wkt        .wkt
               wkb        .wkb
               csv        .csv
+              geoparquet .parquet .geoparquet
               png        .png (write-only; use --bbox and --size)
             """);
 }

@@ -16,7 +16,8 @@ public class ConvertBenchmarks
         GeoFormat.Wkt,
         GeoFormat.Wkb,
         GeoFormat.Csv,
-        GeoFormat.FlatGeobuf)]
+        GeoFormat.FlatGeobuf,
+        GeoFormat.GeoParquet)]
     public GeoFormat Format { get; set; }
 
     [GlobalSetup]

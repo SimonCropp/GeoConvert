@@ -25,6 +25,7 @@ All vector formats can be both read and written; PNG is a write-only raster expo
 | [WKT](https://www.ogc.org/standards/sfa/) | `.wkt` | Text |
 | [WKB](https://www.ogc.org/standards/sfa/) | `.wkb` | Binary |
 | [CSV](https://datatracker.ietf.org/doc/html/rfc4180) | `.csv` | Text (WKT or lon/lat columns) |
+| [GeoParquet](https://geoparquet.org/) | `.parquet`, `.geoparquet` | Binary (Apache Parquet) |
 | [PNG](https://www.w3.org/TR/png-3/) | `.png` | Raster image (write-only) |
 
 All coordinates are treated as [WGS84 (EPSG:4326)](https://epsg.io/4326) longitude/latitude.
@@ -186,6 +187,12 @@ dotnet run -c Release --project src/Benchmarks -- --filter "*"
   in turn. Reading a track with several segments yields a multi line string, so polygons do not survive
   a round trip as polygons.
 * **WKT** and **WKB** carry geometry only — feature attributes are dropped on write.
+* **GeoParquet** is written as a single row group with PLAIN-encoded, Snappy-compressed pages and a flat
+  schema; geometry is stored as WKB (Z/M preserved) with the CRS defaulting to OGC:CRS84. The whole
+  Parquet container is hand-rolled to honour the no-dependency rule, so the supported surface is a subset:
+  on read it also handles GZIP/uncompressed pages, dictionary encoding and data page V2 (as written by
+  GDAL, DuckDB and pyarrow). **Zstd** pages are read on **.NET 11** builds (where Zstd is part of the
+  BCL) and rejected with a clear error on earlier targets.
 * **PNG** is a write-only raster export; reading a `.png` throws. It needs an extent — when no
   `Bounds` is given, the full extent of the data is used.
 * Property values are scalars (`string`, `long`, `double`, `bool`); nested JSON is flattened.

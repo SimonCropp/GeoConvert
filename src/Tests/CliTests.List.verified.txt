@@ -9,4 +9,5 @@
   wkt        .wkt
   wkb        .wkb
   csv        .csv
+  geoparquet .parquet .geoparquet
   png        .png (write-only; use --bbox and --size)

@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+    <TargetFrameworks>net8.0;net9.0;net10.0;net11.0</TargetFrameworks>
     <IsPackable>true</IsPackable>
     <PackageReadmeFile>readme.md</PackageReadmeFile>
     <Description>Convert maps between GeoJSON, TopoJSON, Shapefile, FlatGeobuf, KML/KMZ, GPX, WKT, WKB and CSV. No third-party dependencies.</Description>

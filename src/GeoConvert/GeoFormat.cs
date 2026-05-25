@@ -13,6 +13,7 @@ public enum GeoFormat
     Wkt,
     Wkb,
     Csv,
+    GeoParquet,
 
     /// <summary>A rendered raster image. Write-only — see <see cref="MapRenderer"/>.</summary>
     Png,

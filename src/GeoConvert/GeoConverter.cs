@@ -23,6 +23,8 @@ public static class GeoConverter
             ".wkt" => GeoFormat.Wkt,
             ".wkb" => GeoFormat.Wkb,
             ".csv" => GeoFormat.Csv,
+            ".parquet" => GeoFormat.GeoParquet,
+            ".geoparquet" => GeoFormat.GeoParquet,
             ".png" => GeoFormat.Png,
             _ => throw new GeoConvertException($"Cannot determine a map format from extension '{extension}'."),
         };
@@ -56,6 +58,7 @@ public static class GeoConverter
             GeoFormat.Wkt => Wkt.Read(stream),
             GeoFormat.Wkb => Wkb.Read(stream),
             GeoFormat.Csv => Csv.Read(stream),
+            GeoFormat.GeoParquet => GeoParquet.Read(stream),
             GeoFormat.Shapefile => throw new GeoConvertException(
                 "Shapefiles span multiple files; read them with a file path, not a stream."),
             GeoFormat.Png => throw new GeoConvertException(
@@ -110,6 +113,9 @@ public static class GeoConverter
                 break;
             case GeoFormat.Csv:
                 Csv.Write(stream, collection);
+                break;
+            case GeoFormat.GeoParquet:
+                GeoParquet.Write(stream, collection);
                 break;
             case GeoFormat.Png:
                 MapRenderer.RenderPng(collection, stream);

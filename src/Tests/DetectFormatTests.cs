@@ -12,6 +12,8 @@ public class DetectFormatTests
     [Arguments("a.wkt", GeoFormat.Wkt)]
     [Arguments("a.wkb", GeoFormat.Wkb)]
     [Arguments("a.csv", GeoFormat.Csv)]
+    [Arguments("a.parquet", GeoFormat.GeoParquet)]
+    [Arguments("a.geoparquet", GeoFormat.GeoParquet)]
     [Arguments("a.png", GeoFormat.Png)]
     [Arguments("DATA.GeoJSON", GeoFormat.GeoJson)]
     public async Task Detect(string path, GeoFormat expected) =>
