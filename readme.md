@@ -8,6 +8,8 @@ Convert maps between geospatial formats, with **no third-party dependencies** â€
 class libraries (`System.Text.Json`, `System.Xml`, `System.IO.Compression`). It can also render a
 bounding box to a PNG image. Ships as a library and a `geoconvert` command line tool.
 
+Has no dependencies.
+
 
 ## Supported formats
 
@@ -15,17 +17,17 @@ All vector formats can be both read and written; PNG is a write-only raster expo
 
 | Format | Extension(s) | Kind |
 | --- | --- | --- |
-| GeoJSON | `.geojson`, `.json` | JSON |
-| TopoJSON | `.topojson` | JSON (topology encoded) |
-| Shapefile | `.shp` (+ `.shx`, `.dbf`, `.prj`) | Binary |
-| FlatGeobuf | `.fgb` | Binary (FlatBuffers) |
-| KML | `.kml` | XML |
-| KMZ | `.kmz` | Zipped KML |
-| GPX | `.gpx` | XML |
-| WKT | `.wkt` | Text |
-| WKB | `.wkb` | Binary |
-| CSV | `.csv` | Text (WKT or lon/lat columns) |
-| PNG | `.png` | Raster image (write-only) |
+| [GeoJSON](https://datatracker.ietf.org/doc/html/rfc7946) | `.geojson`, `.json` | JSON |
+| [TopoJSON](https://github.com/topojson/topojson-specification) | `.topojson` | JSON (topology encoded) |
+| [Shapefile](https://www.esri.com/library/whitepapers/pdfs/shapefile.pdf) | `.shp` (+ `.shx`, `.dbf`, `.prj`) | Binary |
+| [FlatGeobuf](https://flatgeobuf.org/) | `.fgb` | Binary (FlatBuffers) |
+| [KML](https://www.ogc.org/standards/kml/) | `.kml` | XML |
+| [KMZ](https://developers.google.com/kml/documentation/kmzarchives) | `.kmz` | Zipped KML |
+| [GPX](https://www.topografix.com/gpx.asp) | `.gpx` | XML |
+| [WKT](https://www.ogc.org/standards/sfa/) | `.wkt` | Text |
+| [WKB](https://www.ogc.org/standards/sfa/) | `.wkb` | Binary |
+| [CSV](https://datatracker.ietf.org/doc/html/rfc4180) | `.csv` | Text (WKT or lon/lat columns) |
+| [PNG](https://www.w3.org/TR/png-3/) | `.png` | Raster image (write-only) |
 
 All coordinates are treated as WGS84 (EPSG:4326) longitude/latitude.
 
@@ -181,4 +183,5 @@ dotnet run -c Release --project src/Benchmarks -- --filter "*"
 
 ## Icon
 
-https://thenounproject.com/icon/pattern-8166303/
+[Pattern](https://thenounproject.com/icon/pattern-8166303/) designed by [Kim Sun Young](https://thenounproject.com/creator/hookeeak/) from [The Noun Project](https://thenounproject.com).
+
