@@ -29,6 +29,16 @@ sealed class FlatBufferBuilder
         buffer = grown;
     }
 
+    void EnsureSpace(int bytes)
+    {
+        while (space < bytes)
+        {
+            var oldLength = buffer.Length;
+            GrowBuffer();
+            space += buffer.Length - oldLength;
+        }
+    }
+
     void Prep(int size, int additionalBytes)
     {
         if (size > minAlign)
@@ -205,15 +215,19 @@ sealed class FlatBufferBuilder
 
     public int EndTable()
     {
-        PutInt(0); // placeholder for the soffset to the vtable
-        var tableLocation = Offset;
-
         // Trim trailing unset fields so the vtable is no larger than needed (matches the spec).
         var fieldCount = vtableSize;
         while (fieldCount > 0 && vtable[fieldCount - 1] == 0)
         {
             fieldCount--;
         }
+
+        // The writes below (the soffset placeholder plus the vtable shorts) bypass Prep, so make sure
+        // the buffer has room first — otherwise large tables underflow space and overrun the buffer.
+        EnsureSpace(sizeof(int) + (fieldCount + 2) * sizeof(short));
+
+        PutInt(0); // placeholder for the soffset to the vtable
+        var tableLocation = Offset;
 
         for (var i = fieldCount - 1; i >= 0; i--)
         {
