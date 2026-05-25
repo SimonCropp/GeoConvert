@@ -1,0 +1,50 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <Placemark>
+      <name>alpha</name>
+      <ExtendedData>
+        <Data name="pop">
+          <value>1200</value>
+        </Data>
+        <Data name="ratio">
+          <value>3.14</value>
+        </Data>
+      </ExtendedData>
+      <Point>
+        <coordinates>1.5,2.5</coordinates>
+      </Point>
+    </Placemark>
+    <Placemark>
+      <name>road</name>
+      <ExtendedData>
+        <Data name="lanes">
+          <value>2</value>
+        </Data>
+      </ExtendedData>
+      <LineString>
+        <coordinates>0,0 1,1 2,0</coordinates>
+      </LineString>
+    </Placemark>
+    <Placemark>
+      <name>block</name>
+      <ExtendedData>
+        <Data name="active">
+          <value>true</value>
+        </Data>
+      </ExtendedData>
+      <Polygon>
+        <outerBoundaryIs>
+          <LinearRing>
+            <coordinates>0,0 4,0 4,4 0,4 0,0</coordinates>
+          </LinearRing>
+        </outerBoundaryIs>
+        <innerBoundaryIs>
+          <LinearRing>
+            <coordinates>1,1 2,1 2,2 1,2 1,1</coordinates>
+          </LinearRing>
+        </innerBoundaryIs>
+      </Polygon>
+    </Placemark>
+  </Document>
+</kml>

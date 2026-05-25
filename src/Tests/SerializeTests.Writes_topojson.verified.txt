@@ -1,0 +1,107 @@
+﻿{
+  "type": "Topology",
+  "objects": {
+    "data": {
+      "type": "GeometryCollection",
+      "geometries": [
+        {
+          "type": "Point",
+          "coordinates": [
+            1.5,
+            2.5
+          ],
+          "properties": {
+            "name": "alpha",
+            "pop": 1200,
+            "ratio": 3.14
+          }
+        },
+        {
+          "type": "LineString",
+          "arcs": [
+            0
+          ],
+          "properties": {
+            "name": "road",
+            "lanes": 2
+          }
+        },
+        {
+          "type": "Polygon",
+          "arcs": [
+            [
+              1
+            ],
+            [
+              2
+            ]
+          ],
+          "properties": {
+            "name": "block",
+            "active": true
+          }
+        }
+      ]
+    }
+  },
+  "arcs": [
+    [
+      [
+        0,
+        0
+      ],
+      [
+        1,
+        1
+      ],
+      [
+        2,
+        0
+      ]
+    ],
+    [
+      [
+        0,
+        0
+      ],
+      [
+        4,
+        0
+      ],
+      [
+        4,
+        4
+      ],
+      [
+        0,
+        4
+      ],
+      [
+        0,
+        0
+      ]
+    ],
+    [
+      [
+        1,
+        1
+      ],
+      [
+        2,
+        1
+      ],
+      [
+        2,
+        2
+      ],
+      [
+        1,
+        2
+      ],
+      [
+        1,
+        1
+      ]
+    ]
+  ]
+}

@@ -1,0 +1,28 @@
+## Build output
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+artifacts/
+
+## Locally built nuget packages
+nugets/
+
+## Test + coverage output
+TestResults/
+
+## Verify
+*.received.*
+*.received/
+
+## Rider / VS / VS Code
+.vs/
+.idea/
+*.user
+*.suo
+.vscode/
+
+## OS
+.DS_Store
+Thumbs.db
+.claude/settings.local.json

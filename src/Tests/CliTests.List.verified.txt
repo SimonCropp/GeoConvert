@@ -1,0 +1,12 @@
+﻿Supported formats (read and write):
+  geojson    .geojson .json
+  topojson   .topojson
+  shapefile  .shp (+ .shx .dbf .prj)
+  flatgeobuf .fgb
+  kml        .kml
+  kmz        .kmz
+  gpx        .gpx
+  wkt        .wkt
+  wkb        .wkb
+  csv        .csv
+  png        .png (write-only; use --bbox and --size)

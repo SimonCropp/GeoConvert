@@ -1,0 +1,20 @@
+﻿geoconvert - convert maps between geospatial formats.
+
+Usage:
+  geoconvert <input> <output> [--from <format>] [--to <format>]
+
+Formats are detected from file extensions; --from/--to override that.
+
+Options:
+  --from <format>        Force the input format.
+  --to <format>          Force the output format.
+  --bbox minX,minY,maxX,maxY   Extent to render (PNG output only).
+  --size WIDTH[xHEIGHT]  Image size in pixels (PNG output only).
+  --list                 List supported formats.
+  -h, --help             Show this help.
+
+Examples:
+  geoconvert cities.geojson cities.kml
+  geoconvert roads.shp roads.fgb
+  geoconvert data.csv data.geojson --from csv
+  geoconvert world.geojson europe.png --bbox -10,35,30,60 --size 1200x900
