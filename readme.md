@@ -155,6 +155,6 @@ Everything reads into and writes out of a `FeatureCollection`:
 * Property values are scalars (`string`, `long`, `double`, `bool`); nested JSON is flattened.
 
 
-## License
+## Icon
 
-[MIT](license.txt)
+https://thenounproject.com/icon/pattern-8166303/

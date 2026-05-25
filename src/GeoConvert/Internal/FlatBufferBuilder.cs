@@ -86,32 +86,12 @@ sealed class FlatBufferBuilder
         BinaryPrimitives.WriteDoubleLittleEndian(buffer.AsSpan(space), value);
     }
 
-    public void AddBool(int field, bool value, bool defaultValue)
-    {
-        if (value != defaultValue)
-        {
-            Prep(1, 0);
-            PutByte((byte)(value ? 1 : 0));
-            Slot(field);
-        }
-    }
-
     public void AddByte(int field, byte value, byte defaultValue)
     {
         if (value != defaultValue)
         {
             Prep(1, 0);
             PutByte(value);
-            Slot(field);
-        }
-    }
-
-    public void AddShort(int field, short value, short defaultValue)
-    {
-        if (value != defaultValue)
-        {
-            Prep(2, 0);
-            PutShort(value);
             Slot(field);
         }
     }
@@ -232,13 +212,20 @@ sealed class FlatBufferBuilder
         PutInt(0); // placeholder for the soffset to the vtable
         var tableLocation = Offset;
 
-        for (var i = vtableSize - 1; i >= 0; i--)
+        // Trim trailing unset fields so the vtable is no larger than needed (matches the spec).
+        var fieldCount = vtableSize;
+        while (fieldCount > 0 && vtable[fieldCount - 1] == 0)
+        {
+            fieldCount--;
+        }
+
+        for (var i = fieldCount - 1; i >= 0; i--)
         {
             PutShort((short)(vtable[i] != 0 ? tableLocation - vtable[i] : 0));
         }
 
         PutShort((short)(tableLocation - objectStart));
-        PutShort((short)((vtableSize + 2) * sizeof(short)));
+        PutShort((short)((fieldCount + 2) * sizeof(short)));
 
         var vtableLocation = Offset;
         BinaryPrimitives.WriteInt32LittleEndian(

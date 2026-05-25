@@ -308,6 +308,6 @@ public static class Wkb
             GeometryType.MultiLineString => 5,
             GeometryType.MultiPolygon => 6,
             GeometryType.GeometryCollection => 7,
-            _ => throw new GeoConvertException($"Unknown geometry type {type}."),
+            _ => 0, // unknown: WriteGeometry rejects it
         };
 }

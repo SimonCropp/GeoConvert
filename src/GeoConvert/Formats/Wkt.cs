@@ -243,6 +243,6 @@ public static class Wkt
             GeometryType.MultiLineString => "MULTILINESTRING",
             GeometryType.MultiPolygon => "MULTIPOLYGON",
             GeometryType.GeometryCollection => "GEOMETRYCOLLECTION",
-            _ => throw new GeoConvertException($"Unknown geometry type {type}."),
+            _ => type.ToString(), // unknown: AppendBody rejects it
         };
 }

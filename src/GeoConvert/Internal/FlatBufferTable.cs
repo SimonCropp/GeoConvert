@@ -22,12 +22,6 @@ readonly struct FlatBufferTable(byte[] buffer, int position)
         return offset == 0 ? 0 : position + offset;
     }
 
-    public bool GetBool(int field, bool defaultValue)
-    {
-        var offset = FieldOffset(field);
-        return offset == 0 ? defaultValue : buffer[offset] != 0;
-    }
-
     public byte GetByte(int field, byte defaultValue)
     {
         var offset = FieldOffset(field);
@@ -38,12 +32,6 @@ readonly struct FlatBufferTable(byte[] buffer, int position)
     {
         var offset = FieldOffset(field);
         return offset == 0 ? defaultValue : BinaryPrimitives.ReadUInt16LittleEndian(buffer.AsSpan(offset));
-    }
-
-    public int GetInt(int field, int defaultValue)
-    {
-        var offset = FieldOffset(field);
-        return offset == 0 ? defaultValue : BinaryPrimitives.ReadInt32LittleEndian(buffer.AsSpan(offset));
     }
 
     public ulong GetULong(int field, ulong defaultValue)

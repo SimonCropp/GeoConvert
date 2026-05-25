@@ -23,6 +23,11 @@ Run from the repo root.
   (`/<asm>/<namespace>/<class>/<method>`, `*` wildcards allowed).
 - Run the CLI: `dotnet run --project src/GeoConvert.Cli -- input.geojson output.kml`
   (PNG: `... world.geojson map.png --bbox minX,minY,maxX,maxY --size WxH`).
+- Coverage: run the test exe with `--coverage --coverage-output-format cobertura --coverage-output
+  unit.cobertura.xml --results-directory TestResults`, then gate with
+  `pwsh src/coverage-check.ps1 -Report TestResults/unit.cobertura.xml`. The shipped source is kept at
+  **100% line coverage** (the gate, and CI, fail below that). `coverage-check.ps1` scopes to files under
+  `src/` excluding the test project (Microsoft coverage instruments everything otherwise).
 
 ## Verify snapshots
 
@@ -79,6 +84,10 @@ write-only and needs an extent (defaults to the data bounds).
 - ProjectDefaults **overwrites the repo-root `.editorconfig`** and generates `*.DotSettings` on every
   build — edit code style there, not by hand. The library multi-targets `net8.0;net9.0;net10.0`; the CLI
   and Tests target `net10.0`.
+- `GeoConvert` exposes internals to the test project via `InternalsVisibleTo` (so helpers like the
+  FlatBuffers builder are unit-testable and adversarial inputs can be crafted). Because Polyfill is a
+  source package compiled into each assembly, the Tests project must **not** reference Polyfill itself —
+  it consumes GeoConvert's copy through IVT; a second copy causes ambiguous-extension build errors.
 - Tests use TUnit + Verify.TUnit + Verify.DiffPlex. `RoundTripTests` write→read→`Verify` the resulting
   GeoJSON (so the snapshot shows what each format preserves); `SerializeTests` snapshot raw output;
   shared fixtures are in `src/Tests/Sample.cs`.

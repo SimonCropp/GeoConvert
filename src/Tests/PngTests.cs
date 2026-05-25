@@ -70,6 +70,40 @@ public class PngTests
         await Assert.That(threw).IsTrue();
     }
 
+    [Test]
+    public async Task Renders_all_geometry_types()
+    {
+        var collection = new FeatureCollection
+        {
+            new Feature(new Point(1, 1)),
+            new Feature(new MultiPoint([new(2, 2), new(3, 3)])),
+            new Feature(new LineString([new(0, 0), new(4, 4)])),
+            new Feature(new MultiLineString([new([new(0, 4), new(4, 0)])])),
+            new Feature(new Polygon([[new(0, 0), new(4, 0), new(4, 4), new(0, 0)]])),
+            new Feature(new MultiPolygon([new([[new(1, 1), new(2, 1), new(2, 2), new(1, 1)]])])),
+            new Feature(new GeometryCollection([new Point(2, 3)])),
+        };
+
+        var png = MapRenderer.RenderPng(collection, new() { Width = 128, Height = 128 });
+        await Assert.That(png[..8]).IsEquivalentTo(signature);
+    }
+
+    [Test]
+    public async Task Rejects_non_positive_width()
+    {
+        var threw = false;
+        try
+        {
+            MapRenderer.RenderPng(Sample.Polygons(), new() { Width = 0 });
+        }
+        catch (GeoConvertException)
+        {
+            threw = true;
+        }
+
+        await Assert.That(threw).IsTrue();
+    }
+
     static int NonBackgroundCount(byte[] pixels)
     {
         var count = 0;

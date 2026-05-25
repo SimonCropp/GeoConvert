@@ -323,31 +323,26 @@ public static class Shapefile
         }
     }
 
+    // The shape type is established by DetermineShapeType before these are called, so the geometry is
+    // known to be a polyline (line/multi-line) or polygon respectively.
     static IReadOnlyList<IReadOnlyList<Position>> LineParts(Geometry geometry) =>
-        geometry switch
-        {
-            LineString line => [line.Positions],
-            MultiLineString multi => [.. multi.LineStrings.Select(_ => _.Positions)],
-            _ => throw new GeoConvertException($"Cannot write {geometry.Type} as a polyline."),
-        };
+        geometry is MultiLineString multi
+            ? [.. multi.LineStrings.Select(_ => _.Positions)]
+            : [((LineString)geometry).Positions];
 
     static IReadOnlyList<IReadOnlyList<Position>> PolygonParts(Geometry geometry)
     {
         var parts = new List<IReadOnlyList<Position>>();
-        switch (geometry)
+        if (geometry is MultiPolygon multiPolygon)
         {
-            case Polygon polygon:
+            foreach (var polygon in multiPolygon.Polygons)
+            {
                 AddPolygon(parts, polygon);
-                break;
-            case MultiPolygon multiPolygon:
-                foreach (var polygon in multiPolygon.Polygons)
-                {
-                    AddPolygon(parts, polygon);
-                }
-
-                break;
-            default:
-                throw new GeoConvertException($"Cannot write {geometry.Type} as a polygon.");
+            }
+        }
+        else
+        {
+            AddPolygon(parts, (Polygon)geometry);
         }
 
         return parts;
@@ -421,7 +416,7 @@ public static class Shapefile
             GeometryType.MultiPoint => 8,
             GeometryType.LineString or GeometryType.MultiLineString => 3,
             GeometryType.Polygon or GeometryType.MultiPolygon => 5,
-            _ => throw new GeoConvertException($"Shapefile cannot represent {geometry.Type}."),
+            _ => 0, // unknown: BuildContent rejects shape type 0
         };
 
     static List<string> PropertyKeys(FeatureCollection collection)

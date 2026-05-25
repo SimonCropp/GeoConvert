@@ -10,11 +10,11 @@ static class JsonValue
         element.ValueKind switch
         {
             JsonValueKind.String => element.GetString(),
-            JsonValueKind.Number => element.TryGetInt64(out var l) ? l : element.GetDouble(),
+            // Cast keeps an integer boxed as long; without it the ternary unifies to double.
+            JsonValueKind.Number => element.TryGetInt64(out var l) ? l : (object)element.GetDouble(),
             JsonValueKind.True => true,
             JsonValueKind.False => false,
             JsonValueKind.Null => null,
-            JsonValueKind.Undefined => null,
             _ => element.GetRawText(),
         };
 
