@@ -1,6 +1,6 @@
 /// <summary>
 /// A dependency-free implementation of the Snappy block format — the default page compression for the
-/// GeoParquet codec. <see cref="Decompress"/> handles every tag form (literal plus 1/2/4-byte-offset
+/// GeoParquet codec. <see cref="Decompress(byte[])"/> handles every tag form (literal plus 1/2/4-byte-offset
 /// copies) so blocks from other tools read back; <see cref="Compress"/> uses a hash-matched encoder
 /// over ≤64&#160;KB blocks, mirroring the reference algorithm.
 /// </summary>
@@ -27,13 +27,18 @@ static class Snappy
         return output.ToArray();
     }
 
-    public static byte[] Decompress(byte[] input)
+    public static byte[] Decompress(byte[] input) => Decompress(input, 0, input.Length);
+
+    // Decompresses the block held in input[start..start+length] without first copying it out — the
+    // GeoParquet reader hands us a slice of a larger column-chunk buffer.
+    public static byte[] Decompress(byte[] input, int start, int length)
     {
-        var position = 0;
-        var length = (int)ReadVarint(input, ref position);
-        var output = new byte[length];
+        var position = start;
+        var end = start + length;
+        var blockLength = (int)ReadVarint(input, ref position);
+        var output = new byte[blockLength];
         var outPosition = 0;
-        while (position < input.Length)
+        while (position < end)
         {
             var tag = input[position++];
             switch (tag & 0x03)

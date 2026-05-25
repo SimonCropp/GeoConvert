@@ -161,11 +161,10 @@ public static class GeoParquet
             var header = ParquetMetadata.ReadPageHeader(reader);
             var pageStart = reader.Position;
             position = pageStart + header.CompressedSize;
-            var raw = data.AsSpan(pageStart, header.CompressedSize).ToArray();
 
             if (header.Type == ParquetMetadata.PageDictionary)
             {
-                dictionary = DecodePlain(Decompress(raw, codec), 0, header.NumValues, type);
+                dictionary = DecodePlain(Decompress(data, pageStart, header.CompressedSize, codec), 0, header.NumValues, type);
                 continue;
             }
 
@@ -176,17 +175,18 @@ public static class GeoParquet
             {
                 // V2 stores levels uncompressed ahead of the (optionally compressed) values.
                 definitions = maxDefinition > 0
-                    ? ParquetEncoding.DecodeRle(raw, header.RepetitionLevelsByteLength, header.NumValues, 1)
+                    ? ParquetEncoding.DecodeRle(data, pageStart + header.RepetitionLevelsByteLength, header.NumValues, 1)
                     : null;
                 var valueStart = header.RepetitionLevelsByteLength + header.DefinitionLevelsByteLength;
-                var encodedValues = raw[valueStart..];
-                body = header.IsCompressed ? Decompress(encodedValues, codec) : encodedValues;
+                // Uncompressed values are sliced out via the no-op codec, so there is one decode path.
+                var pageCodec = header.IsCompressed ? codec : ParquetMetadata.CodecUncompressed;
+                body = Decompress(data, pageStart + valueStart, header.CompressedSize - valueStart, pageCodec);
                 valueOffset = 0;
             }
             else
             {
                 // V1 compresses the whole page; definition levels carry a 4-byte length prefix.
-                body = Decompress(raw, codec);
+                body = Decompress(data, pageStart, header.CompressedSize, codec);
                 valueOffset = 0;
                 definitions = null;
                 if (maxDefinition > 0)
@@ -288,15 +288,15 @@ public static class GeoParquet
         }
     }
 
-    static byte[] Decompress(byte[] compressed, int codec) =>
+    static byte[] Decompress(byte[] compressed, int offset, int length, int codec) =>
         codec switch
         {
-            ParquetMetadata.CodecUncompressed => compressed,
-            ParquetMetadata.CodecSnappy => Snappy.Decompress(compressed),
-            ParquetMetadata.CodecGzip => Inflate(new GZipStream(new MemoryStream(compressed), CompressionMode.Decompress)),
+            ParquetMetadata.CodecUncompressed => compressed.AsSpan(offset, length).ToArray(),
+            ParquetMetadata.CodecSnappy => Snappy.Decompress(compressed, offset, length),
+            ParquetMetadata.CodecGzip => Inflate(new GZipStream(new MemoryStream(compressed, offset, length), CompressionMode.Decompress)),
 #if NET11_0_OR_GREATER
             // Zstd ships in the .NET 11 BCL; on earlier targets it is rejected below.
-            ParquetMetadata.CodecZstd => Inflate(new ZstandardStream(new MemoryStream(compressed), CompressionMode.Decompress)),
+            ParquetMetadata.CodecZstd => Inflate(new ZstandardStream(new MemoryStream(compressed, offset, length), CompressionMode.Decompress)),
 #else
             ParquetMetadata.CodecZstd => throw new GeoConvertException(
                 "Zstd-compressed GeoParquet requires a .NET 11 (or later) build of GeoConvert."),
@@ -439,13 +439,10 @@ public static class GeoParquet
         };
 
         var definitionBytes = ParquetEncoding.EncodeRle(definitions, 1);
-        using var body = new MemoryStream();
-        Span<byte> length = stackalloc byte[4];
-        BinaryPrimitives.WriteInt32LittleEndian(length, definitionBytes.Length);
-        body.Write(length);
-        body.Write(definitionBytes);
-        body.Write(plain);
-        var bodyBytes = body.ToArray();
+        var bodyBytes = new byte[4 + definitionBytes.Length + plain.Length];
+        BinaryPrimitives.WriteInt32LittleEndian(bodyBytes, definitionBytes.Length);
+        definitionBytes.CopyTo(bodyBytes, 4);
+        plain.CopyTo(bodyBytes, 4 + definitionBytes.Length);
         var compressed = Compress(bodyBytes, codec);
 
         var header = ParquetMetadata.WritePageHeader(new()

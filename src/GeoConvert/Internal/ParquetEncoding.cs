@@ -46,16 +46,23 @@ static class ParquetEncoding
 
     public static byte[] PlainByteArray(IReadOnlyList<byte[]> values)
     {
-        using var memory = new MemoryStream();
-        Span<byte> length = stackalloc byte[4];
+        var total = 0;
         foreach (var value in values)
         {
-            BinaryPrimitives.WriteInt32LittleEndian(length, value.Length);
-            memory.Write(length);
-            memory.Write(value);
+            total += 4 + value.Length;
         }
 
-        return memory.ToArray();
+        var bytes = new byte[total];
+        var position = 0;
+        foreach (var value in values)
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(position), value.Length);
+            position += 4;
+            value.CopyTo(bytes, position);
+            position += value.Length;
+        }
+
+        return bytes;
     }
 
     // ---- PLAIN readers ----
