@@ -116,6 +116,11 @@ geoconvert world.geojson europe.png --bbox -10,35,30,60 --size 1200x900
 ```
 
 
+### Exampl generated png
+
+<img src="/src/Tests/PngTests.Render_RealMap.verified.png" height="1000px">
+
+
 ## Command line
 
 Installed as a [.NET tool](https://learn.microsoft.com/dotnet/core/tools/global-tools) named
