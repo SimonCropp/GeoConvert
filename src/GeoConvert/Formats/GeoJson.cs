@@ -178,7 +178,7 @@ public static class GeoJson
     {
         using var stream = new MemoryStream();
         Write(stream, collection);
-        return Encoding.UTF8.GetString(stream.ToArray());
+        return Encoding.UTF8.GetString(stream.GetBuffer(), 0, (int)stream.Length);
     }
 
     static void Write(Utf8JsonWriter writer, FeatureCollection collection)

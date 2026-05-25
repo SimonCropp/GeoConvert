@@ -248,7 +248,7 @@ public static class Wkb
                 writer.Write((uint)multiPoint.Positions.Count);
                 foreach (var position in multiPoint.Positions)
                 {
-                    WriteGeometry(writer, new Point(position));
+                    WritePoint(writer, position);
                 }
 
                 break;
@@ -279,6 +279,35 @@ public static class Wkb
             default:
                 throw new GeoConvertException($"Cannot write {geometry.Type} as WKB.");
         }
+    }
+
+    // Writes a standalone Point geometry for one coordinate (the members of a MultiPoint), without
+    // allocating a Point wrapper per coordinate. Dimensionality is taken per coordinate, matching the
+    // general Point path.
+    static void WritePoint(BinaryWriter writer, Position position)
+    {
+        var hasZ = position.HasZ;
+        var hasM = position.HasM;
+
+        // little-endian (NDR)
+        writer.Write((byte)1);
+
+        uint type = 1;
+        if (hasZ && hasM)
+        {
+            type += 3000;
+        }
+        else if (hasM)
+        {
+            type += 2000;
+        }
+        else if (hasZ)
+        {
+            type += 1000;
+        }
+
+        writer.Write(type);
+        WriteCoordinate(writer, position, hasZ, hasM);
     }
 
     static void WriteCoordinates(BinaryWriter writer, IReadOnlyList<Position> positions, bool hasZ, bool hasM)

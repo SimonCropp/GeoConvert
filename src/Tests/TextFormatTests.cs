@@ -115,6 +115,21 @@ public class TextFormatTests
         await Assert.That(back.Coordinate.M).IsEqualTo(4d);
     }
 
+    [Test]
+    public async Task Wkb_multipoint_preserves_z_and_m()
+    {
+        // Members carry Z-only, M-only and ZM ordinates, exercising each per-point dimension tag.
+        var source = new FeatureCollection
+        {
+            new Feature(new MultiPoint([new(1, 2, 3), new(4, 5, null, 6), new(7, 8, 9, 10)])),
+        };
+        var back = (MultiPoint)TestSupport.RoundtripStream(source, GeoFormat.Wkb).Features[0].Geometry!;
+        await Assert.That(back.Positions[0].Z).IsEqualTo(3d);
+        await Assert.That(back.Positions[1].M).IsEqualTo(6d);
+        await Assert.That(back.Positions[2].Z).IsEqualTo(9d);
+        await Assert.That(back.Positions[2].M).IsEqualTo(10d);
+    }
+
     static byte[] Reverse(byte[] bytes)
     {
         Array.Reverse(bytes);

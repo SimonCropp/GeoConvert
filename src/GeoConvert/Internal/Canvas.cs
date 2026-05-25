@@ -1,3 +1,5 @@
+using System.Runtime.InteropServices;
+
 /// <summary>A software RGBA raster with source-over blending and basic line/disc/polygon fills.</summary>
 sealed class Canvas
 {
@@ -8,14 +10,15 @@ sealed class Canvas
         Width = width;
         Height = height;
         pixels = new byte[width * height * 4];
-        for (var i = 0; i < pixels.Length; i += 4)
-        {
-            pixels[i] = background.R;
-            pixels[i + 1] = background.G;
-            pixels[i + 2] = background.B;
-            pixels[i + 3] = background.A;
-        }
+        // Fill the background a pixel (uint) at a time rather than byte-by-byte.
+        MemoryMarshal.Cast<byte, uint>(pixels.AsSpan()).Fill(Pack(background));
     }
+
+    // Packs RGBA into a uint so that reinterpreting the pixel buffer as uints yields the R,G,B,A byte order.
+    static uint Pack(Rgba color) =>
+        BitConverter.IsLittleEndian
+            ? (uint)(color.R | (color.G << 8) | (color.B << 16) | (color.A << 24))
+            : (uint)((color.R << 24) | (color.G << 16) | (color.B << 8) | color.A);
 
     public int Width { get; }
 
@@ -83,7 +86,7 @@ sealed class Canvas
     }
 
     /// <summary>Fills the region bounded by the given rings using the even-odd rule (so holes are excluded).</summary>
-    public void FillPolygon(IReadOnlyList<IReadOnlyList<(double X, double Y)>> rings, Rgba color)
+    public void FillPolygon((double X, double Y)[][] rings, Rgba color)
     {
         var minY = double.MaxValue;
         var maxY = double.MinValue;
@@ -103,6 +106,8 @@ sealed class Canvas
 
         var first = Math.Max(0, (int)Math.Ceiling(minY));
         var last = Math.Min(Height - 1, (int)Math.Floor(maxY));
+        var opaque = color.A == 255;
+        var packed = Pack(color);
         var crossings = new List<double>();
         for (var y = first; y <= last; y++)
         {
@@ -110,10 +115,10 @@ sealed class Canvas
             crossings.Clear();
             foreach (var ring in rings)
             {
-                for (var i = 0; i < ring.Count; i++)
+                for (var i = 0; i < ring.Length; i++)
                 {
                     var a = ring[i];
-                    var b = ring[(i + 1) % ring.Count];
+                    var b = ring[i + 1 == ring.Length ? 0 : i + 1];
                     if ((a.Y <= scan && b.Y > scan) || (b.Y <= scan && a.Y > scan))
                     {
                         var t = (scan - a.Y) / (b.Y - a.Y);
@@ -125,11 +130,25 @@ sealed class Canvas
             crossings.Sort();
             for (var i = 0; i + 1 < crossings.Count; i += 2)
             {
-                var startX = (int)Math.Ceiling(crossings[i] - 0.5);
-                var endX = (int)Math.Floor(crossings[i + 1] - 0.5);
-                for (var x = startX; x <= endX; x++)
+                var startX = Math.Max((int)Math.Ceiling(crossings[i] - 0.5), 0);
+                var endX = Math.Min((int)Math.Floor(crossings[i + 1] - 0.5), Width - 1);
+                if (startX > endX)
                 {
-                    Blend(x, y, color);
+                    continue;
+                }
+
+                if (opaque)
+                {
+                    // An opaque fill overwrites the span, so write whole pixels directly.
+                    var span = pixels.AsSpan((y * Width + startX) * 4, (endX - startX + 1) * 4);
+                    MemoryMarshal.Cast<byte, uint>(span).Fill(packed);
+                }
+                else
+                {
+                    for (var x = startX; x <= endX; x++)
+                    {
+                        Blend(x, y, color);
+                    }
                 }
             }
         }

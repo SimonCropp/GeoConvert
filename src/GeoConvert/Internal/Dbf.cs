@@ -151,15 +151,24 @@ static class Dbf
 
         writer.Write((byte)0x0D);
 
+        // Each record is the same width, so encode into one reusable buffer instead of allocating a
+        // byte[] per field. FormatField pads every value to its field width, so each field fills exactly
+        // its slice of the record.
+        var record = new byte[recordLength];
         foreach (var feature in collection)
         {
             // not deleted
-            writer.Write((byte)0x20);
+            record[0] = 0x20;
+            var offset = 1;
             for (var i = 0; i < keys.Count; i++)
             {
                 feature.Properties.TryGetValue(keys[i], out var value);
-                writer.Write(Encoding.Latin1.GetBytes(FormatField(fields[i], value)));
+                var formatted = FormatField(fields[i], value);
+                Encoding.Latin1.GetBytes(formatted, record.AsSpan(offset, fields[i].Length));
+                offset += fields[i].Length;
             }
+
+            writer.Write(record);
         }
 
         writer.Write((byte)0x1A);
@@ -203,60 +212,81 @@ static class Dbf
 
     static List<Field> BuildFields(IReadOnlyList<string> keys, FeatureCollection collection)
     {
-        var fields = new List<Field>(keys.Count);
+        // Infer each field's type and width in a single pass over the features. The previous approach
+        // re-enumerated the whole collection (and probed every feature's dictionary) once per key.
+        var stats = new Dictionary<string, FieldStats>(keys.Count, StringComparer.Ordinal);
+        var ordered = new List<FieldStats>(keys.Count);
         foreach (var key in keys)
         {
-            var sawValue = false;
-            var isBool = true;
-            var isInteger = true;
-            var isNumber = true;
-            var maxLength = 1;
-            var maxDecimals = 0;
+            var stat = new FieldStats();
+            stats[key] = stat;
+            ordered.Add(stat);
+        }
 
-            foreach (var feature in collection)
+        foreach (var feature in collection)
+        {
+            foreach (var (key, value) in feature.Properties)
             {
-                if (!feature.Properties.TryGetValue(key, out var value) || value == null)
+                if (value != null && stats.TryGetValue(key, out var stat))
                 {
-                    continue;
-                }
-
-                sawValue = true;
-                switch (value)
-                {
-                    case bool:
-                        isInteger = false;
-                        isNumber = false;
-                        break;
-                    case sbyte or byte or short or ushort or int or uint or long or ulong:
-                        isBool = false;
-                        maxLength = Math.Max(maxLength, Scalars.Format(value).Length);
-                        break;
-                    case float or double or decimal:
-                        isBool = false;
-                        isInteger = false;
-                        var plain = Convert.ToDouble(value, CultureInfo.InvariantCulture)
-                            .ToString("0.###############", CultureInfo.InvariantCulture);
-                        var dot = plain.IndexOf('.');
-                        if (dot >= 0)
-                        {
-                            maxDecimals = Math.Max(maxDecimals, plain.Length - dot - 1);
-                        }
-
-                        maxLength = Math.Max(maxLength, plain.Length);
-                        break;
-                    default:
-                        isBool = false;
-                        isInteger = false;
-                        isNumber = false;
-                        maxLength = Math.Max(maxLength, Scalars.Format(value).Length);
-                        break;
+                    stat.Accumulate(value);
                 }
             }
+        }
 
-            fields.Add(BuildField(key, sawValue, isBool, isInteger, isNumber, maxLength, maxDecimals));
+        var fields = new List<Field>(keys.Count);
+        for (var i = 0; i < keys.Count; i++)
+        {
+            var stat = ordered[i];
+            fields.Add(BuildField(keys[i], stat.SawValue, stat.IsBool, stat.IsInteger, stat.IsNumber, stat.MaxLength, stat.MaxDecimals));
         }
 
         return fields;
+    }
+
+    sealed class FieldStats
+    {
+        public bool SawValue { get; private set; }
+        public bool IsBool { get; private set; } = true;
+        public bool IsInteger { get; private set; } = true;
+        public bool IsNumber { get; private set; } = true;
+        public int MaxLength { get; private set; } = 1;
+        public int MaxDecimals { get; private set; }
+
+        public void Accumulate(object value)
+        {
+            SawValue = true;
+            switch (value)
+            {
+                case bool:
+                    IsInteger = false;
+                    IsNumber = false;
+                    break;
+                case sbyte or byte or short or ushort or int or uint or long or ulong:
+                    IsBool = false;
+                    MaxLength = Math.Max(MaxLength, Scalars.Format(value).Length);
+                    break;
+                case float or double or decimal:
+                    IsBool = false;
+                    IsInteger = false;
+                    var plain = Convert.ToDouble(value, CultureInfo.InvariantCulture)
+                        .ToString("0.###############", CultureInfo.InvariantCulture);
+                    var dot = plain.IndexOf('.');
+                    if (dot >= 0)
+                    {
+                        MaxDecimals = Math.Max(MaxDecimals, plain.Length - dot - 1);
+                    }
+
+                    MaxLength = Math.Max(MaxLength, plain.Length);
+                    break;
+                default:
+                    IsBool = false;
+                    IsInteger = false;
+                    IsNumber = false;
+                    MaxLength = Math.Max(MaxLength, Scalars.Format(value).Length);
+                    break;
+            }
+        }
     }
 
     static Field BuildField(

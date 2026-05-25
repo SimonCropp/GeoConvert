@@ -98,7 +98,7 @@ public static class MapRenderer
 
     static void DrawPolygon(Canvas canvas, Polygon polygon, Projection projection, RenderOptions options)
     {
-        var rings = polygon.Rings.Select(projection.ToPixels).ToList();
+        var rings = polygon.Rings.Select(projection.ToPixels).ToArray();
         canvas.FillPolygon(rings, options.Fill);
         foreach (var ring in rings)
         {
@@ -116,9 +116,9 @@ public static class MapRenderer
         }
     }
 
-    static void StrokeRing(Canvas canvas, IReadOnlyList<(double X, double Y)> ring, RenderOptions options)
+    static void StrokeRing(Canvas canvas, (double X, double Y)[] ring, RenderOptions options)
     {
-        for (var i = 0; i + 1 < ring.Count; i++)
+        for (var i = 0; i + 1 < ring.Length; i++)
         {
             canvas.StrokeLine(ring[i].X, ring[i].Y, ring[i + 1].X, ring[i + 1].Y, options.StrokeWidth, options.Stroke);
         }
@@ -161,12 +161,12 @@ public static class MapRenderer
             return (x, y);
         }
 
-        public List<(double X, double Y)> ToPixels(IReadOnlyList<Position> positions)
+        public (double X, double Y)[] ToPixels(IReadOnlyList<Position> positions)
         {
-            var result = new List<(double X, double Y)>(positions.Count);
-            foreach (var position in positions)
+            var result = new (double X, double Y)[positions.Count];
+            for (var i = 0; i < positions.Count; i++)
             {
-                result.Add(ToPixel(position));
+                result[i] = ToPixel(positions[i]);
             }
 
             return result;
