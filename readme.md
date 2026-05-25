@@ -195,7 +195,7 @@ dotnet run -c Release --project src/Benchmarks -- --filter "*"
   BCL) and rejected with a clear error on earlier targets.
 * **PNG** is a write-only raster export; reading a `.png` throws. It needs an extent — when no
   `Bounds` is given, the full extent of the data is used.
-* Property values are scalars (`string`, `long`, `double`, `bool`); nested JSON is flattened.
+* Property values are scalars (`string`, `long`, `double`, `bool`); a nested JSON object or array is stored as its raw JSON text in a single string property.
 
 
 ## Icon
