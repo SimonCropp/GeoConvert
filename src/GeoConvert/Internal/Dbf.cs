@@ -12,8 +12,11 @@ static class Dbf
         public required byte Decimals { get; init; }
     }
 
-    public static (List<string> Names, List<object?[]> Rows) Read(Stream stream)
+    public static (List<string> Names, List<object?[]> Rows) Read(Stream stream, Encoding? encoding = null)
     {
+        // Field values are decoded with this; defaults to Latin-1 for legacy dBASE. Shapefiles that
+        // declare UTF-8 via a .cpg sidecar pass it in (Natural Earth and most modern data are UTF-8).
+        var textEncoding = encoding ?? Encoding.Latin1;
         using var memory = new MemoryStream();
         stream.CopyTo(memory);
         memory.Position = 0;
@@ -67,7 +70,7 @@ static class Dbf
             for (var f = 0; f < fields.Count; f++)
             {
                 var field = fields[f];
-                var text = Encoding.Latin1.GetString(reader.ReadBytes(field.Length));
+                var text = textEncoding.GetString(reader.ReadBytes(field.Length));
                 values[f] = ParseValue(field, text);
             }
 

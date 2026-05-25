@@ -15,18 +15,24 @@ public static class Shapefile
 
     public static FeatureCollection Read(string shpPath)
     {
+        var encoding = ResolveEncoding(shpPath);
         using var shp = File.OpenRead(shpPath);
         var dbfPath = Path.ChangeExtension(shpPath, ".dbf");
         if (File.Exists(dbfPath))
         {
             using var dbf = File.OpenRead(dbfPath);
-            return Read(shp, dbf);
+            return Read(shp, dbf, encoding);
         }
 
-        return Read(shp, null);
+        return Read(shp, null, encoding);
     }
 
-    public static FeatureCollection Read(Stream shp, Stream? dbf)
+    /// <summary>Reads geometry and attributes, decoding the .dbf as Latin-1.</summary>
+    public static FeatureCollection Read(Stream shp, Stream? dbf) =>
+        Read(shp, dbf, Encoding.Latin1);
+
+    /// <summary>Reads geometry and attributes, decoding the .dbf text with <paramref name="encoding"/>.</summary>
+    public static FeatureCollection Read(Stream shp, Stream? dbf, Encoding encoding)
     {
         var geometries = ReadGeometries(shp);
         var collection = new FeatureCollection();
@@ -41,7 +47,7 @@ public static class Shapefile
             return collection;
         }
 
-        var (names, rows) = Dbf.Read(dbf);
+        var (names, rows) = Dbf.Read(dbf, encoding);
         for (var i = 0; i < geometries.Count; i++)
         {
             var feature = new Feature(geometries[i]);
@@ -58,6 +64,23 @@ public static class Shapefile
         }
 
         return collection;
+    }
+
+    // A shapefile's text encoding is declared in a sibling .cpg file. Honor UTF-8 (Natural Earth and
+    // most modern data); fall back to Latin-1 for legacy/unspecified code pages.
+    static Encoding ResolveEncoding(string shpPath)
+    {
+        var cpgPath = Path.ChangeExtension(shpPath, ".cpg");
+        if (File.Exists(cpgPath))
+        {
+            var text = File.ReadAllText(cpgPath).Trim();
+            if (text.Contains("UTF", StringComparison.OrdinalIgnoreCase) && text.Contains('8'))
+            {
+                return Encoding.UTF8;
+            }
+        }
+
+        return Encoding.Latin1;
     }
 
     static List<Geometry?> ReadGeometries(Stream stream)
