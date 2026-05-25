@@ -3,9 +3,10 @@ namespace GeoConvert;
 /// <summary>
 /// Reads and writes <see href="https://www.topografix.com/gpx.asp">GPX 1.1</see>. Waypoints
 /// (<c>wpt</c>) map to points, routes (<c>rte</c>) and single-segment tracks (<c>trk</c>) to line
-/// strings, and multi-segment tracks to multi line strings. GPX cannot represent polygons or geometry
-/// collections, so writing those throws. Coordinates are lon/lat with optional elevation (Z). Reading
-/// streams with <see cref="XmlReader"/>.
+/// strings, and multi-segment tracks to multi line strings. GPX has no native area type, so writing a
+/// polygon emits a track with one segment per ring (exterior then holes), a multi polygon flattens every
+/// ring of every member into a single track, and a geometry collection writes each member geometry in
+/// turn. Coordinates are lon/lat with optional elevation (Z). Reading streams with <see cref="XmlReader"/>.
 /// </summary>
 public static class Gpx
 {
@@ -162,9 +163,14 @@ public static class Gpx
         writer.WriteEndDocument();
     }
 
-    static void WriteFeature(XmlWriter writer, Feature feature)
+    static void WriteFeature(XmlWriter writer, Feature feature) =>
+        WriteGeometry(writer, feature.Geometry, feature);
+
+    // Writes one geometry, carrying the owning feature so metadata (name/desc) is attached. A geometry
+    // collection recurses, writing each member with the same feature metadata.
+    static void WriteGeometry(XmlWriter writer, Geometry? geometry, Feature feature)
     {
-        switch (feature.Geometry)
+        switch (geometry)
         {
             case null:
                 break;
@@ -184,8 +190,21 @@ public static class Gpx
             case MultiLineString multiLine:
                 WriteTrack(writer, feature, multiLine.LineStrings.Select(_ => _.Positions));
                 break;
+            case Polygon polygon:
+                WriteTrack(writer, feature, polygon.Rings);
+                break;
+            case MultiPolygon multiPolygon:
+                WriteTrack(writer, feature, multiPolygon.Polygons.SelectMany(_ => _.Rings));
+                break;
+            case GeometryCollection collection:
+                foreach (var member in collection.Geometries)
+                {
+                    WriteGeometry(writer, member, feature);
+                }
+
+                break;
             default:
-                throw new GeoConvertException($"GPX cannot represent {feature.Geometry.Type}.");
+                throw new GeoConvertException($"GPX cannot represent {geometry.Type}.");
         }
     }
 

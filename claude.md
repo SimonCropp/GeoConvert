@@ -75,8 +75,10 @@ Format codec conventions: a writer must **not** close a caller-provided `Stream`
 
 Shapefile holds one geometry category per file (mixed throws) and is 2D. FlatGeobuf is written without
 the spatial index (`index_node_size=0`) and is 2D; indexed files are read by skipping the index. GPX
-supports only points/lines (polygons throw). WKT/WKB carry geometry only (attributes dropped). PNG is
-write-only and needs an extent (defaults to the data bounds).
+has no area type, so a polygon is written as a track (one segment per ring), a multi polygon flattens
+its rings into one track, and a geometry collection writes each member in turn (so areas read back as
+lines). WKT/WKB carry geometry only (attributes dropped). PNG is write-only and needs an extent
+(defaults to the data bounds).
 
 ## Project conventions (via the `ProjectDefaults` NuGet)
 

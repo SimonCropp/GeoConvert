@@ -107,10 +107,10 @@ public class CliTests
     public async Task BadConversionReturnsError()
     {
         using var directory = new TempDirectory();
-        // A polygon cannot be written to GPX.
+        // A shapefile holds a single geometry category, so mixed geometry cannot be written.
         var input = Path.Combine(directory, "in.geojson");
-        await File.WriteAllTextAsync(input, GeoJson.WriteString(Sample.Polygons()));
-        var output = Path.Combine(directory, "out.gpx");
+        await File.WriteAllTextAsync(input, GeoJson.WriteString(Sample.Mixed()));
+        var output = Path.Combine(directory, "out.shp");
         var code = Runner.Run([input, output], new StringWriter(), new StringWriter());
         await Assert.That(code).IsEqualTo(1);
     }

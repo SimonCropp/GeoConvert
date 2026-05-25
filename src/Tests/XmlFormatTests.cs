@@ -159,16 +159,49 @@ public class XmlFormatTests
     }
 
     [Test]
-    public async Task Gpx_rejects_polygon()
+    public async Task Gpx_writes_polygon_rings_as_track_segments()
+    {
+        // GPX has no area type, so a polygon's rings (exterior then holes) become track segments and
+        // read back as a multi line string.
+        var source = new FeatureCollection
+        {
+            new Feature(new Polygon(
+            [
+                [new(0, 0), new(4, 0), new(4, 4), new(0, 4), new(0, 0)],
+                [new(1, 1), new(2, 1), new(2, 2), new(1, 2), new(1, 1)],
+            ]))
+        };
+        var back = (MultiLineString)TestSupport.RoundtripStream(source, GeoFormat.Gpx).Features[0].Geometry!;
+        await Assert.That(back.LineStrings.Count).IsEqualTo(2);
+        await Assert.That(back.LineStrings[0].Positions.Count).IsEqualTo(5);
+    }
+
+    [Test]
+    public async Task Gpx_writes_multipolygon_rings_into_single_track()
     {
         var source = new FeatureCollection
         {
-            new Feature(new Polygon([[new(0, 0), new(1, 0), new(1, 1), new(0, 0)]])),
+            new Feature(new MultiPolygon(
+            [
+                new([[new(0, 0), new(1, 0), new(1, 1), new(0, 0)]]),
+                new([[new(5, 5), new(6, 5), new(6, 6), new(5, 5)]]),
+            ]))
         };
-        await Assert.That(TestSupport.ThrowsGeo(() =>
+        var back = (MultiLineString)TestSupport.RoundtripStream(source, GeoFormat.Gpx).Features[0].Geometry!;
+        await Assert.That(back.LineStrings.Count).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task Gpx_writes_collection_members_in_turn()
+    {
+        var source = new FeatureCollection
         {
-            using var stream = new MemoryStream();
-            Gpx.Write(stream, source);
-        })).IsTrue();
+            new Feature(new GeometryCollection([new Point(7, 8), new LineString([new(0, 0), new(1, 1)])]))
+        };
+        // The point becomes a waypoint and the line a track, so the collection reads back as two features.
+        var back = TestSupport.RoundtripStream(source, GeoFormat.Gpx);
+        await Assert.That(back.Count).IsEqualTo(2);
+        await Assert.That(back.Features[0].Geometry).IsTypeOf<Point>();
+        await Assert.That(back.Features[1].Geometry).IsTypeOf<LineString>();
     }
 }

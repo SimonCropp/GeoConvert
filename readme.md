@@ -171,8 +171,10 @@ dotnet run -c Release --project src/Benchmarks -- --filter "*"
   lines and polygons throws. Output is 2D and a WGS84 `.prj` is emitted.
 * **FlatGeobuf** is written without the optional packed R-tree spatial index
   (`index_node_size = 0`) and is 2D; files that carry an index are read by skipping it.
-* **GPX** can only represent points, line strings and multi line strings; writing polygons or
-  collections throws.
+* **GPX** has no native area type: polygons are written as a track with one segment per ring, multi
+  polygons flatten every ring into a single track, and geometry collections write each member geometry
+  in turn. Reading a track with several segments yields a multi line string, so polygons do not survive
+  a round trip as polygons.
 * **WKT** and **WKB** carry geometry only — feature attributes are dropped on write.
 * **PNG** is a write-only raster export; reading a `.png` throws. It needs an extent — when no
   `Bounds` is given, the full extent of the data is used.
