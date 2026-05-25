@@ -29,13 +29,14 @@ public class ShapefileEncodingTests
         return memory.ToArray();
     }
 
+    // Pads with NUL, the way GDAL/Natural Earth write character fields (not the spec's space).
     static byte[] Padded(byte[] value, byte length)
     {
         var record = new byte[length];
         value.CopyTo(record, 0);
         for (var i = value.Length; i < length; i++)
         {
-            record[i] = 0x20;
+            record[i] = 0x00;
         }
 
         return record;

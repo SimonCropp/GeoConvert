@@ -85,7 +85,9 @@ static class Dbf
 
     static object? ParseValue(Field field, string text)
     {
-        var trimmed = text.Trim();
+        // Character fields are padded to width; per the dBASE spec with spaces, but GDAL/Natural Earth
+        // (and others) pad with NUL. Strip both — String.Trim alone leaves '\0'.
+        var trimmed = text.Replace('\0', ' ').Trim();
         switch (field.Type)
         {
             case 'L':
