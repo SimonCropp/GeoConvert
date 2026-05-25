@@ -88,10 +88,12 @@ sealed class ThriftCompactReader(byte[] data, int offset = 0)
                 }
 
                 break;
-            case 3: // i8
+            // i8
+            case 3:
                 position++;
                 break;
-            case 4: // i16
+            // i16
+            case 4:
             case ThriftCompactWriter.TypeI32:
             case ThriftCompactWriter.TypeI64:
                 ReadZigZag();
@@ -106,7 +108,8 @@ sealed class ThriftCompactReader(byte[] data, int offset = 0)
                 break;
             }
             case ThriftCompactWriter.TypeList:
-            case 10: // set
+            // set
+            case 10:
             {
                 var (elementType, count) = ReadListHeader();
                 for (var i = 0; i < count; i++)
@@ -116,7 +119,8 @@ sealed class ThriftCompactReader(byte[] data, int offset = 0)
 
                 break;
             }
-            case 11: // map
+            // map
+            case 11:
             {
                 var count = (int)ReadVarint();
                 if (count > 0)

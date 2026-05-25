@@ -114,19 +114,32 @@ public class ThriftTests
         // types the writer never emits.
         byte[] bytes =
         [
-            0x13, 0x07, // i8
-            0x14, 0x0A, // i16 = zigzag(5)
-            0x15, 0x0E, // i32 = zigzag(7)
-            0x16, 0x0F, // i64 = zigzag(-8)
-            0x17, 0, 0, 0, 0, 0, 0, 0, 0, // double
-            0x18, 0x03, 0x61, 0x62, 0x63, // binary "abc"
-            0x11, // bool true
-            0x12, // bool false
-            0x19, 0x21, 0x01, 0x02, // list<bool> {true, false}
-            0x1A, 0x15, 0x06, // set<i32> {3}
-            0x1B, 0x01, 0x58, 0x02, 0x01, 0x78, // map<i32,binary> {1: "x"}
-            0x1C, 0x15, 0x12, 0x00, // struct { i32 = 9 }
-            0x00, // struct stop
+            // i8
+            0x13, 0x07,
+            // i16 = zigzag(5)
+            0x14, 0x0A,
+            // i32 = zigzag(7)
+            0x15, 0x0E,
+            // i64 = zigzag(-8)
+            0x16, 0x0F,
+            // double
+            0x17, 0, 0, 0, 0, 0, 0, 0, 0,
+            // binary "abc"
+            0x18, 0x03, 0x61, 0x62, 0x63,
+            // bool true
+            0x11,
+            // bool false
+            0x12,
+            // list<bool> {true, false}
+            0x19, 0x21, 0x01, 0x02,
+            // set<i32> {3}
+            0x1A, 0x15, 0x06,
+            // map<i32,binary> {1: "x"}
+            0x1B, 0x01, 0x58, 0x02, 0x01, 0x78,
+            // struct { i32 = 9 }
+            0x1C, 0x15, 0x12, 0x00,
+            // struct stop
+            0x00,
         ];
 
         var reader = new ThriftCompactReader(bytes);

@@ -70,8 +70,10 @@ public class GeoParquetTests
     }
 
     [Test]
-    [Arguments(true, true)] // compressed values, optional column (definition levels)
-    [Arguments(false, false)] // uncompressed values, required column (no definition levels)
+    // compressed values, optional column (definition levels)
+    [Arguments(true, true)]
+    // uncompressed values, required column (no definition levels)
+    [Arguments(false, false)]
     public async Task Reads_data_page_v2(bool compressed, bool optional)
     {
         var first = Wkb.ToBytes(new Point(new(1, 2)));
@@ -81,7 +83,8 @@ public class GeoParquetTests
         var definitionBytes = optional ? ParquetEncoding.EncodeRle([1, 1], 1) : [];
 
         using var page = new MemoryStream();
-        page.Write(definitionBytes); // V2 levels are uncompressed, no length prefix
+        // V2 levels are uncompressed, no length prefix
+        page.Write(definitionBytes);
         page.Write(encodedValues);
         var pageBytes = page.ToArray();
 
@@ -90,13 +93,18 @@ public class GeoParquetTests
         headerWriter.I32(1, ParquetMetadata.PageDataV2);
         headerWriter.I32(2, definitionBytes.Length + plainValues.Length);
         headerWriter.I32(3, pageBytes.Length);
-        headerWriter.StructField(8); // data_page_header_v2
-        headerWriter.I32(1, 2); // num_values
-        headerWriter.I32(2, 0); // num_nulls
-        headerWriter.I32(3, 2); // num_rows
+        // data_page_header_v2
+        headerWriter.StructField(8);
+        // num_values
+        headerWriter.I32(1, 2);
+        // num_nulls
+        headerWriter.I32(2, 0);
+        // num_rows
+        headerWriter.I32(3, 2);
         headerWriter.I32(4, ParquetMetadata.EncodingPlain);
         headerWriter.I32(5, definitionBytes.Length);
-        headerWriter.I32(6, 0); // repetition_levels_byte_length
+        // repetition_levels_byte_length
+        headerWriter.I32(6, 0);
         headerWriter.Bool(7, compressed);
         headerWriter.StructEnd();
         headerWriter.StructEnd();
@@ -178,7 +186,8 @@ public class GeoParquetTests
         BinaryPrimitives.WriteInt32LittleEndian(length, definitionBytes.Length);
         dataBody.Write(length);
         dataBody.Write(definitionBytes);
-        dataBody.WriteByte(1); // index bit width
+        // index bit width
+        dataBody.WriteByte(1);
         dataBody.Write(indexBytes);
         var dataBytes = dataBody.ToArray();
 

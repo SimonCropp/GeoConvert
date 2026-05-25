@@ -11,7 +11,8 @@ namespace GeoConvert;
 /// </summary>
 public static class GeoParquet
 {
-    static readonly byte[] magic = [0x50, 0x41, 0x52, 0x31]; // "PAR1"
+    // "PAR1"
+    static readonly byte[] magic = [0x50, 0x41, 0x52, 0x31];
     const string geometryColumnName = "geometry";
     const int defaultCodec = ParquetMetadata.CodecSnappy;
 
@@ -531,9 +532,12 @@ public static class GeoParquet
                 writer.WriteEndArray();
             }
 
-            writer.WriteEndObject(); // geometry column
-            writer.WriteEndObject(); // columns
-            writer.WriteEndObject(); // root
+            // geometry column
+            writer.WriteEndObject();
+            // columns
+            writer.WriteEndObject();
+            // root
+            writer.WriteEndObject();
         }
 
         return Encoding.UTF8.GetString(stream.ToArray());

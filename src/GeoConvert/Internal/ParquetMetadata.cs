@@ -133,8 +133,10 @@ static class ParquetMetadata
             foreach (var column in group.Columns)
             {
                 writer.StructBegin();
-                writer.I64(2, column.DictionaryPageOffset ?? column.DataPageOffset); // file_offset
-                writer.StructField(3); // meta_data
+                // file_offset
+                writer.I64(2, column.DictionaryPageOffset ?? column.DataPageOffset);
+                // meta_data
+                writer.StructField(3);
                 writer.I32(1, column.Type);
                 writer.ListHeader(2, ThriftCompactWriter.TypeI32, column.Encodings.Count);
                 foreach (var encoding in column.Encodings)
@@ -158,13 +160,16 @@ static class ParquetMetadata
                     writer.I64(11, dictionaryOffset);
                 }
 
-                writer.StructEnd(); // meta_data
-                writer.StructEnd(); // ColumnChunk
+                // meta_data
+                writer.StructEnd();
+                // ColumnChunk
+                writer.StructEnd();
             }
 
             writer.I64(2, group.TotalByteSize);
             writer.I64(3, group.NumRows);
-            writer.StructEnd(); // RowGroup
+            // RowGroup
+            writer.StructEnd();
         }
 
         if (file.KeyValueMetadata.Count > 0)
@@ -256,18 +261,22 @@ static class ParquetMetadata
         writer.I32(3, header.CompressedSize);
         if (header.Type == PageDictionary)
         {
-            writer.StructField(7); // dictionary_page_header
+            // dictionary_page_header
+            writer.StructField(7);
             writer.I32(1, header.NumValues);
             writer.I32(2, header.Encoding);
             writer.StructEnd();
         }
         else
         {
-            writer.StructField(5); // data_page_header
+            // data_page_header
+            writer.StructField(5);
             writer.I32(1, header.NumValues);
             writer.I32(2, header.Encoding);
-            writer.I32(3, EncodingRle); // definition_level_encoding
-            writer.I32(4, EncodingRle); // repetition_level_encoding
+            // definition_level_encoding
+            writer.I32(3, EncodingRle);
+            // repetition_level_encoding
+            writer.I32(4, EncodingRle);
             writer.StructEnd();
         }
 
@@ -298,11 +307,14 @@ static class ParquetMetadata
                 case 3:
                     header.CompressedSize = reader.ReadI32();
                     break;
-                case 5: // data_page_header
-                case 7: // dictionary_page_header
+                // data_page_header
+                case 5:
+                // dictionary_page_header
+                case 7:
                     ReadPageDetail(reader, header);
                     break;
-                case 8: // data_page_header_v2
+                // data_page_header_v2
+                case 8:
                     ReadDataPageV2(reader, header);
                     break;
                 default:

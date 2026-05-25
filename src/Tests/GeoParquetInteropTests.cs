@@ -61,7 +61,8 @@ public class GeoParquetInteropTests
         var geometryField = new DataField<byte[]>("geometry");
         var nameField = new DataField<string>("name");
         var popField = new DataField<long?>("pop");
-        var countField = new DataField<int>("count"); // INT32 physical type
+        // INT32 physical type
+        var countField = new DataField<int>("count");
         var schema = new ParquetSchema(geometryField, nameField, popField, countField);
 
         using var stream = new MemoryStream();

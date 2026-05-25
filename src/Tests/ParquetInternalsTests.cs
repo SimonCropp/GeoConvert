@@ -3,9 +3,11 @@ public class ParquetInternalsTests
 {
     [Test]
     [Arguments(0)]
-    [Arguments(5)] // below the non-literal block threshold
+    // below the non-literal block threshold
+    [Arguments(5)]
     [Arguments(200)]
-    [Arguments(70000)] // spans multiple 64 KB blocks
+    // spans multiple 64 KB blocks
+    [Arguments(70000)]
     public async Task Snappy_roundtrips_repetitive(int size)
     {
         var data = new byte[size];
@@ -168,14 +170,18 @@ public class ParquetInternalsTests
         // FileMetaData with an unknown top-level field, and a KeyValue carrying an unknown field.
         var footer = new ThriftCompactWriter();
         footer.StructBegin();
-        footer.I32(1, 1); // version
-        footer.ListHeader(5, ThriftCompactWriter.TypeStruct, 1); // key_value_metadata
+        // version
+        footer.I32(1, 1);
+        // key_value_metadata
+        footer.ListHeader(5, ThriftCompactWriter.TypeStruct, 1);
         footer.StructBegin();
         footer.String(1, "k");
         footer.String(2, "v");
-        footer.I32(3, 99); // unknown KeyValue field
+        // unknown KeyValue field
+        footer.I32(3, 99);
         footer.StructEnd();
-        footer.I32(7, 123); // unknown FileMetaData field
+        // unknown FileMetaData field
+        footer.I32(7, 123);
         footer.StructEnd();
 
         var file = ParquetMetadata.ReadFile(footer.ToArray(), 0);
@@ -188,7 +194,8 @@ public class ParquetInternalsTests
         page.I32(1, ParquetMetadata.PageData);
         page.I32(2, 10);
         page.I32(3, 10);
-        page.I32(4, 7); // unknown crc field
+        // unknown crc field
+        page.I32(4, 7);
         page.StructEnd();
 
         var header = ParquetMetadata.ReadPageHeader(new(page.ToArray()));

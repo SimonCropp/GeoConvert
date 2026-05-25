@@ -28,7 +28,8 @@ sealed class ThriftCompactWriter
 
     public void StructEnd()
     {
-        buffer.WriteByte(0); // struct stop
+        // struct stop
+        buffer.WriteByte(0);
         lastFieldId = pending.Pop();
     }
 

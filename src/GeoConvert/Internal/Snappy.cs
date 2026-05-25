@@ -38,7 +38,8 @@ static class Snappy
             var tag = input[position++];
             switch (tag & 0x03)
             {
-                case 0: // literal
+                // literal
+                case 0:
                 {
                     var literal = tag >> 2;
                     if (literal >= 60)
@@ -57,14 +58,16 @@ static class Snappy
                     outPosition += literal;
                     break;
                 }
-                case 1: // copy, 1-byte offset
+                // copy, 1-byte offset
+                case 1:
                 {
                     var count = ((tag >> 2) & 0x07) + 4;
                     var offset = ((tag >> 5) << 8) | input[position++];
                     CopyBack(output, ref outPosition, offset, count);
                     break;
                 }
-                case 2: // copy, 2-byte offset
+                // copy, 2-byte offset
+                case 2:
                 {
                     var count = (tag >> 2) + 1;
                     var offset = input[position] | (input[position + 1] << 8);
@@ -72,7 +75,8 @@ static class Snappy
                     CopyBack(output, ref outPosition, offset, count);
                     break;
                 }
-                default: // copy, 4-byte offset
+                // copy, 4-byte offset
+                default:
                 {
                     var count = (tag >> 2) + 1;
                     var offset = input[position] |
