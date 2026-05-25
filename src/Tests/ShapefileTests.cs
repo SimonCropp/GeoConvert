@@ -65,7 +65,8 @@ public class ShapefileTests
             }
         };
 
-        var c = new Feature(new Point(2, 2)); // no flag => logical '?'
+        // no flag => logical '?'
+        var c = new Feature(new Point(2, 2));
 
         var back = TestSupport.RoundtripShapefile([a, b, c]);
 

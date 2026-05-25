@@ -1,6 +1,3 @@
-using System.Buffers.Binary;
-using System.IO.Compression;
-
 public class PngTests
 {
     static readonly byte[] signature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
@@ -86,6 +83,38 @@ public class PngTests
 
         var png = MapRenderer.RenderPng(collection, new() { Width = 128, Height = 128 });
         await Assert.That(png[..8]).IsEquivalentTo(signature);
+    }
+
+    [Test]
+    public Task Render_snapshot()
+    {
+        var collection = new FeatureCollection
+        {
+            new Feature(new Polygon(
+            [
+                [new(0, 0), new(10, 0), new(10, 8), new(0, 8), new(0, 0)],
+                [new(2, 2), new(5, 2), new(5, 5), new(2, 5), new(2, 2)],
+            ])),
+            new Feature(new LineString([new(1, 1), new(9, 7), new(1, 7), new(9, 1)])),
+            new Feature(new MultiPoint([new(3, 6), new(7, 3), new(5, 5)])),
+        };
+
+        var png = MapRenderer.RenderPng(
+            collection,
+            new() { Bounds = new Envelope(-1, -1, 11, 9), Width = 300, Height = 220 });
+
+        return Verify(new MemoryStream(png), "png");
+    }
+
+    [Test]
+    public Task Render_RealMap()
+    {
+        var collection = GeoConverter.Read(ProjectFiles.australian_suburbs_geojson);
+        var png = MapRenderer.RenderPng(
+            collection,
+            new() { Width = 3000 });
+
+        return Verify(new MemoryStream(png), "png");
     }
 
     [Test]

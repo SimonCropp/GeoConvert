@@ -45,7 +45,8 @@ public class CoverageMopUpTests
         var feature = TopoJson.ReadString(topology).Features[0];
         await Assert.That((long)feature.Id!).IsEqualTo(9L);
         var line = (LineString)feature.Geometry!;
-        await Assert.That(line.Positions[0].X).IsEqualTo(1d); // arc reversed
+        // arc reversed
+        await Assert.That(line.Positions[0].X).IsEqualTo(1d);
     }
 
     [Test]
@@ -93,8 +94,10 @@ public class CoverageMopUpTests
     public async Task Shapefile_truncated_record_is_ignored()
     {
         var data = new byte[108];
-        data[103] = 1; // record number 1
-        data[107] = 100; // claims 100 words (200 bytes) but none follow
+        // record number 1
+        data[103] = 1;
+        // claims 100 words (200 bytes) but none follow
+        data[107] = 100;
         using var stream = new MemoryStream(data);
         await Assert.That(Shapefile.Read(stream, null).Count).IsEqualTo(0);
     }

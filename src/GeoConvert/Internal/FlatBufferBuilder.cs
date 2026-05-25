@@ -234,7 +234,8 @@ sealed class FlatBufferBuilder
     public byte[] FinishSizePrefixed(int rootTable)
     {
         Prep(minAlign, 8);
-        PutInt(Offset - rootTable + 4); // root table uoffset
+        // root table uoffset
+        PutInt(Offset - rootTable + 4);
         PutInt(buffer.Length - space); // size prefix (length of everything after it)
         return ToArray();
     }

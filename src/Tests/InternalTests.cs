@@ -14,7 +14,8 @@ public class InternalTests
 
         var featureBuilder = new FlatBufferBuilder();
         featureBuilder.StartTable(8);
-        featureBuilder.AddByte(6, 99, 0); // geometry type field = 99
+        // geometry type field = 99
+        featureBuilder.AddByte(6, 99, 0);
         var geometry = featureBuilder.EndTable();
         featureBuilder.StartTable(3);
         featureBuilder.AddOffset(0, geometry);
@@ -32,11 +33,14 @@ public class InternalTests
 
         var headerBuilder = new FlatBufferBuilder();
         headerBuilder.StartTable(14);
-        headerBuilder.AddUShort(9, 16, 0); // index_node_size = 16
-        headerBuilder.AddULong(8, 2, 0); // features_count = 2 (forces the index-size loop to iterate)
+        // index_node_size = 16
+        headerBuilder.AddUShort(9, 16, 0);
+        // features_count = 2 (forces the index-size loop to iterate)
+        headerBuilder.AddULong(8, 2, 0);
         var header = headerBuilder.FinishSizePrefixed(headerBuilder.EndTable());
 
-        var index = new byte[120]; // IndexByteSize(2, 16) = 3 nodes * 40 bytes
+        // IndexByteSize(2, 16) = 3 nodes * 40 bytes
+        var index = new byte[120];
 
         byte[] bytes = [.. magic, .. header, .. index, .. PointFeature(1), .. PointFeature(2)];
         using var stream = new MemoryStream(bytes);
@@ -51,7 +55,8 @@ public class InternalTests
         var xy = builder.CreateDoubleVector([x, x]);
         builder.StartTable(8);
         builder.AddOffset(1, xy);
-        builder.AddByte(6, 1, 0); // Point
+        // Point
+        builder.AddByte(6, 1, 0);
         var geometry = builder.EndTable();
         builder.StartTable(3);
         builder.AddOffset(0, geometry);
@@ -65,7 +70,8 @@ public class InternalTests
 
         var builder = new FlatBufferBuilder();
         builder.StartTable(11);
-        builder.AddByte(1, 7, 0); // column type Long, no name
+        // column type Long, no name
+        builder.AddByte(1, 7, 0);
         var column = builder.EndTable();
         var columns = builder.CreateOffsetVector([column]);
         builder.StartTable(14);
@@ -122,6 +128,7 @@ public class InternalTests
         IReadOnlyList<Position> ccw = [new(0, 0), new(1, 0), new(1, 1), new(0, 1), new(0, 0)];
         await Assert.That(Ring.IsClockwise(ccw)).IsFalse();
         await Assert.That(Ring.IsClockwise(Ring.Orient(ccw, clockwise: true))).IsTrue();
-        await Assert.That(Ring.SignedArea([new(0, 0), new(1, 1)])).IsEqualTo(0d); // degenerate
+        // degenerate
+        await Assert.That(Ring.SignedArea([new(0, 0), new(1, 1)])).IsEqualTo(0d);
     }
 }

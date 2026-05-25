@@ -191,7 +191,8 @@ public static class FlatGeobuf
 
     static int IndexByteSize(ulong featureCount, ushort nodeSize)
     {
-        const int nodeItemSize = 40; // 4 doubles (bbox) + 1 ulong (offset)
+        // 4 doubles (bbox) + 1 ulong (offset)
+        const int nodeItemSize = 40;
         var size = nodeSize < 2 ? (ushort)2 : nodeSize;
         ulong nodes = 0;
         var levelCount = featureCount;
@@ -246,7 +247,8 @@ public static class FlatGeobuf
         builder.AddByte(headerGeometryType, CommonGeometryType(collection), 0);
         builder.AddOffset(headerColumns, columnsVector);
         builder.AddULong(headerFeaturesCount, (ulong)collection.Count, 0);
-        builder.AddUShort(headerIndexNodeSize, 0, 16); // 0 => no spatial index
+        // 0 => no spatial index
+        builder.AddUShort(headerIndexNodeSize, 0, 16);
         return builder.FinishSizePrefixed(builder.EndTable());
     }
 
@@ -446,7 +448,8 @@ public static class FlatGeobuf
             var fgbType = (byte)((int)geometry.Type + 1);
             if (common is { } existing && existing != fgbType)
             {
-                return 0; // Unknown: each feature carries its own type
+                // Unknown: each feature carries its own type
+                return 0;
             }
 
             common = fgbType;

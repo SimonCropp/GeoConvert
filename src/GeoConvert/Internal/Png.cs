@@ -14,11 +14,16 @@ static class Png
         var header = new byte[13];
         BinaryPrimitives.WriteInt32BigEndian(header, width);
         BinaryPrimitives.WriteInt32BigEndian(header.AsSpan(4), height);
-        header[8] = 8; // bit depth
-        header[9] = 6; // color type: truecolor with alpha
-        header[10] = 0; // deflate
-        header[11] = 0; // filter
-        header[12] = 0; // no interlace
+        // bit depth
+        header[8] = 8;
+        // color type: truecolor with alpha
+        header[9] = 6;
+        // deflate
+        header[10] = 0;
+        // filter
+        header[11] = 0;
+        // no interlace
+        header[12] = 0;
         WriteChunk(stream, "IHDR", header);
 
         WriteChunk(stream, "IDAT", Compress(AddFilterBytes(rgba, width, height)));

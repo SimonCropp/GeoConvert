@@ -7,12 +7,12 @@ sealed class WktParser(string text)
     {
         var geometry = ParseTagged();
         SkipWhitespace();
-        if (pos != text.Length)
+        if (pos == text.Length)
         {
-            throw Error("unexpected trailing characters");
+            return geometry;
         }
 
-        return geometry;
+        throw Error("unexpected trailing characters");
     }
 
     Geometry ParseTagged()
@@ -202,7 +202,8 @@ sealed class WktParser(string text)
         while (pos < text.Length)
         {
             var c = text[pos];
-            if (char.IsDigit(c) || c is '+' or '-' or '.' or 'e' or 'E')
+            if (char.IsDigit(c) ||
+                c is '+' or '-' or '.' or 'e' or 'E')
             {
                 pos++;
             }
@@ -235,14 +236,16 @@ sealed class WktParser(string text)
         }
 
         var c = text[pos];
-        return char.IsDigit(c) || c is '+' or '-' or '.';
+        return char.IsDigit(c) ||
+               c is '+' or '-' or '.';
     }
 
     string ReadWord()
     {
         SkipWhitespace();
         var start = pos;
-        while (pos < text.Length && char.IsLetter(text[pos]))
+        while (pos < text.Length &&
+               char.IsLetter(text[pos]))
         {
             pos++;
         }

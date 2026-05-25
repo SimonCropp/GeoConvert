@@ -131,7 +131,10 @@ public static class Runner
             if (toFormat == GeoFormat.Png)
             {
                 var collection = GeoConverter.Read(input, fromFormat);
-                var renderOptions = new RenderOptions { Bounds = bounds };
+                var renderOptions = new RenderOptions
+                {
+                    Bounds = bounds
+                };
                 if (width > 0)
                 {
                     renderOptions.Width = width;
@@ -201,43 +204,45 @@ public static class Runner
         return true;
     }
 
-    static void PrintUsage(TextWriter writer)
-    {
-        writer.WriteLine("geoconvert - convert maps between geospatial formats.");
-        writer.WriteLine();
-        writer.WriteLine("Usage:");
-        writer.WriteLine("  geoconvert <input> <output> [--from <format>] [--to <format>]");
-        writer.WriteLine();
-        writer.WriteLine("Formats are detected from file extensions; --from/--to override that.");
-        writer.WriteLine();
-        writer.WriteLine("Options:");
-        writer.WriteLine("  --from <format>        Force the input format.");
-        writer.WriteLine("  --to <format>          Force the output format.");
-        writer.WriteLine("  --bbox minX,minY,maxX,maxY   Extent to render (PNG output only).");
-        writer.WriteLine("  --size WIDTH[xHEIGHT]  Image size in pixels (PNG output only).");
-        writer.WriteLine("  --list                 List supported formats.");
-        writer.WriteLine("  -h, --help             Show this help.");
-        writer.WriteLine();
-        writer.WriteLine("Examples:");
-        writer.WriteLine("  geoconvert cities.geojson cities.kml");
-        writer.WriteLine("  geoconvert roads.shp roads.fgb");
-        writer.WriteLine("  geoconvert data.csv data.geojson --from csv");
-        writer.WriteLine("  geoconvert world.geojson europe.png --bbox -10,35,30,60 --size 1200x900");
-    }
+    static void PrintUsage(TextWriter writer) =>
+        writer.WriteLine(
+            """
+            geoconvert - convert maps between geospatial formats.
 
-    static void PrintFormats(TextWriter writer)
-    {
-        writer.WriteLine("Supported formats (read and write):");
-        writer.WriteLine("  geojson    .geojson .json");
-        writer.WriteLine("  topojson   .topojson");
-        writer.WriteLine("  shapefile  .shp (+ .shx .dbf .prj)");
-        writer.WriteLine("  flatgeobuf .fgb");
-        writer.WriteLine("  kml        .kml");
-        writer.WriteLine("  kmz        .kmz");
-        writer.WriteLine("  gpx        .gpx");
-        writer.WriteLine("  wkt        .wkt");
-        writer.WriteLine("  wkb        .wkb");
-        writer.WriteLine("  csv        .csv");
-        writer.WriteLine("  png        .png (write-only; use --bbox and --size)");
-    }
+            Usage:
+              geoconvert <input> <output> [--from <format>] [--to <format>]
+
+            Formats are detected from file extensions; --from/--to override that.
+
+            Options:
+              --from <format>        Force the input format.
+              --to <format>          Force the output format.
+              --bbox minX,minY,maxX,maxY   Extent to render (PNG output only).
+              --size WIDTH[xHEIGHT]  Image size in pixels (PNG output only).
+              --list                 List supported formats.
+              -h, --help             Show this help.
+
+            Examples:
+              geoconvert cities.geojson cities.kml
+              geoconvert roads.shp roads.fgb
+              geoconvert data.csv data.geojson --from csv
+              geoconvert world.geojson europe.png --bbox -10,35,30,60 --size 1200x900
+            """);
+
+    static void PrintFormats(TextWriter writer) =>
+        writer.WriteLine(
+            """
+            Supported formats (read and write):
+              geojson    .geojson .json
+              topojson   .topojson
+              shapefile  .shp (+ .shx .dbf .prj)
+              flatgeobuf .fgb
+              kml        .kml
+              kmz        .kmz
+              gpx        .gpx
+              wkt        .wkt
+              wkb        .wkb
+              csv        .csv
+              png        .png (write-only; use --bbox and --size)
+            """);
 }

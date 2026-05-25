@@ -19,12 +19,17 @@ static class Dbf
         memory.Position = 0;
         using var reader = new BinaryReader(memory, Encoding.Latin1);
 
-        reader.ReadByte(); // version
-        reader.ReadBytes(3); // last update date
+        // version
+        reader.ReadByte();
+        // last update date
+        reader.ReadBytes(3);
         var recordCount = reader.ReadUInt32();
-        reader.ReadUInt16(); // header length
-        reader.ReadUInt16(); // record length
-        reader.ReadBytes(20); // reserved
+        // header length
+        reader.ReadUInt16();
+        // record length
+        reader.ReadUInt16();
+        // reserved
+        reader.ReadBytes(20);
 
         var fields = new List<Field>();
         while (true)
@@ -44,10 +49,12 @@ static class Dbf
 
             var name = Encoding.Latin1.GetString(nameBytes).TrimEnd('\0', ' ');
             var type = (char)reader.ReadByte();
-            reader.ReadBytes(4); // reserved / field data address
+            // reserved / field data address
+            reader.ReadBytes(4);
             var length = reader.ReadByte();
             var decimals = reader.ReadByte();
-            reader.ReadBytes(14); // reserved
+            // reserved
+            reader.ReadBytes(14);
 
             fields.Add(new() { Name = name, Type = type, Length = length, Decimals = decimals });
         }
@@ -115,7 +122,8 @@ static class Dbf
 
         using var writer = new BinaryWriter(stream, Encoding.Latin1, leaveOpen: true);
         writer.Write((byte)0x03);
-        writer.Write((byte)80); // 1980
+        // 1980
+        writer.Write((byte)80);
         writer.Write((byte)1);
         writer.Write((byte)1);
         writer.Write((uint)collection.Count);
@@ -140,7 +148,8 @@ static class Dbf
 
         foreach (var feature in collection)
         {
-            writer.Write((byte)0x20); // not deleted
+            // not deleted
+            writer.Write((byte)0x20);
             for (var i = 0; i < keys.Count; i++)
             {
                 feature.Properties.TryGetValue(keys[i], out var value);

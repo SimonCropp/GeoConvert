@@ -16,9 +16,9 @@ public sealed class Polygon(IReadOnlyList<IReadOnlyList<Position>> rings) : Geom
 
     public override bool IsEmpty => Rings.Count == 0 || Rings[0].Count == 0;
 
-    public override bool HasZ => Rings.Any(ring => ring.Any(_ => _.HasZ));
+    public override bool HasZ => Rings.Any(_ => _.Any(_ => _.HasZ));
 
-    public override bool HasM => Rings.Any(ring => ring.Any(_ => _.HasM));
+    public override bool HasM => Rings.Any(_ => _.Any(_ => _.HasM));
 
     public override Envelope GetBounds() => Bounds.Of(Rings.SelectMany(_ => _));
 }

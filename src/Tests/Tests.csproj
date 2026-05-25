@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="ProjectFiles" />
     <PackageReference Include="TUnit" />
     <PackageReference Include="Verify.TUnit" />
     <PackageReference Include="Verify.DiffPlex" />
@@ -16,6 +17,12 @@
     <PackageReference Include="ProjectDefaults" PrivateAssets="all" />
     <ProjectReference Include="..\GeoConvert\GeoConvert.csproj" />
     <ProjectReference Include="..\GeoConvert.Cli\GeoConvert.Cli.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="australian-suburbs.geojson">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

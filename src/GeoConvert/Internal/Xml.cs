@@ -35,7 +35,8 @@ static class Xml
             return;
         }
 
-        reader.Read(); // step into the element's content
+        // step into the element's content
+        reader.Read();
         while (!reader.EOF && reader.NodeType != XmlNodeType.EndElement)
         {
             if (reader.NodeType == XmlNodeType.Element)
@@ -50,7 +51,8 @@ static class Xml
 
         if (!reader.EOF)
         {
-            reader.Read(); // consume the end tag
+            // consume the end tag
+            reader.Read();
         }
     }
 }

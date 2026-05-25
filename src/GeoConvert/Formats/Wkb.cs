@@ -209,7 +209,8 @@ public static class Wkb
         var hasZ = geometry.HasZ;
         var hasM = geometry.HasM;
 
-        writer.Write((byte)1); // little-endian (NDR)
+        // little-endian (NDR)
+        writer.Write((byte)1);
 
         var type = BaseType(geometry.Type);
         if (hasZ && hasM)
