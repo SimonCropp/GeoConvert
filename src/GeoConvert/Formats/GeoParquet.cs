@@ -20,16 +20,19 @@ public static class GeoParquet
     {
         using var memory = new MemoryStream();
         stream.CopyTo(memory);
-        var data = memory.ToArray();
+        // GetBuffer avoids the extra full-file copy ToArray would make; length is the real byte count
+        // (the buffer may be larger), so footer offsets must be measured from it, not from data.Length.
+        var data = memory.GetBuffer();
+        var length = (int)memory.Length;
 
-        if (data.Length < 12 || !StartsWithMagic(data, 0) || !StartsWithMagic(data, data.Length - 4))
+        if (length < 12 || !StartsWithMagic(data, 0) || !StartsWithMagic(data, length - 4))
         {
             throw new GeoConvertException("Not a Parquet file (bad PAR1 magic).");
         }
 
         try
         {
-            return Parse(data);
+            return Parse(data, length);
         }
         catch (GeoConvertException)
         {
@@ -47,10 +50,10 @@ public static class GeoParquet
         data[offset + 2] == magic[2] &&
         data[offset + 3] == magic[3];
 
-    static FeatureCollection Parse(byte[] data)
+    static FeatureCollection Parse(byte[] data, int length)
     {
-        var footerLength = BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(data.Length - 8));
-        var file = ParquetMetadata.ReadFile(data, data.Length - 8 - footerLength);
+        var footerLength = BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(length - 8));
+        var file = ParquetMetadata.ReadFile(data, length - 8 - footerLength);
         var geometryColumn = ReadGeoMetadata(file);
 
         var repetitions = new Dictionary<string, int>(StringComparer.Ordinal);
