@@ -168,9 +168,19 @@ dotnet run -c Release --project src/Benchmarks -- --filter "*"
 ## Notes and limitations
 
 * **Shapefile** holds a single geometry category per file; writing a collection that mixes points,
-  lines and polygons throws. Output is 2D and a WGS84 `.prj` is emitted.
+  lines and polygons throws. This is mandated by the format, not a GeoConvert choice — the `.shp`
+  header declares one shape type for the whole file, so a mixed collection has no valid encoding and
+  the consumer must split it into one file per geometry type first. Output is 2D: the format does
+  define Z and M variants, but GeoConvert drops those ordinates rather than emit them. A WGS84 `.prj`
+  is emitted.
 * **FlatGeobuf** is written without the optional packed R-tree spatial index
-  (`index_node_size = 0`) and is 2D; files that carry an index are read by skipping it.
+  (`index_node_size = 0`) and is 2D. The index is a query accelerator, not data: it lets a reader
+  fetch features in a bounding box without scanning the whole file, but carries no information the
+  feature records don't. So GeoConvert reads an indexed file by computing the index size and skipping
+  past it — full-file conversion needs every feature anyway — and writes none, leaving output that is
+  still valid FlatGeobuf (GDAL, QGIS and flatgeobuf.org read it fine) for the consumer to re-index on
+  import if it wants spatial queries. Emitting one would mean hand-rolling a Hilbert R-tree to honour
+  the no-dependency rule, which is real complexity for a benefit a conversion tool rarely needs.
 * **GPX** has no native area type: polygons are written as a track with one segment per ring, multi
   polygons flatten every ring into a single track, and geometry collections write each member geometry
   in turn. Reading a track with several segments yields a multi line string, so polygons do not survive
