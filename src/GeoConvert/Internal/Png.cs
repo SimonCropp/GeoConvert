@@ -26,30 +26,22 @@ static class Png
         header[12] = 0;
         WriteChunk(stream, "IHDR", header);
 
-        WriteChunk(stream, "IDAT", Compress(AddFilterBytes(rgba, width, height)));
+        WriteChunk(stream, "IDAT", Compress(rgba, width, height));
         WriteChunk(stream, "IEND", []);
     }
 
-    static byte[] AddFilterBytes(byte[] rgba, int width, int height)
+    static byte[] Compress(byte[] rgba, int width, int height)
     {
         var stride = width * 4;
-        var output = new byte[(stride + 1) * height];
-        for (var y = 0; y < height; y++)
-        {
-            // A leading 0 selects the "None" row filter.
-            output[y * (stride + 1)] = 0;
-            Array.Copy(rgba, y * stride, output, y * (stride + 1) + 1, stride);
-        }
-
-        return output;
-    }
-
-    static byte[] Compress(byte[] data)
-    {
         using var memory = new MemoryStream();
         using (var zlib = new ZLibStream(memory, CompressionLevel.Optimal, leaveOpen: true))
         {
-            zlib.Write(data, 0, data.Length);
+            for (var y = 0; y < height; y++)
+            {
+                // A leading 0 selects the "None" row filter.
+                zlib.WriteByte(0);
+                zlib.Write(rgba, y * stride, stride);
+            }
         }
 
         return memory.ToArray();

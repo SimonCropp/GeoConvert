@@ -59,10 +59,19 @@ static class CsvParser
                     i++;
                     break;
                 default:
-                    field.Append(c);
+                {
+                    // Bulk-append the whole run of ordinary characters instead of one at a time.
+                    var start = i;
+                    do
+                    {
+                        i++;
+                    }
+                    while (i < text.Length && text[i] is not ('"' or ',' or '\r' or '\n'));
+
+                    field.Append(text, start, i - start);
                     fieldStarted = true;
-                    i++;
                     break;
+                }
             }
         }
 

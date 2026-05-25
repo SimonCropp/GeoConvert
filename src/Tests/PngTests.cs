@@ -86,6 +86,29 @@ public class PngTests
     }
 
     [Test]
+    public async Task Fills_polygon_with_opaque_color()
+    {
+        // An opaque fill takes the fast span-fill path; the interior should be exactly the fill color.
+        var collection = new FeatureCollection
+        {
+            new Feature(new Polygon([[new(0, 0), new(10, 0), new(10, 10), new(0, 10), new(0, 0)]])),
+        };
+        var options = new RenderOptions
+        {
+            Bounds = new Envelope(0, 0, 10, 10),
+            Width = 64,
+            Height = 64,
+            Fill = new(200, 50, 50),
+        };
+
+        var (width, _, pixels) = Decode(MapRenderer.RenderPng(collection, options));
+        var center = (32 * width + 32) * 4;
+        await Assert.That(pixels[center]).IsEqualTo((byte)200);
+        await Assert.That(pixels[center + 1]).IsEqualTo((byte)50);
+        await Assert.That(pixels[center + 2]).IsEqualTo((byte)50);
+    }
+
+    [Test]
     public Task Render_snapshot()
     {
         var collection = new FeatureCollection
