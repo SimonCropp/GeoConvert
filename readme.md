@@ -8,8 +8,6 @@ Convert maps between geospatial formats, with **no third-party dependencies** â€
 class libraries (`System.Text.Json`, `System.Xml`, `System.IO.Compression`). It can also render a
 bounding box to a PNG image. Ships as a library and a `geoconvert` command line tool.
 
-Has no dependencies.
-
 
 ## Supported formats
 
