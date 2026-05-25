@@ -28,6 +28,10 @@ Run from the repo root.
   `pwsh src/coverage-check.ps1 -Report TestResults/unit.cobertura.xml`. The shipped source is kept at
   **100% line coverage** (the gate, and CI, fail below that). `coverage-check.ps1` scopes to files under
   `src/` excluding the test project (Microsoft coverage instruments everything otherwise).
+- Benchmarks (BenchmarkDotNet, requires Release):
+  `dotnet run -c Release --project src/Benchmarks -- --filter '*'` (add `--job Dry` for a fast smoke
+  run). `ConvertBenchmarks` measures read/write per stream format; `RenderBenchmarks` measures PNG
+  rasterization.
 
 ## Verify snapshots
 

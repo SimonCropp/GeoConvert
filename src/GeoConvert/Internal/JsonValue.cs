@@ -1,5 +1,3 @@
-namespace GeoConvert;
-
 /// <summary>
 /// Converts between JSON scalar values and the CLR scalars used in <see cref="Feature.Properties"/>.
 /// Nested objects/arrays are preserved as their raw JSON string.

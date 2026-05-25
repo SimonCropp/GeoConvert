@@ -1,120 +1,170 @@
-using System.Xml;
-using System.Xml.Linq;
-
 namespace GeoConvert;
 
 /// <summary>
 /// Reads and writes <see href="https://www.ogc.org/standard/kml/">KML 2.2</see>. Each
 /// <c>&lt;Placemark&gt;</c> maps to a feature; <c>&lt;name&gt;</c>/<c>&lt;description&gt;</c> and
 /// <c>&lt;ExtendedData&gt;</c>/<c>&lt;Data&gt;</c> map to properties. KML coordinates are lon,lat[,alt]
-/// (no measure). Reading is namespace-tolerant.
+/// (no measure). Reading streams with <see cref="XmlReader"/> and is namespace-tolerant.
 /// </summary>
 public static class Kml
 {
-    static readonly XNamespace ns = "http://www.opengis.net/kml/2.2";
+    const string ns = "http://www.opengis.net/kml/2.2";
 
     public static FeatureCollection Read(Stream stream)
     {
-        var document = XDocument.Load(stream);
+        using var reader = Xml.CreateReader(stream);
         var collection = new FeatureCollection();
-        foreach (var placemark in document.DescendantsLocal("Placemark"))
-        {
-            collection.Add(ReadPlacemark(placemark));
-        }
-
+        reader.MoveToContent();
+        Scan(reader, collection);
         return collection;
     }
 
-    static Feature ReadPlacemark(XElement placemark)
+    // Placemarks can be nested under Document/Folder, so walk the tree to any depth.
+    static void Scan(XmlReader reader, FeatureCollection collection) =>
+        Xml.ReadChildren(reader, () =>
+        {
+            if (reader.LocalName == "Placemark")
+            {
+                collection.Add(ReadPlacemark(reader));
+            }
+            else
+            {
+                Scan(reader, collection);
+            }
+        });
+
+    static Feature ReadPlacemark(XmlReader reader)
     {
         var feature = new Feature();
-
-        if (placemark.ValueLocal("name") is { } name)
+        Xml.ReadChildren(reader, () =>
         {
-            feature.Properties["name"] = name;
-        }
-
-        if (placemark.ValueLocal("description") is { } description)
-        {
-            feature.Properties["description"] = description;
-        }
-
-        if (placemark.ElementLocal("ExtendedData") is { } extended)
-        {
-            foreach (var data in extended.ElementsLocal("Data"))
+            switch (reader.LocalName)
             {
-                if (data.Attribute("name")?.Value is { } key)
-                {
-                    feature.Properties[key] = data.ValueLocal("value");
-                }
+                case "name":
+                    feature.Properties["name"] = reader.ReadElementContentAsString();
+                    break;
+                case "description":
+                    feature.Properties["description"] = reader.ReadElementContentAsString();
+                    break;
+                case "ExtendedData":
+                    ReadExtendedData(reader, feature);
+                    break;
+                case "Point":
+                case "LineString":
+                case "LinearRing":
+                case "Polygon":
+                case "MultiGeometry":
+                    var geometry = ReadGeometry(reader);
+                    feature.Geometry ??= geometry; // first geometry wins
+                    break;
+                default:
+                    reader.Skip();
+                    break;
             }
-        }
+        });
 
-        feature.Geometry = ReadGeometry(placemark);
         return feature;
     }
 
-    static Geometry? ReadGeometry(XContainer container)
-    {
-        foreach (var element in container.Elements())
+    static void ReadExtendedData(XmlReader reader, Feature feature) =>
+        Xml.ReadChildren(reader, () =>
         {
-            if (ReadGeometryElement(element) is { } geometry)
+            if (reader.LocalName != "Data")
             {
-                return geometry;
+                reader.Skip();
+                return;
             }
-        }
 
-        return null;
-    }
+            var key = reader.GetAttribute("name");
+            string? value = null;
+            Xml.ReadChildren(reader, () =>
+            {
+                if (reader.LocalName == "value")
+                {
+                    value = reader.ReadElementContentAsString();
+                }
+                else
+                {
+                    reader.Skip();
+                }
+            });
 
-    static Geometry? ReadGeometryElement(XElement element)
-    {
-        switch (element.Name.LocalName)
+            if (key != null)
+            {
+                feature.Properties[key] = value;
+            }
+        });
+
+    static Geometry ReadGeometry(XmlReader reader) =>
+        reader.LocalName switch
         {
-            case "Point":
-                var points = ParseCoordinates(element);
-                return new Point(points.Count > 0 ? points[0] : new(double.NaN, double.NaN));
-            case "LineString":
-            case "LinearRing":
-                return new LineString(ParseCoordinates(element));
-            case "Polygon":
-                return ReadPolygon(element);
-            case "MultiGeometry":
-                return ReadMultiGeometry(element);
-            default:
-                return null;
-        }
+            "Point" => ReadPoint(reader),
+            "LineString" or "LinearRing" => new LineString(ReadCoordinatesElement(reader)),
+            "Polygon" => ReadPolygon(reader),
+            _ => ReadMultiGeometry(reader), // MultiGeometry
+        };
+
+    static Point ReadPoint(XmlReader reader)
+    {
+        var positions = ReadCoordinatesElement(reader);
+        return new(positions.Count > 0 ? positions[0] : new(double.NaN, double.NaN));
     }
 
-    static Polygon ReadPolygon(XElement element)
+    static Polygon ReadPolygon(XmlReader reader)
     {
         var rings = new List<IReadOnlyList<Position>>();
-        if (element.ElementLocal("outerBoundaryIs")?.ElementLocal("LinearRing") is { } outer)
+        Xml.ReadChildren(reader, () =>
         {
-            rings.Add(ParseCoordinates(outer));
-        }
-
-        foreach (var inner in element.ElementsLocal("innerBoundaryIs"))
-        {
-            if (inner.ElementLocal("LinearRing") is { } ring)
+            if (reader.LocalName is "outerBoundaryIs" or "innerBoundaryIs")
             {
-                rings.Add(ParseCoordinates(ring));
+                rings.Add(ReadBoundary(reader));
             }
-        }
+            else
+            {
+                reader.Skip();
+            }
+        });
 
         return new(rings);
     }
 
-    static Geometry ReadMultiGeometry(XElement element)
+    static List<Position> ReadBoundary(XmlReader reader)
+    {
+        var positions = new List<Position>();
+        Xml.ReadChildren(reader, () =>
+        {
+            if (reader.LocalName == "LinearRing")
+            {
+                positions = ReadCoordinatesElement(reader);
+            }
+            else
+            {
+                reader.Skip();
+            }
+        });
+
+        return positions;
+    }
+
+    static Geometry ReadMultiGeometry(XmlReader reader)
     {
         var children = new List<Geometry>();
-        foreach (var child in element.Elements())
+        Xml.ReadChildren(reader, () =>
         {
-            if (ReadGeometryElement(child) is { } geometry)
+            switch (reader.LocalName)
             {
-                children.Add(geometry);
+                case "Point":
+                case "LineString":
+                case "LinearRing":
+                case "Polygon":
+                case "MultiGeometry":
+                    children.Add(ReadGeometry(reader));
+                    break;
+                default:
+                    reader.Skip();
+                    break;
             }
-        }
+        });
 
         if (children.Count > 0 && children.All(_ => _ is Point))
         {
@@ -134,16 +184,27 @@ public static class Kml
         return new GeometryCollection(children);
     }
 
-    static List<Position> ParseCoordinates(XElement geometryElement)
+    static List<Position> ReadCoordinatesElement(XmlReader reader)
     {
-        var coordinates = geometryElement.ValueLocal("coordinates");
-        if (coordinates == null)
-        {
-            return [];
-        }
-
         var positions = new List<Position>();
-        foreach (var tuple in coordinates.Split([' ', '\t', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries))
+        Xml.ReadChildren(reader, () =>
+        {
+            if (reader.LocalName == "coordinates")
+            {
+                ParseCoordinates(reader.ReadElementContentAsString(), positions);
+            }
+            else
+            {
+                reader.Skip();
+            }
+        });
+
+        return positions;
+    }
+
+    static void ParseCoordinates(string text, List<Position> positions)
+    {
+        foreach (var tuple in text.Split([' ', '\t', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries))
         {
             var parts = tuple.Split(',');
             var x = double.Parse(parts[0], CultureInfo.InvariantCulture);
@@ -151,117 +212,150 @@ public static class Kml
             double? z = parts.Length > 2 ? double.Parse(parts[2], CultureInfo.InvariantCulture) : null;
             positions.Add(new(x, y, z));
         }
-
-        return positions;
     }
 
     public static void Write(Stream stream, FeatureCollection collection)
     {
-        var document = BuildDocument(collection);
-        var settings = new XmlWriterSettings
-        {
-            Indent = true,
-            Encoding = new UTF8Encoding(false),
-        };
-        using var writer = XmlWriter.Create(stream, settings);
-        document.Save(writer);
-    }
-
-    internal static XDocument BuildDocument(FeatureCollection collection)
-    {
-        var document = new XElement(ns + "Document");
+        using var writer = Xml.CreateWriter(stream);
+        writer.WriteStartDocument();
+        writer.WriteStartElement("kml", ns);
+        writer.WriteStartElement("Document", ns);
         foreach (var feature in collection)
         {
-            document.Add(WritePlacemark(feature));
+            WritePlacemark(writer, feature);
         }
 
-        return new(
-            new("1.0", "UTF-8", null),
-            new XElement(ns + "kml", document));
+        writer.WriteEndElement();
+        writer.WriteEndElement();
+        writer.WriteEndDocument();
     }
 
-    static XElement WritePlacemark(Feature feature)
+    static void WritePlacemark(XmlWriter writer, Feature feature)
     {
-        var placemark = new XElement(ns + "Placemark");
-        var extras = new List<KeyValuePair<string, object?>>();
+        writer.WriteStartElement("Placemark", ns);
+
+        var hasExtras = false;
         foreach (var property in feature.Properties)
         {
             switch (property.Key)
             {
                 case "name":
-                    placemark.Add(new XElement(ns + "name", Scalars.Format(property.Value)));
+                    writer.WriteElementString("name", ns, Scalars.Format(property.Value));
                     break;
                 case "description":
-                    placemark.Add(new XElement(ns + "description", Scalars.Format(property.Value)));
+                    writer.WriteElementString("description", ns, Scalars.Format(property.Value));
                     break;
                 default:
-                    extras.Add(property);
+                    hasExtras = true;
                     break;
             }
         }
 
-        if (extras.Count > 0)
+        if (hasExtras)
         {
-            var extended = new XElement(ns + "ExtendedData");
-            foreach (var extra in extras)
+            writer.WriteStartElement("ExtendedData", ns);
+            foreach (var property in feature.Properties)
             {
-                extended.Add(
-                    new XElement(
-                        ns + "Data",
-                        new XAttribute("name", extra.Key),
-                        new XElement(ns + "value", Scalars.Format(extra.Value))));
+                if (property.Key is "name" or "description")
+                {
+                    continue;
+                }
+
+                writer.WriteStartElement("Data", ns);
+                writer.WriteAttributeString("name", property.Key);
+                writer.WriteElementString("value", ns, Scalars.Format(property.Value));
+                writer.WriteEndElement();
             }
 
-            placemark.Add(extended);
+            writer.WriteEndElement();
         }
 
         if (feature.Geometry is { } geometry)
         {
-            placemark.Add(WriteGeometry(geometry));
+            WriteGeometry(writer, geometry);
         }
 
-        return placemark;
+        writer.WriteEndElement();
     }
 
-    static XElement WriteGeometry(Geometry geometry) =>
-        geometry switch
-        {
-            Point point => new(ns + "Point", Coordinates([point.Coordinate])),
-            LineString line => new(ns + "LineString", Coordinates(line.Positions)),
-            Polygon polygon => WritePolygon(polygon),
-            MultiPoint multiPoint => new(
-                ns + "MultiGeometry",
-                multiPoint.Positions.Select(_ => new XElement(ns + "Point", Coordinates([_])))),
-            MultiLineString multiLine => new(
-                ns + "MultiGeometry",
-                multiLine.LineStrings.Select(WriteGeometry)),
-            MultiPolygon multiPolygon => new(
-                ns + "MultiGeometry",
-                multiPolygon.Polygons.Select(WriteGeometry)),
-            GeometryCollection collection => new(
-                ns + "MultiGeometry",
-                collection.Geometries.Select(WriteGeometry)),
-            _ => throw new GeoConvertException($"Cannot write {geometry.Type} as KML."),
-        };
-
-    static XElement WritePolygon(Polygon polygon)
+    static void WriteGeometry(XmlWriter writer, Geometry geometry)
     {
-        var element = new XElement(ns + "Polygon");
+        switch (geometry)
+        {
+            case Point point:
+                WriteCoordinatesElement(writer, "Point", [point.Coordinate]);
+                break;
+            case LineString line:
+                WriteCoordinatesElement(writer, "LineString", line.Positions);
+                break;
+            case Polygon polygon:
+                WritePolygon(writer, polygon);
+                break;
+            case MultiPoint multiPoint:
+                writer.WriteStartElement("MultiGeometry", ns);
+                foreach (var position in multiPoint.Positions)
+                {
+                    WriteCoordinatesElement(writer, "Point", [position]);
+                }
+
+                writer.WriteEndElement();
+                break;
+            case MultiLineString multiLine:
+                writer.WriteStartElement("MultiGeometry", ns);
+                foreach (var line in multiLine.LineStrings)
+                {
+                    WriteGeometry(writer, line);
+                }
+
+                writer.WriteEndElement();
+                break;
+            case MultiPolygon multiPolygon:
+                writer.WriteStartElement("MultiGeometry", ns);
+                foreach (var polygon in multiPolygon.Polygons)
+                {
+                    WriteGeometry(writer, polygon);
+                }
+
+                writer.WriteEndElement();
+                break;
+            case GeometryCollection collection:
+                writer.WriteStartElement("MultiGeometry", ns);
+                foreach (var child in collection.Geometries)
+                {
+                    WriteGeometry(writer, child);
+                }
+
+                writer.WriteEndElement();
+                break;
+            default:
+                throw new GeoConvertException($"Cannot write {geometry.Type} as KML.");
+        }
+    }
+
+    static void WritePolygon(XmlWriter writer, Polygon polygon)
+    {
+        writer.WriteStartElement("Polygon", ns);
         if (polygon.ExteriorRing is { } exterior)
         {
-            element.Add(new XElement(ns + "outerBoundaryIs", new XElement(ns + "LinearRing", Coordinates(exterior))));
+            writer.WriteStartElement("outerBoundaryIs", ns);
+            WriteCoordinatesElement(writer, "LinearRing", exterior);
+            writer.WriteEndElement();
         }
 
         foreach (var hole in polygon.InteriorRings)
         {
-            element.Add(new XElement(ns + "innerBoundaryIs", new XElement(ns + "LinearRing", Coordinates(hole))));
+            writer.WriteStartElement("innerBoundaryIs", ns);
+            WriteCoordinatesElement(writer, "LinearRing", hole);
+            writer.WriteEndElement();
         }
 
-        return element;
+        writer.WriteEndElement();
     }
 
-    static XElement Coordinates(IReadOnlyList<Position> positions)
+    static void WriteCoordinatesElement(XmlWriter writer, string element, IReadOnlyList<Position> positions)
     {
+        writer.WriteStartElement(element, ns);
+
         var builder = new StringBuilder();
         for (var i = 0; i < positions.Count; i++)
         {
@@ -281,6 +375,7 @@ public static class Kml
             }
         }
 
-        return new(ns + "coordinates", builder.ToString());
+        writer.WriteElementString("coordinates", ns, builder.ToString());
+        writer.WriteEndElement();
     }
 }

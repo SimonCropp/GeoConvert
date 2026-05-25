@@ -49,17 +49,10 @@ public class RoundTripTests
     {
         if (format == GeoFormat.Shapefile)
         {
-            var directory = Directory.CreateTempSubdirectory();
-            try
-            {
-                var path = Path.Combine(directory.FullName, "data.shp");
-                Shapefile.Write(path, source);
-                return Shapefile.Read(path);
-            }
-            finally
-            {
-                directory.Delete(true);
-            }
+            using var directory = new TempDirectory();
+            var path = Path.Combine(directory, "data.shp");
+            Shapefile.Write(path, source);
+            return Shapefile.Read(path);
         }
 
         using var stream = new MemoryStream();

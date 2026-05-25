@@ -28,15 +28,8 @@ public class DefensiveTests
 
     static void WriteBadShapefile()
     {
-        var directory = Directory.CreateTempSubdirectory();
-        try
-        {
-            Shapefile.Write(Path.Combine(directory.FullName, "bad.shp"), Bad());
-        }
-        finally
-        {
-            directory.Delete(true);
-        }
+        using var directory = new TempDirectory();
+        Shapefile.Write(Path.Combine(directory, "bad.shp"), Bad());
     }
 
     [Test]

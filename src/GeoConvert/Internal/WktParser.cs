@@ -1,5 +1,3 @@
-namespace GeoConvert;
-
 /// <summary>Recursive-descent parser for a single WKT geometry.</summary>
 sealed class WktParser(string text)
 {

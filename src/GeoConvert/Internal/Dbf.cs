@@ -1,5 +1,3 @@
-namespace GeoConvert;
-
 /// <summary>
 /// Minimal dBASE III (.dbf) reader/writer for shapefile attribute tables. Field types are inferred on
 /// write (Logical, Numeric integer/decimal, or Character) and decoded back on read. Text is Latin-1.

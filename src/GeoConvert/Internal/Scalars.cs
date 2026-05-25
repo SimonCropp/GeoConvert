@@ -1,5 +1,3 @@
-namespace GeoConvert;
-
 /// <summary>Culture-invariant formatting and inference of scalar property values.</summary>
 static class Scalars
 {

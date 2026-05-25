@@ -12,34 +12,62 @@ public static class Wkb
     const uint ewkbM = 0x40000000;
     const uint ewkbSrid = 0x20000000;
 
+    // A forward cursor over the WKB buffer: reads scalars directly from the span via BinaryPrimitives, so
+    // no per-value byte[] is allocated and endianness is handled without copying/reversing.
+    ref struct Cursor(ReadOnlySpan<byte> data)
+    {
+        readonly ReadOnlySpan<byte> data = data;
+        int position;
+
+        public readonly bool AtEnd => position >= data.Length;
+
+        public byte ReadByte() => data[position++];
+
+        public uint ReadUInt32(bool little)
+        {
+            var slice = data.Slice(position, 4);
+            position += 4;
+            return little
+                ? BinaryPrimitives.ReadUInt32LittleEndian(slice)
+                : BinaryPrimitives.ReadUInt32BigEndian(slice);
+        }
+
+        public double ReadDouble(bool little)
+        {
+            var slice = data.Slice(position, 8);
+            position += 8;
+            return little
+                ? BinaryPrimitives.ReadDoubleLittleEndian(slice)
+                : BinaryPrimitives.ReadDoubleBigEndian(slice);
+        }
+    }
+
     public static FeatureCollection Read(Stream stream)
     {
         using var memory = new MemoryStream();
         stream.CopyTo(memory);
-        memory.Position = 0;
 
+        var cursor = new Cursor(memory.GetBuffer().AsSpan(0, (int)memory.Length));
         var collection = new FeatureCollection();
-        using var reader = new BinaryReader(memory);
-        while (memory.Position < memory.Length)
+        while (!cursor.AtEnd)
         {
-            collection.Add(new Feature(ReadGeometry(reader)));
+            collection.Add(new Feature(ReadGeometry(ref cursor)));
         }
 
         return collection;
     }
 
     /// <summary>Parses a single geometry from its WKB representation.</summary>
-    public static Geometry ParseGeometry(byte[] bytes)
+    public static Geometry ParseGeometry(ReadOnlySpan<byte> bytes)
     {
-        using var memory = new MemoryStream(bytes);
-        using var reader = new BinaryReader(memory);
-        return ReadGeometry(reader);
+        var cursor = new Cursor(bytes);
+        return ReadGeometry(ref cursor);
     }
 
-    static Geometry ReadGeometry(BinaryReader reader)
+    static Geometry ReadGeometry(ref Cursor cursor)
     {
-        var little = reader.ReadByte() == 1;
-        var rawType = ReadUInt32(reader, little);
+        var little = cursor.ReadByte() == 1;
+        var rawType = cursor.ReadUInt32(little);
 
         bool hasZ;
         bool hasM;
@@ -50,7 +78,7 @@ public static class Wkb
             hasM = (rawType & ewkbM) != 0;
             if ((rawType & ewkbSrid) != 0)
             {
-                ReadUInt32(reader, little);
+                cursor.ReadUInt32(little);
             }
 
             baseType = rawType & 0xFF;
@@ -65,51 +93,51 @@ public static class Wkb
         switch (baseType)
         {
             case 1:
-                return new Point(ReadCoordinate(reader, little, hasZ, hasM));
+                return new Point(ReadCoordinate(ref cursor, little, hasZ, hasM));
             case 2:
-                return new LineString(ReadCoordinates(reader, little, hasZ, hasM));
+                return new LineString(ReadCoordinates(ref cursor, little, hasZ, hasM));
             case 3:
-                return new Polygon(ReadRings(reader, little, hasZ, hasM));
+                return new Polygon(ReadRings(ref cursor, little, hasZ, hasM));
             case 4:
             {
-                var count = ReadUInt32(reader, little);
+                var count = cursor.ReadUInt32(little);
                 var positions = new List<Position>((int)count);
                 for (var i = 0; i < count; i++)
                 {
-                    positions.Add(((Point)ReadGeometry(reader)).Coordinate);
+                    positions.Add(((Point)ReadGeometry(ref cursor)).Coordinate);
                 }
 
                 return new MultiPoint(positions);
             }
             case 5:
             {
-                var count = ReadUInt32(reader, little);
+                var count = cursor.ReadUInt32(little);
                 var lines = new List<LineString>((int)count);
                 for (var i = 0; i < count; i++)
                 {
-                    lines.Add((LineString)ReadGeometry(reader));
+                    lines.Add((LineString)ReadGeometry(ref cursor));
                 }
 
                 return new MultiLineString(lines);
             }
             case 6:
             {
-                var count = ReadUInt32(reader, little);
+                var count = cursor.ReadUInt32(little);
                 var polygons = new List<Polygon>((int)count);
                 for (var i = 0; i < count; i++)
                 {
-                    polygons.Add((Polygon)ReadGeometry(reader));
+                    polygons.Add((Polygon)ReadGeometry(ref cursor));
                 }
 
                 return new MultiPolygon(polygons);
             }
             case 7:
             {
-                var count = ReadUInt32(reader, little);
+                var count = cursor.ReadUInt32(little);
                 var geometries = new List<Geometry>((int)count);
                 for (var i = 0; i < count; i++)
                 {
-                    geometries.Add(ReadGeometry(reader));
+                    geometries.Add(ReadGeometry(ref cursor));
                 }
 
                 return new GeometryCollection(geometries);
@@ -119,59 +147,37 @@ public static class Wkb
         }
     }
 
-    static List<IReadOnlyList<Position>> ReadRings(BinaryReader reader, bool little, bool hasZ, bool hasM)
+    static List<IReadOnlyList<Position>> ReadRings(ref Cursor cursor, bool little, bool hasZ, bool hasM)
     {
-        var ringCount = ReadUInt32(reader, little);
+        var ringCount = cursor.ReadUInt32(little);
         var rings = new List<IReadOnlyList<Position>>((int)ringCount);
         for (var i = 0; i < ringCount; i++)
         {
-            rings.Add(ReadCoordinates(reader, little, hasZ, hasM));
+            rings.Add(ReadCoordinates(ref cursor, little, hasZ, hasM));
         }
 
         return rings;
     }
 
-    static List<Position> ReadCoordinates(BinaryReader reader, bool little, bool hasZ, bool hasM)
+    static List<Position> ReadCoordinates(ref Cursor cursor, bool little, bool hasZ, bool hasM)
     {
-        var count = ReadUInt32(reader, little);
+        var count = cursor.ReadUInt32(little);
         var positions = new List<Position>((int)count);
         for (var i = 0; i < count; i++)
         {
-            positions.Add(ReadCoordinate(reader, little, hasZ, hasM));
+            positions.Add(ReadCoordinate(ref cursor, little, hasZ, hasM));
         }
 
         return positions;
     }
 
-    static Position ReadCoordinate(BinaryReader reader, bool little, bool hasZ, bool hasM)
+    static Position ReadCoordinate(ref Cursor cursor, bool little, bool hasZ, bool hasM)
     {
-        var x = ReadDouble(reader, little);
-        var y = ReadDouble(reader, little);
-        double? z = hasZ ? ReadDouble(reader, little) : null;
-        double? m = hasM ? ReadDouble(reader, little) : null;
+        var x = cursor.ReadDouble(little);
+        var y = cursor.ReadDouble(little);
+        double? z = hasZ ? cursor.ReadDouble(little) : null;
+        double? m = hasM ? cursor.ReadDouble(little) : null;
         return new(x, y, z, m);
-    }
-
-    static uint ReadUInt32(BinaryReader reader, bool little)
-    {
-        var bytes = reader.ReadBytes(4);
-        if (little != BitConverter.IsLittleEndian)
-        {
-            Array.Reverse(bytes);
-        }
-
-        return BitConverter.ToUInt32(bytes);
-    }
-
-    static double ReadDouble(BinaryReader reader, bool little)
-    {
-        var bytes = reader.ReadBytes(8);
-        if (little != BitConverter.IsLittleEndian)
-        {
-            Array.Reverse(bytes);
-        }
-
-        return BitConverter.ToDouble(bytes);
     }
 
     public static void Write(Stream stream, FeatureCollection collection)

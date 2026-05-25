@@ -1,5 +1,3 @@
-namespace GeoConvert;
-
 /// <summary>Ring orientation helpers (shoelace signed area).</summary>
 static class Ring
 {

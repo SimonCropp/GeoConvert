@@ -1,5 +1,3 @@
-namespace GeoConvert;
-
 /// <summary>Minimal RFC 4180 CSV reader: handles quoted fields, escaped quotes and embedded newlines.</summary>
 static class CsvParser
 {

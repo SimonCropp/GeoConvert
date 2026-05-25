@@ -11,6 +11,9 @@ nugets/
 ## Test + coverage output
 TestResults/
 
+## BenchmarkDotNet output
+BenchmarkDotNet.Artifacts/
+
 ## Verify
 *.received.*
 *.received/

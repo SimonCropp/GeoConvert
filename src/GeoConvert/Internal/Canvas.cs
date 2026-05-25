@@ -1,5 +1,3 @@
-namespace GeoConvert;
-
 /// <summary>A software RGBA raster with source-over blending and basic line/disc/polygon fills.</summary>
 sealed class Canvas
 {

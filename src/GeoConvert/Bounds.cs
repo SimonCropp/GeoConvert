@@ -1,5 +1,3 @@
-namespace GeoConvert;
-
 static class Bounds
 {
     public static Envelope Of(IEnumerable<Position> positions)

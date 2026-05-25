@@ -1,8 +1,10 @@
 <Solution>
   <Project Path="GeoConvert/GeoConvert.csproj" />
   <Project Path="GeoConvert.Cli/GeoConvert.Cli.csproj" />
+  <Project Path="Benchmarks/Benchmarks.csproj" />
   <Project Path="Tests/Tests.csproj" />
   <Folder Name="/SolutionItems/">
+    <File Path="../readme.md" />
     <File Path="appveyor.yml" />
     <File Path="Directory.Build.props" />
     <File Path="Directory.Packages.props" />

@@ -14,17 +14,10 @@ static class TestSupport
 
     public static FeatureCollection RoundtripShapefile(FeatureCollection source)
     {
-        var directory = Directory.CreateTempSubdirectory();
-        try
-        {
-            var path = Path.Combine(directory.FullName, "data.shp");
-            Shapefile.Write(path, source);
-            return Shapefile.Read(path);
-        }
-        finally
-        {
-            directory.Delete(true);
-        }
+        using var directory = new TempDirectory();
+        var path = Path.Combine(directory, "data.shp");
+        Shapefile.Write(path, source);
+        return Shapefile.Read(path);
     }
 
     public static bool ThrowsGeo(Action action)

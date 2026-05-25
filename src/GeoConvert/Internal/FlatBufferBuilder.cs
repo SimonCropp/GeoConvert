@@ -1,7 +1,3 @@
-using System.Buffers.Binary;
-
-namespace GeoConvert;
-
 /// <summary>
 /// A minimal, dependency-free FlatBuffers builder — just enough of the wire format to encode the
 /// FlatGeobuf header and feature tables. The buffer is built back to front, mirroring the canonical

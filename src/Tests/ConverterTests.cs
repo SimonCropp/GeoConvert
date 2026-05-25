@@ -3,43 +3,29 @@ public class ConverterTests
     [Test]
     public async Task Reads_and_writes_by_path()
     {
-        var directory = Directory.CreateTempSubdirectory();
-        try
-        {
-            var geojson = Path.Combine(directory.FullName, "in.geojson");
-            File.WriteAllText(geojson, GeoJson.WriteString(Sample.Mixed()));
+        using var directory = new TempDirectory();
+        var geojson = Path.Combine(directory, "in.geojson");
+        await File.WriteAllTextAsync(geojson, GeoJson.WriteString(Sample.Mixed()));
 
-            var read = GeoConverter.Read(geojson);
-            await Assert.That(read.Count).IsEqualTo(3);
+        var read = GeoConverter.Read(geojson);
+        await Assert.That(read.Count).IsEqualTo(3);
 
-            var kml = Path.Combine(directory.FullName, "out.kml");
-            GeoConverter.Write(read, kml);
-            await Assert.That(File.Exists(kml)).IsTrue();
+        var kml = Path.Combine(directory, "out.kml");
+        GeoConverter.Write(read, kml);
+        await Assert.That(File.Exists(kml)).IsTrue();
 
-            GeoConverter.Convert(geojson, kml);
-            await Assert.That(File.Exists(kml)).IsTrue();
-        }
-        finally
-        {
-            directory.Delete(true);
-        }
+        GeoConverter.Convert(geojson, kml);
+        await Assert.That(File.Exists(kml)).IsTrue();
     }
 
     [Test]
     public async Task Reads_and_writes_shapefile_by_path()
     {
-        var directory = Directory.CreateTempSubdirectory();
-        try
-        {
-            var shp = Path.Combine(directory.FullName, "d.shp");
-            GeoConverter.Write(Sample.Polygons(), shp);
-            var back = GeoConverter.Read(shp);
-            await Assert.That(back.Count).IsEqualTo(2);
-        }
-        finally
-        {
-            directory.Delete(true);
-        }
+        using var directory = new TempDirectory();
+        var shp = Path.Combine(directory, "d.shp");
+        GeoConverter.Write(Sample.Polygons(), shp);
+        var back = GeoConverter.Read(shp);
+        await Assert.That(back.Count).IsEqualTo(2);
     }
 
     [Test]

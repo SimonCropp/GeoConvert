@@ -181,9 +181,9 @@ public static class FlatGeobuf
 
     static FlatBufferTable ReadSizePrefixed(byte[] data, ref int position)
     {
-        var size = System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(position));
+        var size = BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(position));
         var bufferStart = position + 4;
-        var rootOffset = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(bufferStart));
+        var rootOffset = BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(bufferStart));
         var table = new FlatBufferTable(data, bufferStart + rootOffset);
         position = bufferStart + (int)size;
         return table;

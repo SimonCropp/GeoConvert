@@ -1,7 +1,3 @@
-using System.Buffers.Binary;
-
-namespace GeoConvert;
-
 /// <summary>
 /// A read-only view over a FlatBuffers table at an absolute position in a buffer. Field indexes are
 /// zero-based in schema declaration order (the vtable slot is <c>4 + index * 2</c>).

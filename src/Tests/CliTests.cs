@@ -11,22 +11,16 @@ public class CliTests
     [Test]
     public async Task ConvertsByExtension()
     {
-        var directory = Directory.CreateTempSubdirectory();
-        try
-        {
-            var input = Path.Combine(directory.FullName, "in.geojson");
-            File.WriteAllText(input, GeoJson.WriteString(Sample.Mixed()));
-            var output = Path.Combine(directory.FullName, "out.kml");
+        using var directory = new TempDirectory();
 
-            var code = Runner.Run([input, output], new StringWriter(), new StringWriter());
+        var input = Path.Combine(directory, "in.geojson");
+        await File.WriteAllTextAsync(input, GeoJson.WriteString(Sample.Mixed()));
+        var output = Path.Combine(directory, "out.kml");
 
-            await Assert.That(code).IsEqualTo(0);
-            await Assert.That(File.Exists(output)).IsTrue();
-        }
-        finally
-        {
-            directory.Delete(true);
-        }
+        var code = Runner.Run([input, output], new StringWriter(), new StringWriter());
+
+        await Assert.That(code).IsEqualTo(0);
+        await Assert.That(File.Exists(output)).IsTrue();
     }
 
     [Test]
@@ -42,26 +36,27 @@ public class CliTests
     [Test]
     public async Task RendersPngWithBoundingBox()
     {
-        var directory = Directory.CreateTempSubdirectory();
-        try
-        {
-            var input = Path.Combine(directory.FullName, "in.geojson");
-            File.WriteAllText(input, GeoJson.WriteString(Sample.Polygons()));
-            var output = Path.Combine(directory.FullName, "out.png");
+        using var directory = new TempDirectory();
 
-            var code = Runner.Run(
-                [input, output, "--bbox", "-1,-1,16,16", "--size", "128x128"],
-                new StringWriter(),
-                new StringWriter());
+        var input = Path.Combine(directory, "in.geojson");
+        await File.WriteAllTextAsync(input, GeoJson.WriteString(Sample.Polygons()));
+        var output = Path.Combine(directory, "out.png");
 
-            await Assert.That(code).IsEqualTo(0);
-            await Assert.That(File.Exists(output)).IsTrue();
-            await Assert.That(File.ReadAllBytes(output)[..4]).IsEquivalentTo(new byte[] { 0x89, 0x50, 0x4E, 0x47 });
-        }
-        finally
-        {
-            directory.Delete(true);
-        }
+        var code = Runner.Run(
+            [input, output, "--bbox", "-1,-1,16,16", "--size", "128x128"],
+            new StringWriter(),
+            new StringWriter());
+
+        await Assert.That(code).IsEqualTo(0);
+        await Assert.That(File.Exists(output)).IsTrue();
+        await Assert.That((await File.ReadAllBytesAsync(output))[..4])
+            .IsEquivalentTo(new byte[]
+            {
+                0x89,
+                0x50,
+                0x4E,
+                0x47
+            });
     }
 
     [Test]
@@ -71,40 +66,26 @@ public class CliTests
     [Test]
     public async Task ForcedFormatsConvert()
     {
-        var directory = Directory.CreateTempSubdirectory();
-        try
-        {
-            var input = Path.Combine(directory.FullName, "in.data");
-            File.WriteAllText(input, GeoJson.WriteString(Sample.Mixed()));
-            var output = Path.Combine(directory.FullName, "out.data");
-            var code = Runner.Run(
-                [input, output, "--from", "geojson", "--to", "wkt"],
-                new StringWriter(),
-                new StringWriter());
-            await Assert.That(code).IsEqualTo(0);
-        }
-        finally
-        {
-            directory.Delete(true);
-        }
+        using var directory = new TempDirectory();
+        var input = Path.Combine(directory, "in.data");
+        await File.WriteAllTextAsync(input, GeoJson.WriteString(Sample.Mixed()));
+        var output = Path.Combine(directory, "out.data");
+        var code = Runner.Run(
+            [input, output, "--from", "geojson", "--to", "wkt"],
+            new StringWriter(),
+            new StringWriter());
+        await Assert.That(code).IsEqualTo(0);
     }
 
     [Test]
     public async Task RendersPngWithSizeOnly()
     {
-        var directory = Directory.CreateTempSubdirectory();
-        try
-        {
-            var input = Path.Combine(directory.FullName, "in.geojson");
-            File.WriteAllText(input, GeoJson.WriteString(Sample.Polygons()));
-            var output = Path.Combine(directory.FullName, "out.png");
-            var code = Runner.Run([input, output, "--size", "100"], new StringWriter(), new StringWriter());
-            await Assert.That(code).IsEqualTo(0);
-        }
-        finally
-        {
-            directory.Delete(true);
-        }
+        using var directory = new TempDirectory();
+        var input = Path.Combine(directory, "in.geojson");
+        await File.WriteAllTextAsync(input, GeoJson.WriteString(Sample.Polygons()));
+        var output = Path.Combine(directory, "out.png");
+        var code = Runner.Run([input, output, "--size", "100"], new StringWriter(), new StringWriter());
+        await Assert.That(code).IsEqualTo(0);
     }
 
     [Test]
@@ -125,20 +106,13 @@ public class CliTests
     [Test]
     public async Task BadConversionReturnsError()
     {
-        var directory = Directory.CreateTempSubdirectory();
-        try
-        {
-            // A polygon cannot be written to GPX.
-            var input = Path.Combine(directory.FullName, "in.geojson");
-            File.WriteAllText(input, GeoJson.WriteString(Sample.Polygons()));
-            var output = Path.Combine(directory.FullName, "out.gpx");
-            var code = Runner.Run([input, output], new StringWriter(), new StringWriter());
-            await Assert.That(code).IsEqualTo(1);
-        }
-        finally
-        {
-            directory.Delete(true);
-        }
+        using var directory = new TempDirectory();
+        // A polygon cannot be written to GPX.
+        var input = Path.Combine(directory, "in.geojson");
+        await File.WriteAllTextAsync(input, GeoJson.WriteString(Sample.Polygons()));
+        var output = Path.Combine(directory, "out.gpx");
+        var code = Runner.Run([input, output], new StringWriter(), new StringWriter());
+        await Assert.That(code).IsEqualTo(1);
     }
 
     static Task VerifyConsole(string[] args)

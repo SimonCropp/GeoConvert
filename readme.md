@@ -1,4 +1,8 @@
-# GeoConvert
+# <img src="/src/icon.png" height="30px"> GeoConvert
+
+[![Build status](https://img.shields.io/appveyor/build/SimonCropp/GeoConvert)](https://ci.appveyor.com/project/SimonCropp/GeoConvert)
+[![NuGet Status](https://img.shields.io/nuget/v/GeoConvert.svg?label=GeoConvert)](https://www.nuget.org/packages/GeoConvert/)
+[![NuGet Status](https://img.shields.io/nuget/v/GeoConvert.Cli.svg?label=GeoConvert.Cli)](https://www.nuget.org/packages/GeoConvert.Cli/)
 
 Convert maps between geospatial formats, with **no third-party dependencies** — only the .NET base
 class libraries (`System.Text.Json`, `System.Xml`, `System.IO.Compression`). It can also render a
@@ -139,6 +143,19 @@ Everything reads into and writes out of a `FeatureCollection`:
 * `Feature` — a `Geometry` plus a string-keyed `Properties` dictionary and an optional `Id`.
 * `Geometry` — `Point`, `LineString`, `Polygon`, `MultiPoint`, `MultiLineString`, `MultiPolygon` or
   `GeometryCollection`, built from `Position` values (X = longitude, Y = latitude, optional Z and M).
+
+
+## Benchmarks
+
+[BenchmarkDotNet](https://benchmarkdotnet.org/) benchmarks live in `src/Benchmarks` and must run in
+Release:
+
+```
+dotnet run -c Release --project src/Benchmarks -- --filter "*"
+```
+
+`ConvertBenchmarks` measures reading and writing a 500-polygon collection through each stream format;
+`RenderBenchmarks` measures PNG rasterization. Add `--job Dry` for a quick smoke run.
 
 
 ## Notes and limitations

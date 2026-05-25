@@ -32,19 +32,12 @@ public class ShapefileTests
     [Test]
     public async Task Reads_without_dbf()
     {
-        var directory = Directory.CreateTempSubdirectory();
-        try
-        {
-            var path = Path.Combine(directory.FullName, "d.shp");
-            Shapefile.Write(path, [new Feature(new Point(1, 2))]);
-            File.Delete(Path.ChangeExtension(path, ".dbf"));
-            var back = Shapefile.Read(path);
-            await Assert.That(back.Features[0].Properties.Count).IsEqualTo(0);
-        }
-        finally
-        {
-            directory.Delete(true);
-        }
+        using var directory = new TempDirectory();
+        var path = Path.Combine(directory, "d.shp");
+        Shapefile.Write(path, [new Feature(new Point(1, 2))]);
+        File.Delete(Path.ChangeExtension(path, ".dbf"));
+        var back = Shapefile.Read(path);
+        await Assert.That(back.Features[0].Properties.Count).IsEqualTo(0);
     }
 
     [Test]

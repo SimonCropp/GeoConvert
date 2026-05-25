@@ -1,8 +1,3 @@
-using System.Buffers.Binary;
-using System.IO.Compression;
-
-namespace GeoConvert;
-
 /// <summary>
 /// Minimal PNG encoder for 8-bit truecolor-with-alpha images. The image data is zlib-compressed with
 /// the BCL <see cref="ZLibStream"/>; chunk CRCs are computed here. No third-party dependencies.
