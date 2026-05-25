@@ -18,21 +18,20 @@ public static class GeoParquet
 
     public static FeatureCollection Read(Stream stream)
     {
-        using var memory = new MemoryStream();
-        stream.CopyTo(memory);
-        // GetBuffer avoids the extra full-file copy ToArray would make; length is the real byte count
-        // (the buffer may be larger), so footer offsets must be measured from it, not from data.Length.
-        var data = memory.GetBuffer();
-        var length = (int)memory.Length;
-
-        if (length < 12 || !StartsWithMagic(data, 0) || !StartsWithMagic(data, length - 4))
-        {
-            throw new GeoConvertException("Not a Parquet file (bad PAR1 magic).");
-        }
-
         try
         {
-            return Parse(data, length);
+            if (stream.CanSeek)
+            {
+                return Parse(stream);
+            }
+
+            // Parquet's footer sits at the end of the file, so the reader has to seek; a forward-only
+            // stream is buffered into a seekable one first. Seekable inputs (files) are read in place,
+            // pulling just the footer and one column chunk at a time rather than the whole file.
+            using var memory = new MemoryStream();
+            stream.CopyTo(memory);
+            memory.Position = 0;
+            return Parse(memory);
         }
         catch (GeoConvertException)
         {
@@ -50,10 +49,25 @@ public static class GeoParquet
         data[offset + 2] == magic[2] &&
         data[offset + 3] == magic[3];
 
-    static FeatureCollection Parse(byte[] data, int length)
+    static byte[] ReadAt(Stream stream, long offset, int count)
     {
-        var footerLength = BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(length - 8));
-        var file = ParquetMetadata.ReadFile(data, length - 8 - footerLength);
+        stream.Position = offset;
+        var buffer = new byte[count];
+        stream.ReadExactly(buffer);
+        return buffer;
+    }
+
+    static FeatureCollection Parse(Stream stream)
+    {
+        var length = stream.Length;
+        var trailer = length >= 12 ? ReadAt(stream, length - 8, 8) : null;
+        if (trailer == null || !StartsWithMagic(ReadAt(stream, 0, 4), 0) || !StartsWithMagic(trailer, 4))
+        {
+            throw new GeoConvertException("Not a Parquet file (bad PAR1 magic).");
+        }
+
+        var footerLength = BinaryPrimitives.ReadInt32LittleEndian(trailer);
+        var file = ParquetMetadata.ReadFile(ReadAt(stream, length - 8 - footerLength, footerLength), 0);
         var geometryColumn = ReadGeoMetadata(file);
 
         var repetitions = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -75,7 +89,9 @@ public static class GeoParquet
                 var name = chunk.Path[^1];
                 var maxDefinition =
                     repetitions.GetValueOrDefault(name) == ParquetMetadata.RepetitionOptional ? 1 : 0;
-                columns[name] = ReadColumnChunk(data, chunk, maxDefinition, rows);
+                var start = chunk.DictionaryPageOffset ?? chunk.DataPageOffset;
+                var chunkBytes = ReadAt(stream, start, (int)chunk.TotalCompressedSize);
+                columns[name] = ReadColumnChunk(chunkBytes, chunk.Codec, chunk.Type, maxDefinition, rows);
             }
 
             for (var row = 0; row < rows; row++)
@@ -131,10 +147,11 @@ public static class GeoParquet
         return primary!;
     }
 
-    static object?[] ReadColumnChunk(byte[] data, ParquetMetadata.Column chunk, int maxDefinition, int rows)
+    // data holds exactly one column chunk's pages (dictionary page, if any, then data pages).
+    static object?[] ReadColumnChunk(byte[] data, int codec, int type, int maxDefinition, int rows)
     {
         var values = new object?[rows];
-        var position = (int)(chunk.DictionaryPageOffset ?? chunk.DataPageOffset);
+        var position = 0;
         object[]? dictionary = null;
         var rowsRead = 0;
 
@@ -148,7 +165,7 @@ public static class GeoParquet
 
             if (header.Type == ParquetMetadata.PageDictionary)
             {
-                dictionary = DecodePlain(Decompress(raw, chunk.Codec), 0, header.NumValues, chunk.Type);
+                dictionary = DecodePlain(Decompress(raw, codec), 0, header.NumValues, type);
                 continue;
             }
 
@@ -163,13 +180,13 @@ public static class GeoParquet
                     : null;
                 var valueStart = header.RepetitionLevelsByteLength + header.DefinitionLevelsByteLength;
                 var encodedValues = raw[valueStart..];
-                body = header.IsCompressed ? Decompress(encodedValues, chunk.Codec) : encodedValues;
+                body = header.IsCompressed ? Decompress(encodedValues, codec) : encodedValues;
                 valueOffset = 0;
             }
             else
             {
                 // V1 compresses the whole page; definition levels carry a 4-byte length prefix.
-                body = Decompress(raw, chunk.Codec);
+                body = Decompress(raw, codec);
                 valueOffset = 0;
                 definitions = null;
                 if (maxDefinition > 0)
@@ -184,7 +201,7 @@ public static class GeoParquet
             var present = definitions == null
                 ? header.NumValues
                 : definitions.Count(level => level == maxDefinition);
-            var pageValues = DecodePageValues(body, valueOffset, present, chunk, header, dictionary);
+            var pageValues = DecodePageValues(body, valueOffset, present, type, header, dictionary);
 
             var valueIndex = 0;
             for (var i = 0; i < header.NumValues; i++)
@@ -202,14 +219,14 @@ public static class GeoParquet
         byte[] body,
         int offset,
         int present,
-        ParquetMetadata.Column chunk,
+        int type,
         ParquetMetadata.PageHeader header,
         object[]? dictionary)
     {
         switch (header.Encoding)
         {
             case ParquetMetadata.EncodingPlain:
-                return DecodePlain(body, offset, present, chunk.Type);
+                return DecodePlain(body, offset, present, type);
             case ParquetMetadata.EncodingPlainDictionary:
             case ParquetMetadata.EncodingRleDictionary:
                 if (dictionary == null)

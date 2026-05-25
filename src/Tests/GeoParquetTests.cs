@@ -70,6 +70,48 @@ public class GeoParquetTests
     }
 
     [Test]
+    public async Task Reads_non_seekable_stream()
+    {
+        using var buffer = new MemoryStream();
+        GeoParquet.Write(buffer, Sample.Mixed());
+
+        // A forward-only stream can't seek to the footer, so the reader must buffer it first.
+        using var forwardOnly = new ForwardOnlyStream(buffer.ToArray());
+        var result = GeoParquet.Read(forwardOnly);
+
+        await Assert.That(result.Count).IsEqualTo(3);
+        await Assert.That(((Point)result.Features[0].Geometry!).Coordinate.X).IsEqualTo(1.5);
+    }
+
+    sealed class ForwardOnlyStream(byte[] data) : Stream
+    {
+        readonly MemoryStream inner = new(data);
+
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+
+        public override int Read(byte[] buffer, int offset, int count) => inner.Read(buffer, offset, count);
+
+        public override void Flush()
+        {
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    }
+
+    [Test]
     // compressed values, optional column (definition levels)
     [Arguments(true, true)]
     // uncompressed values, required column (no definition levels)
@@ -248,8 +290,10 @@ public class GeoParquetTests
                             Encodings = [ParquetMetadata.EncodingRleDictionary],
                             Path = ["geometry"],
                             NumValues = 2,
-                            TotalUncompressedSize = dictionaryBody.Length + dataBytes.Length,
-                            TotalCompressedSize = dictionaryBody.Length + dataBytes.Length,
+                            TotalUncompressedSize =
+                                dictionaryHeader.Length + dictionaryBody.Length + dataHeader.Length + dataBytes.Length,
+                            TotalCompressedSize =
+                                dictionaryHeader.Length + dictionaryBody.Length + dataHeader.Length + dataBytes.Length,
                             DataPageOffset = dataOffset,
                             DictionaryPageOffset = dictionaryOffset,
                         },
