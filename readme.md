@@ -27,7 +27,7 @@ All vector formats can be both read and written; PNG is a write-only raster expo
 | [CSV](https://datatracker.ietf.org/doc/html/rfc4180) | `.csv` | Text (WKT or lon/lat columns) |
 | [PNG](https://www.w3.org/TR/png-3/) | `.png` | Raster image (write-only) |
 
-All coordinates are treated as WGS84 (EPSG:4326) longitude/latitude.
+All coordinates are treated as [WGS84 (EPSG:4326)](https://epsg.io/4326) longitude/latitude.
 
 
 ## Library
