@@ -70,6 +70,26 @@ public class FlatGeobufAlignmentTests
     }
 
     [Test]
+    public async Task FlatGeobuf_writes_polygons_in_geojson_rfc_7946_winding()
+    {
+        // Input is CW-wound (Shapefile / OGC / OSM convention). FGB output must come out CCW per RFC
+        // 7946 so triangulating renderers (Mapbox-GL / MapLibre-GL, the dominant FGB consumers) don't
+        // interpret the polygon as a hole-in-the-world and draw inside-out fan artifacts. GeoJson.Write
+        // already orients the same way; this pins the same invariant for FGB.
+        var cwPolygon = new Polygon([[new(0, 0), new(0, 1), new(1, 1), new(1, 0), new(0, 0)]]);
+        var collection = new FeatureCollection { new Feature(cwPolygon) };
+
+        using var stream = new MemoryStream();
+        FlatGeobuf.Write(stream, collection);
+        stream.Position = 0;
+        var read = FlatGeobuf.Read(stream);
+
+        var ring = ((Polygon) read.Features[0].Geometry!).Rings[0];
+        // CCW = positive signed area in lon/lat space.
+        await Assert.That(Ring.SignedArea(ring)).IsGreaterThan(0);
+    }
+
+    [Test]
     public async Task Inner_table_after_byte_field_lands_on_4_aligned_position()
     {
         // Builder-level repro of the same bug, schema-free: a table that ends on a 1-byte field used

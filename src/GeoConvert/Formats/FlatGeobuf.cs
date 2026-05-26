@@ -338,10 +338,11 @@ public static class FlatGeobuf
             case MultiPoint multiPoint:
                 return BuildSimple(builder, multiPoint.Positions, 4);
             case Polygon polygon:
-                return BuildRings(builder, polygon.Rings, 3);
+                return BuildRings(builder, OrientRfc7946(polygon.Rings), 3);
             case MultiLineString multiLine:
             {
                 // Reify once as IReadOnlyList<IReadOnlyList<Position>>; BuildRings only ever indexes.
+                // MultiLineStrings are independent lines, not rings — no winding semantics, no orient.
                 var lines = new IReadOnlyList<Position>[multiLine.LineStrings.Count];
                 for (var i = 0; i < lines.Length; i++)
                 {
@@ -355,7 +356,7 @@ public static class FlatGeobuf
                 var parts = new int[multiPolygon.Polygons.Count];
                 for (var i = 0; i < parts.Length; i++)
                 {
-                    parts[i] = BuildRings(builder, multiPolygon.Polygons[i].Rings, 3);
+                    parts[i] = BuildRings(builder, OrientRfc7946(multiPolygon.Polygons[i].Rings), 3);
                 }
 
                 return BuildParts(builder, parts, 6);
@@ -373,6 +374,22 @@ public static class FlatGeobuf
             default:
                 throw new GeoConvertException($"Cannot write {geometry.Type} as FlatGeobuf.");
         }
+    }
+
+    // Reorients polygon rings to GeoJSON RFC 7946's right-hand rule (exterior counter-clockwise, holes
+    // clockwise) before serialization. The FlatGeobuf spec is silent on winding, but Mapbox-GL /
+    // MapLibre-GL renderers — the dominant FGB consumers — interpret a CW exterior as a hole in the
+    // world and triangulate inside-out, producing fan-shaped artifacts across the polygon. GeoJson.Write
+    // already orients the same way, so this brings FGB into line.
+    static IReadOnlyList<IReadOnlyList<Position>> OrientRfc7946(IReadOnlyList<IReadOnlyList<Position>> rings)
+    {
+        var result = new IReadOnlyList<Position>[rings.Count];
+        for (var i = 0; i < rings.Count; i++)
+        {
+            result[i] = Ring.Orient(rings[i], clockwise: i != 0);
+        }
+
+        return result;
     }
 
     static int BuildSimple(FlatBufferBuilder builder, IReadOnlyList<Position> positions, byte fgbType)
