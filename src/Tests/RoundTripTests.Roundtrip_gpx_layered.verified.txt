@@ -1,0 +1,76 @@
+﻿{
+  "features": [],
+  "children": [
+    {
+      "name": "waypoints",
+      "features": [
+        {
+          "type": "Feature",
+          "geometry": {
+            "type": "Point",
+            "coordinates": [
+              1.5,
+              2.5,
+              100
+            ]
+          },
+          "properties": {
+            "name": "peak"
+          }
+        }
+      ]
+    },
+    {
+      "name": "routes",
+      "features": [
+        {
+          "type": "Feature",
+          "geometry": {
+            "type": "LineString",
+            "coordinates": [
+              [
+                0,
+                0
+              ],
+              [
+                1,
+                1
+              ],
+              [
+                2,
+                2
+              ]
+            ]
+          },
+          "properties": {
+            "name": "loop"
+          }
+        }
+      ]
+    },
+    {
+      "name": "tracks",
+      "features": [
+        {
+          "type": "Feature",
+          "geometry": {
+            "type": "LineString",
+            "coordinates": [
+              [
+                5,
+                5
+              ],
+              [
+                6,
+                6
+              ]
+            ]
+          },
+          "properties": {
+            "name": "ridge"
+          }
+        }
+      ]
+    }
+  ]
+}

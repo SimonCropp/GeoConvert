@@ -3,10 +3,14 @@ namespace GeoConvert;
 /// <summary>
 /// Reads and writes <see href="https://www.topografix.com/gpx.asp">GPX 1.1</see>. Waypoints
 /// (<c>wpt</c>) map to points, routes (<c>rte</c>) and single-segment tracks (<c>trk</c>) to line
-/// strings, and multi-segment tracks to multi line strings. GPX has no native area type, so writing a
-/// polygon emits a track with one segment per ring (exterior then holes), a multi polygon flattens every
-/// ring of every member into a single track, and a geometry collection writes each member geometry in
-/// turn. Coordinates are lon/lat with optional elevation (Z). Reading streams with <see cref="XmlReader"/>.
+/// strings, and multi-segment tracks to multi line strings. On read, each category becomes a named
+/// child layer (<c>"waypoints"</c>, <c>"routes"</c>, <c>"tracks"</c>) so the wpt/rte/trk distinction
+/// — which type alone can't carry — round-trips. On write, those same layer names route features back
+/// to their original element; a flat input is dispatched purely by geometry type (LineString → trk).
+/// GPX has no native area type, so writing a polygon emits a track with one segment per ring
+/// (exterior then holes), a multi polygon flattens every ring of every member into a single track,
+/// and a geometry collection writes each member geometry in turn. Coordinates are lon/lat with
+/// optional elevation (Z). Reading streams with <see cref="XmlReader"/>.
 /// </summary>
 public static class Gpx
 {
@@ -16,25 +20,45 @@ public static class Gpx
     {
         using var reader = Xml.CreateReader(stream);
         var collection = new FeatureCollection();
+        var waypoints = new FeatureCollection { Name = "waypoints" };
+        var routes = new FeatureCollection { Name = "routes" };
+        var tracks = new FeatureCollection { Name = "tracks" };
+
         reader.MoveToContent();
         Xml.ReadChildren(reader, () =>
         {
             switch (reader.LocalName)
             {
                 case "wpt":
-                    collection.Add(ReadWaypointFeature(reader));
+                    waypoints.Add(ReadWaypointFeature(reader));
                     break;
                 case "rte":
-                    collection.Add(ReadRoute(reader));
+                    routes.Add(ReadRoute(reader));
                     break;
                 case "trk":
-                    collection.Add(ReadTrack(reader));
+                    tracks.Add(ReadTrack(reader));
                     break;
                 default:
                     reader.Skip();
                     break;
             }
         });
+
+        // Only attach the buckets that have content, so a single-category document stays uncluttered.
+        if (waypoints.Features.Count > 0)
+        {
+            collection.Children.Add(waypoints);
+        }
+
+        if (routes.Features.Count > 0)
+        {
+            collection.Children.Add(routes);
+        }
+
+        if (tracks.Features.Count > 0)
+        {
+            collection.Children.Add(tracks);
+        }
 
         return collection;
     }
@@ -154,21 +178,72 @@ public static class Gpx
         writer.WriteStartElement("gpx", ns);
         writer.WriteAttributeString("version", "1.1");
         writer.WriteAttributeString("creator", "GeoConvert");
-        foreach (var feature in collection)
+
+        // GPX's element ordering is wpt → rte → trk; emit category children in that order, and any
+        // root-level features or non-category children fall back to type-based dispatch (no category hint).
+        var hasCategoryChild = collection.Children.Any(IsCategoryLayer);
+        if (hasCategoryChild)
         {
-            WriteFeature(writer, feature);
+            foreach (var feature in collection.Features)
+            {
+                WriteFeature(writer, feature, category: null);
+            }
+
+            WriteCategoryChildren(writer, collection, "waypoints");
+            WriteCategoryChildren(writer, collection, "routes");
+            WriteCategoryChildren(writer, collection, "tracks");
+
+            foreach (var child in collection.Children)
+            {
+                if (IsCategoryLayer(child))
+                {
+                    continue;
+                }
+
+                foreach (var feature in child)
+                {
+                    WriteFeature(writer, feature, category: null);
+                }
+            }
+        }
+        else
+        {
+            foreach (var feature in collection)
+            {
+                WriteFeature(writer, feature, category: null);
+            }
         }
 
         writer.WriteEndElement();
         writer.WriteEndDocument();
     }
 
-    static void WriteFeature(XmlWriter writer, Feature feature) =>
-        WriteGeometry(writer, feature.Geometry, feature);
+    static bool IsCategoryLayer(FeatureCollection layer) =>
+        layer.Name is "waypoints" or "routes" or "tracks";
+
+    static void WriteCategoryChildren(XmlWriter writer, FeatureCollection root, string category)
+    {
+        foreach (var child in root.Children)
+        {
+            if (child.Name != category)
+            {
+                continue;
+            }
+
+            foreach (var feature in child)
+            {
+                WriteFeature(writer, feature, category);
+            }
+        }
+    }
+
+    static void WriteFeature(XmlWriter writer, Feature feature, string? category) =>
+        WriteGeometry(writer, feature.Geometry, feature, category);
 
     // Writes one geometry, carrying the owning feature so metadata (name/desc) is attached. A geometry
-    // collection recurses, writing each member with the same feature metadata.
-    static void WriteGeometry(XmlWriter writer, Geometry? geometry, Feature feature)
+    // collection recurses, writing each member with the same feature metadata. The optional category
+    // — set by category-named child layers on the way in — flips LineStrings between rte and trk.
+    static void WriteGeometry(XmlWriter writer, Geometry? geometry, Feature feature, string? category)
     {
         switch (geometry)
         {
@@ -183,6 +258,9 @@ public static class Gpx
                     WriteWaypoint(writer, "wpt", position, feature);
                 }
 
+                break;
+            case LineString line when category == "routes":
+                WriteRoute(writer, feature, line.Positions);
                 break;
             case LineString line:
                 WriteTrack(writer, feature, [line.Positions]);
@@ -199,13 +277,25 @@ public static class Gpx
             case GeometryCollection collection:
                 foreach (var member in collection.Geometries)
                 {
-                    WriteGeometry(writer, member, feature);
+                    WriteGeometry(writer, member, feature, category);
                 }
 
                 break;
             default:
                 throw new GeoConvertException($"GPX cannot represent {geometry.Type}.");
         }
+    }
+
+    static void WriteRoute(XmlWriter writer, Feature feature, IReadOnlyList<Position> positions)
+    {
+        writer.WriteStartElement("rte", ns);
+        WriteMetadata(writer, feature);
+        foreach (var position in positions)
+        {
+            WriteWaypoint(writer, "rtept", position, null);
+        }
+
+        writer.WriteEndElement();
     }
 
     static void WriteTrack(XmlWriter writer, Feature feature, IEnumerable<IReadOnlyList<Position>> segments)

@@ -54,7 +54,13 @@ Hub-and-spoke around one in-memory model:
   optional `Id`) → `Geometry` subtypes (`Point`, `LineString`, `Polygon`, `MultiPoint`,
   `MultiLineString`, `MultiPolygon`, `GeometryCollection`) built from `Position` (X=lon, Y=lat, optional
   Z/M). `Polygon.Rings[0]` is the exterior ring; the rest are holes. Multi\* types hold the singular
-  geometry objects. All coordinates are assumed WGS84.
+  geometry objects. All coordinates are assumed WGS84. `FeatureCollection` is **recursive**: optional
+  `Name`, layer-level `Properties`, direct `Features`, and `Children` sub-layers. Its
+  `IEnumerable<Feature>` enumerator and `Count` walk the whole tree depth-first, so single-layer
+  codecs flatten a layered input transparently via their existing `foreach (var feature in
+  collection)` — they need no special handling. Layer-aware codecs (KML, KMZ, TopoJSON, GPX,
+  Shapefile-as-directory) walk `Children` explicitly. When adding a codec, decide upfront whether it
+  is layer-aware; if not, the recursive enumerator does the right thing for free.
 - **Facade** (`GeoConverter.cs`): the entry point. `DetectFormat` maps a file extension to `GeoFormat`;
   `Read`/`Write` work by `GeoFormat` (stream or path) and `Convert` chains them. Every format flows
   through `FeatureCollection`, so adding a format = adding one codec + wiring it into the four
@@ -80,6 +86,20 @@ has no area type, so a polygon is written as a track (one segment per ring), a m
 its rings into one track, and a geometry collection writes each member in turn (so areas read back as
 lines). WKT/WKB carry geometry only (attributes dropped). PNG is write-only and needs an extent
 (defaults to the data bounds).
+
+### Layer-aware codecs
+
+KML/KMZ map `<Folder>` ↔ `FeatureCollection.Children` (recursive); the first `<Document>` under
+`<kml>` populates the root layer. KMZ read promotes a multi-`.kml` archive to a root with one child
+per document, but write always emits a single `doc.kml` (multi-doc packaging isn't reconstructed —
+the layer info survives as folders inside that doc instead). TopoJSON maps each top-level `objects` entry to one
+child layer keyed by `Name`; the dict is single-level, so grandchildren are flattened into their
+parent on write, and duplicate names are disambiguated with `_1`/`_2` suffixes. GPX groups
+`<wpt>`/`<rte>`/`<trk>` into children named `waypoints`/`routes`/`tracks` on read and routes them
+back to those elements on write (so the wpt/rte/trk distinction round-trips, which type alone can't
+carry — a route would otherwise read back as a track). Shapefile path-based API auto-detects
+directories: read produces one child per `.shp`, write emits one `.shp` per child (plus `data.shp` if
+the root has features); single-file `.shp` mode is unchanged.
 
 ## Project conventions (via the `ProjectDefaults` NuGet)
 

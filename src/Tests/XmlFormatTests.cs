@@ -64,11 +64,13 @@ public class XmlFormatTests
             """);
 
         await Assert.That(collection.Count).IsEqualTo(3);
-        var waypoint = (Point)collection.Features[0].Geometry!;
+        // GPX reads each category (wpt/rte/trk) into its own child layer; use the recursive enumerator
+        // to address the flat sequence regardless of layering.
+        var waypoint = (Point)collection.ElementAt(0).Geometry!;
         await Assert.That(waypoint.Coordinate.Z).IsEqualTo(5d);
-        await Assert.That(collection.Features[0].Properties["description"]).IsEqualTo("wd");
-        await Assert.That(collection.Features[1].Properties["description"]).IsEqualTo("rd");
-        await Assert.That(collection.Features[2].Properties["description"]).IsEqualTo("td");
+        await Assert.That(collection.ElementAt(0).Properties["description"]).IsEqualTo("wd");
+        await Assert.That(collection.ElementAt(1).Properties["description"]).IsEqualTo("rd");
+        await Assert.That(collection.ElementAt(2).Properties["description"]).IsEqualTo("td");
     }
 
     [Test]
@@ -132,8 +134,8 @@ public class XmlFormatTests
             <gpx xmlns="http://www.topografix.com/GPX/1/1"><rte><name>r</name>
             <rtept lat="1" lon="2"/><rtept lat="3" lon="4"/></rte></gpx>
             """);
-        await Assert.That(collection.Features[0].Geometry).IsTypeOf<LineString>();
-        await Assert.That(collection.Features[0].Properties["name"]).IsEqualTo("r");
+        await Assert.That(collection.ElementAt(0).Geometry).IsTypeOf<LineString>();
+        await Assert.That(collection.ElementAt(0).Properties["name"]).IsEqualTo("r");
     }
 
     [Test]
@@ -146,7 +148,7 @@ public class XmlFormatTests
             <trkseg><trkpt lat="2" lon="2"/><trkpt lat="3" lon="3"/></trkseg>
             </trk></gpx>
             """);
-        await Assert.That(collection.Features[0].Geometry).IsTypeOf<MultiLineString>();
+        await Assert.That(collection.ElementAt(0).Geometry).IsTypeOf<MultiLineString>();
     }
 
     [Test]
@@ -155,7 +157,7 @@ public class XmlFormatTests
         var source = new FeatureCollection { new Feature(new MultiPoint([new(1, 2), new(3, 4)])) };
         var back = TestSupport.RoundtripStream(source, GeoFormat.Gpx);
         await Assert.That(back.Count).IsEqualTo(2);
-        await Assert.That(back.Features[0].Geometry).IsTypeOf<Point>();
+        await Assert.That(back.ElementAt(0).Geometry).IsTypeOf<Point>();
     }
 
     [Test]
@@ -171,7 +173,7 @@ public class XmlFormatTests
                 [new(1, 1), new(2, 1), new(2, 2), new(1, 2), new(1, 1)],
             ]))
         };
-        var back = (MultiLineString)TestSupport.RoundtripStream(source, GeoFormat.Gpx).Features[0].Geometry!;
+        var back = (MultiLineString)TestSupport.RoundtripStream(source, GeoFormat.Gpx).ElementAt(0).Geometry!;
         await Assert.That(back.LineStrings.Count).IsEqualTo(2);
         await Assert.That(back.LineStrings[0].Positions.Count).IsEqualTo(5);
     }
@@ -187,7 +189,7 @@ public class XmlFormatTests
                 new([[new(5, 5), new(6, 5), new(6, 6), new(5, 5)]]),
             ]))
         };
-        var back = (MultiLineString)TestSupport.RoundtripStream(source, GeoFormat.Gpx).Features[0].Geometry!;
+        var back = (MultiLineString)TestSupport.RoundtripStream(source, GeoFormat.Gpx).ElementAt(0).Geometry!;
         await Assert.That(back.LineStrings.Count).IsEqualTo(2);
     }
 
@@ -201,7 +203,7 @@ public class XmlFormatTests
         // The point becomes a waypoint and the line a track, so the collection reads back as two features.
         var back = TestSupport.RoundtripStream(source, GeoFormat.Gpx);
         await Assert.That(back.Count).IsEqualTo(2);
-        await Assert.That(back.Features[0].Geometry).IsTypeOf<Point>();
-        await Assert.That(back.Features[1].Geometry).IsTypeOf<LineString>();
+        await Assert.That(back.ElementAt(0).Geometry).IsTypeOf<Point>();
+        await Assert.That(back.ElementAt(1).Geometry).IsTypeOf<LineString>();
     }
 }

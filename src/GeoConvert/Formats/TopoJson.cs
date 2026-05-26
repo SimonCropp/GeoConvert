@@ -2,8 +2,12 @@ namespace GeoConvert;
 
 /// <summary>
 /// Reads and writes <see href="https://github.com/topojson/topojson-specification">TopoJSON</see>.
-/// On read, quantized/delta-encoded arcs and shared topology are decoded. On write, geometries are
-/// emitted as un-shared arcs (a valid topology where no arc is shared) without quantization.
+/// Each entry in the top-level <c>objects</c> dict maps to a child
+/// <see cref="FeatureCollection"/> (its key becomes <see cref="FeatureCollection.Name"/>), so layer
+/// structure round-trips through TopoJSON. On read, quantized/delta-encoded arcs and shared topology
+/// are decoded. On write, geometries are emitted as un-shared arcs (a valid topology where no arc is
+/// shared) without quantization; a flat input collection is written as a single <c>"data"</c> object
+/// for back-compat with consumers that expect a single layer.
 /// </summary>
 public static class TopoJson
 {
@@ -36,7 +40,9 @@ public static class TopoJson
         var collection = new FeatureCollection();
         foreach (var entry in root.GetProperty("objects").EnumerateObject())
         {
-            ReadObject(entry.Value, arcs, scale, translate, collection);
+            var layer = new FeatureCollection { Name = entry.Name };
+            ReadObject(entry.Value, arcs, scale, translate, layer);
+            collection.Children.Add(layer);
         }
 
         return collection;
@@ -237,16 +243,40 @@ public static class TopoJson
         writer.WriteStartObject();
         writer.WriteString("type", "Topology");
         writer.WriteStartObject("objects");
-        writer.WriteStartObject("data");
-        writer.WriteString("type", "GeometryCollection");
-        writer.WriteStartArray("geometries");
-        foreach (var feature in collection)
+
+        if (collection.Children.Count == 0)
         {
-            WriteGeometryObject(writer, feature, arcs);
+            // Flat input: emit a single "data" object with the root's features.
+            WriteObjectEntry(writer, "data", collection.Features, arcs);
+        }
+        else
+        {
+            // Layered input: one object per child. Root-level features (if any) go into "data".
+            if (collection.Features.Count > 0)
+            {
+                WriteObjectEntry(writer, "data", collection.Features, arcs);
+            }
+
+            var index = 0;
+            var used = new HashSet<string>(StringComparer.Ordinal) { "data" };
+            foreach (var child in collection.Children)
+            {
+                var key = child.Name ?? $"layer_{index}";
+                // TopoJSON object keys must be unique; disambiguate by suffix when they collide.
+                var unique = key;
+                var suffix = 1;
+                while (!used.Add(unique))
+                {
+                    unique = $"{key}_{suffix++}";
+                }
+
+                // Each child layer is emitted as a flat GeometryCollection of its features
+                // (recursively flattening grandchildren — TopoJSON's object dict is single-level).
+                WriteObjectEntry(writer, unique, child, arcs);
+                index++;
+            }
         }
 
-        writer.WriteEndArray();
-        writer.WriteEndObject();
         writer.WriteEndObject();
 
         writer.WriteStartArray("arcs");
@@ -268,6 +298,24 @@ public static class TopoJson
 
         writer.WriteEndObject();
         writer.Flush();
+    }
+
+    static void WriteObjectEntry(
+        Utf8JsonWriter writer,
+        string key,
+        IEnumerable<Feature> features,
+        List<IReadOnlyList<Position>> arcs)
+    {
+        writer.WriteStartObject(key);
+        writer.WriteString("type", "GeometryCollection");
+        writer.WriteStartArray("geometries");
+        foreach (var feature in features)
+        {
+            WriteGeometryObject(writer, feature, arcs);
+        }
+
+        writer.WriteEndArray();
+        writer.WriteEndObject();
     }
 
     public static string WriteString(FeatureCollection collection)

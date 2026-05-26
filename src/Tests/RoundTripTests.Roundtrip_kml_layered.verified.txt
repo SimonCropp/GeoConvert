@@ -1,0 +1,88 @@
+﻿{
+  "name": "world",
+  "properties": {
+    "description": "demo"
+  },
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          0,
+          0
+        ]
+      },
+      "properties": {
+        "name": "origin"
+      }
+    }
+  ],
+  "children": [
+    {
+      "name": "cities",
+      "features": [
+        {
+          "type": "Feature",
+          "geometry": {
+            "type": "Point",
+            "coordinates": [
+              10,
+              20
+            ]
+          },
+          "properties": {
+            "name": "A"
+          }
+        },
+        {
+          "type": "Feature",
+          "geometry": {
+            "type": "Point",
+            "coordinates": [
+              11,
+              21
+            ]
+          },
+          "properties": {
+            "name": "B"
+          }
+        }
+      ]
+    },
+    {
+      "name": "roads",
+      "features": [],
+      "children": [
+        {
+          "name": "highways",
+          "features": [
+            {
+              "type": "Feature",
+              "geometry": {
+                "type": "LineString",
+                "coordinates": [
+                  [
+                    0,
+                    0
+                  ],
+                  [
+                    1,
+                    1
+                  ],
+                  [
+                    2,
+                    0
+                  ]
+                ]
+              },
+              "properties": {
+                "name": "M1"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

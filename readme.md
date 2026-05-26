@@ -105,7 +105,7 @@ var options = new RenderOptions
 
 MapRenderer.RenderPng(collection, "europe.png", options);
 ```
-<sup><a href='/src/Tests/Snippets.cs#L49-L61' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderToPng' title='Start of snippet'>anchor</a></sup>
+<sup><a href='/src/Tests/Snippets.cs#L76-L88' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderToPng' title='Start of snippet'>anchor</a></sup>
 <!-- endSnippet -->
 
 `RenderOptions` controls the extent (`Bounds`), pixel `Width`/`Height` (height is derived from the
@@ -148,9 +148,58 @@ Run `geoconvert --list` to see the supported format names, or `geoconvert --help
 
 Everything reads into and writes out of a `FeatureCollection`:
 
+* `FeatureCollection` — a named, possibly nested group of features. Has an optional `Name`, a
+  `Properties` dictionary for layer-level metadata, a list of direct `Features`, and a list of
+  `Children` sub-layers (recursive). It's `IEnumerable<Feature>` over the whole tree, and `Count`
+  matches that enumeration — so `foreach (var feature in collection)` and `collection.Count` always
+  see every feature regardless of how the tree is shaped.
 * `Feature` — a `Geometry` plus a string-keyed `Properties` dictionary and an optional `Id`.
 * `Geometry` — `Point`, `LineString`, `Polygon`, `MultiPoint`, `MultiLineString`, `MultiPolygon` or
   `GeometryCollection`, built from `Position` values (X = longitude, Y = latitude, optional Z and M).
+
+
+### Layered collections
+
+Some formats have a native concept of named sub-layers (KML folders, TopoJSON objects, etc.); the
+rest are single-layer by spec. Layers are preserved across formats that support them and flattened on
+write into formats that don't.
+
+| Format | Layer mapping |
+| --- | --- |
+| KML / KMZ | `<Folder>` ↔ `FeatureCollection.Children` (recursive); folder `<name>` ↔ `Name` |
+| TopoJSON | each `objects` entry ↔ one child layer; entry key ↔ `Name` |
+| KMZ (read) | multi-document archives become a root with one child per `.kml` entry |
+| GPX | `<wpt>`/`<rte>`/`<trk>` ↔ children named `waypoints`/`routes`/`tracks` (preserves the wpt/rte/trk distinction across a round trip) |
+| Shapefile (directory) | one `.shp` in the directory ↔ one child layer, named after the filename |
+| GeoJSON, FlatGeobuf, GeoParquet, CSV, WKT, WKB | single layer — child layers are flattened on write |
+
+<!-- snippet: Layered -->
+<a id='snippet-Layered'></a>
+```cs
+// A FeatureCollection can hold nested child layers, each with its own Name. Formats with a
+// native layer concept (KML folders, TopoJSON objects, KMZ documents, GPX wpt/rte/trk,
+// Shapefile bundle directories) round-trip this structure; everything else flattens via the
+// recursive enumerator.
+var cities = new FeatureCollection { Name = "cities" };
+cities.Add(new Feature(new Point(new(151.21, -33.87))));
+
+var roads = new FeatureCollection { Name = "roads" };
+roads.Add(new Feature(new LineString([new(151.20, -33.86), new(151.22, -33.88)])));
+
+var root = new FeatureCollection { Name = "sydney" };
+root.Children.Add(cities);
+root.Children.Add(roads);
+
+GeoConverter.Write(root, "sydney.kml"); // emits <Folder name="cities">… <Folder name="roads">…
+
+// Single-layer formats just flatten — iterating any collection always yields every feature.
+foreach (var feature in root)
+{
+    Console.WriteLine(feature.Geometry);
+}
+```
+<sup><a href='/src/Tests/Snippets.cs#L49-L71' title='Snippet source file'>snippet source</a> | <a href='#snippet-Layered' title='Start of snippet'>anchor</a></sup>
+<!-- endSnippet -->
 
 
 ## Benchmarks
@@ -173,7 +222,10 @@ dotnet run -c Release --project src/Benchmarks -- --filter "*"
   header declares one shape type for the whole file, so a mixed collection has no valid encoding and
   the consumer must split it into one file per geometry type first. Output is 2D: the format does
   define Z and M variants, but GeoConvert drops those ordinates rather than emit them. A WGS84 `.prj`
-  is emitted.
+  is emitted. When `Shapefile.Read`/`Shapefile.Write` is given a directory (or a path ending in a
+  separator) instead of a `.shp`, the directory is treated as a bundled dataset: one child layer per
+  `.shp` on read, one `.shp` per child on write — the natural shape for ESRI/Natural Earth bundles
+  that ship several shapefiles together.
 * **FlatGeobuf** is written without the optional packed R-tree spatial index
   (`index_node_size = 0`) and is 2D. The index is a query accelerator, not data: it lets a reader
   fetch features in a bounding box without scanning the whole file, but carries no information the
@@ -182,10 +234,19 @@ dotnet run -c Release --project src/Benchmarks -- --filter "*"
   still valid FlatGeobuf (GDAL, QGIS and flatgeobuf.org read it fine) for the consumer to re-index on
   import if it wants spatial queries. Emitting one would mean hand-rolling a Hilbert R-tree to honour
   the no-dependency rule, which is real complexity for a benefit a conversion tool rarely needs.
-* **GPX** has no native area type: polygons are written as a track with one segment per ring, multi
-  polygons flatten every ring into a single track, and geometry collections write each member geometry
-  in turn. Reading a track with several segments yields a multi line string, so polygons do not survive
-  a round trip as polygons.
+* **GPX** reads waypoints, routes and tracks into child layers named `waypoints`, `routes` and
+  `tracks` — the only way to preserve the wpt/rte/trk distinction across a round trip (geometry type
+  alone doesn't carry it, since both rte and trk are line strings). Writing a flat collection
+  dispatches by geometry type (LineString → trk); writing a layered collection routes each feature
+  back to its original element. GPX has no native area type, so polygons are written as a track with
+  one segment per ring, multi polygons flatten every ring into a single track, and geometry
+  collections write each member geometry in turn. Reading a track with several segments yields a
+  multi line string, so polygons do not survive a round trip as polygons.
+* **KML / KMZ** preserve `<Folder>` hierarchy as nested `FeatureCollection.Children`. A KMZ archive
+  with several `.kml` entries reads as a root with one child per document; on write the whole layered
+  tree is stored as a single `doc.kml` (multi-document packaging is not reconstructed).
+* **TopoJSON** preserves the top-level `objects` dict as child layers (one per entry, keyed by
+  `Name`). The dict is single-level, so grandchildren are flattened into their parent on write.
 * **WKT** and **WKB** carry geometry only — feature attributes are dropped on write.
 * **GeoParquet** is written as a single row group with PLAIN-encoded, Snappy-compressed pages and a flat
   schema; geometry is stored as WKB (Z/M preserved) with the CRS defaulting to OGC:CRS84. The whole

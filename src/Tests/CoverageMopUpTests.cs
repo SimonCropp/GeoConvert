@@ -42,7 +42,7 @@ public class CoverageMopUpTests
               {"type":"LineString","arcs":[-1],"id":9}]}},
              "arcs":[[[0,0],[1,1]]]}
             """;
-        var feature = TopoJson.ReadString(topology).Features[0];
+        var feature = TopoJson.ReadString(topology).Children[0].Features[0];
         await Assert.That((long)feature.Id!).IsEqualTo(9L);
         var line = (LineString)feature.Geometry!;
         // arc reversed
@@ -79,8 +79,8 @@ public class CoverageMopUpTests
         ],
         GeoFormat.Gpx);
         await Assert.That(back.Count).IsEqualTo(1);
-        await Assert.That(back.Features[0].Geometry).IsTypeOf<MultiLineString>();
-        await Assert.That(back.Features[0].Properties["description"]).IsEqualTo("d");
+        await Assert.That(back.ElementAt(0).Geometry).IsTypeOf<MultiLineString>();
+        await Assert.That(back.ElementAt(0).Properties["description"]).IsEqualTo("d");
     }
 
     [Test]
@@ -170,5 +170,166 @@ public class CoverageMopUpTests
             GeoFormat.FlatGeobuf);
         await Assert.That(back.Count).IsEqualTo(3);
         await Assert.That(back.Features[2].Geometry).IsNull();
+    }
+
+    [Test]
+    public async Task FeatureCollection_collection_initializer_adds_child_layer()
+    {
+        var inner = new FeatureCollection { Name = "inner" };
+        inner.Add(new Feature(new Point(3, 4)));
+        var root = new FeatureCollection
+        {
+            new Feature(new Point(1, 2)),
+            inner
+        };
+        await Assert.That(root.Children.Count).IsEqualTo(1);
+        await Assert.That(root.Count).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task Kml_nested_document_becomes_child()
+    {
+        const string kml =
+            """<kml xmlns="http://www.opengis.net/kml/2.2"><Document><Document><name>nested</name><Placemark><Point><coordinates>1,2</coordinates></Point></Placemark></Document></Document></kml>""";
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(kml));
+        var collection = Kml.Read(stream);
+        await Assert.That(collection.Children[0].Name).IsEqualTo("nested");
+    }
+
+    [Test]
+    public async Task Kml_unknown_container_child_is_skipped()
+    {
+        const string kml =
+            """<kml xmlns="http://www.opengis.net/kml/2.2"><Document><Style id="x"/><Placemark><Point><coordinates>1,2</coordinates></Point></Placemark></Document></kml>""";
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(kml));
+        var collection = Kml.Read(stream);
+        await Assert.That(collection.Features.Count).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task Kmz_empty_archive_throws()
+    {
+        using var memory = new MemoryStream();
+        using (var archive = new ZipArchive(memory, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            archive.CreateEntry("readme.txt");
+        }
+
+        memory.Position = 0;
+        await Assert.That(G.ThrowsGeo(() => Kmz.Read(memory))).IsTrue();
+    }
+
+    [Test]
+    public async Task Kmz_multi_document_becomes_layered_root()
+    {
+        const string oneKml =
+            """<kml xmlns="http://www.opengis.net/kml/2.2"><Document><Placemark><name>p1</name><Point><coordinates>1,2</coordinates></Point></Placemark></Document></kml>""";
+        const string twoKml =
+            """<kml xmlns="http://www.opengis.net/kml/2.2"><Document><Placemark><name>p2</name><Point><coordinates>3,4</coordinates></Point></Placemark></Document></kml>""";
+
+        using var memory = new MemoryStream();
+        using (var archive = new ZipArchive(memory, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            using (var entry = archive.CreateEntry("one.kml").Open())
+            {
+                entry.Write(Encoding.UTF8.GetBytes(oneKml));
+            }
+
+            using (var entry = archive.CreateEntry("two.kml").Open())
+            {
+                entry.Write(Encoding.UTF8.GetBytes(twoKml));
+            }
+        }
+
+        memory.Position = 0;
+        var collection = Kmz.Read(memory);
+        await Assert.That(collection.Children.Count).IsEqualTo(2);
+        // child.Name defaults to entry filename when the document has no <name>
+        await Assert.That(collection.Children[0].Name).IsEqualTo("one");
+    }
+
+    [Test]
+    public async Task TopoJson_writes_unique_keys_for_duplicate_layer_names()
+    {
+        var first = new FeatureCollection { Name = "data" };
+        first.Add(new Feature(new Point(1, 2)));
+        var second = new FeatureCollection { Name = "data" };
+        second.Add(new Feature(new Point(3, 4)));
+        var root = new FeatureCollection { first, second };
+        var topology = TopoJson.WriteString(root);
+        // Second "data" must be disambiguated; first stays as "data".
+        await Assert.That(topology).Contains("\"data_1\":");
+    }
+
+    [Test]
+    public async Task Gpx_category_write_handles_root_and_non_category_features()
+    {
+        // Layered input that mixes a root-level feature, a category layer ("waypoints"), and a
+        // non-category sibling layer — exercises the fallback dispatch inside the category-write path.
+        var waypoints = new FeatureCollection { Name = "waypoints" };
+        waypoints.Add(new Feature(new Point(1, 2)));
+        var stray = new FeatureCollection { Name = "misc" };
+        stray.Add(new Feature(new LineString([new(0, 0), new(1, 1)])));
+        var root = new FeatureCollection { new Feature(new Point(9, 9)), waypoints, stray };
+
+        using var stream = new MemoryStream();
+        Gpx.Write(stream, root);
+        stream.Position = 0;
+        var back = Gpx.Read(stream);
+        // 1 root wpt + 1 waypoints layer wpt = 2 wpts; the stray line writes as trk.
+        await Assert.That(back.Count).IsEqualTo(3);
+    }
+
+    [Test]
+    public async Task Shapefile_directory_read_tolerates_missing_dbf()
+    {
+        using var directory = new TempDirectory();
+        // Write one shapefile through the normal path, then delete its .dbf to mimic an old/partial dataset.
+        Shapefile.Write(Path.Combine(directory, "geom.shp"), Sample.Polygons());
+        File.Delete(Path.Combine(directory, "geom.dbf"));
+
+        var bundle = Shapefile.Read(directory);
+        await Assert.That(bundle.Children.Count).IsEqualTo(1);
+        await Assert.That(bundle.Children[0].Features[0].Properties.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task Shapefile_directory_write_emits_root_features_as_data_shp()
+    {
+        var child = new FeatureCollection { Name = "extras" };
+        child.Add(new Feature(new Point(5, 5)));
+        var root = new FeatureCollection
+        {
+            new Feature(new Point(1, 1)),
+            new Feature(new Point(2, 2)),
+            child
+        };
+
+        using var directory = new TempDirectory();
+        Shapefile.Write(Path.Combine(directory, "bundle") + Path.DirectorySeparatorChar, root);
+        var datasetPath = Path.Combine(directory, "bundle");
+
+        await Assert.That(File.Exists(Path.Combine(datasetPath, "data.shp"))).IsTrue();
+        await Assert.That(File.Exists(Path.Combine(datasetPath, "extras.shp"))).IsTrue();
+
+        var back = Shapefile.Read(datasetPath);
+        await Assert.That(back.Children.Count).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task Xml_read_children_skips_text_nodes()
+    {
+        // Significant text mixed with elements forces the non-element branch in ReadChildren.
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes("<root>text<child/></root>"));
+        using var reader = XmlReader.Create(stream);
+        reader.MoveToContent();
+        var seen = 0;
+        Xml.ReadChildren(reader, () =>
+        {
+            seen++;
+            reader.Skip();
+        });
+
+        await Assert.That(seen).IsEqualTo(1);
     }
 }

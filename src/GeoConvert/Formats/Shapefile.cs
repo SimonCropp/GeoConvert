@@ -5,7 +5,10 @@ namespace GeoConvert;
 /// Shapefile</see> family: geometry in <c>.shp</c>, the record index in <c>.shx</c>, and attributes in
 /// <c>.dbf</c>; a WGS84 <c>.prj</c> is emitted on write. A shapefile holds a single geometry category
 /// (point, multipoint, polyline or polygon); writing a mixed collection throws. Output is 2D (Z/M
-/// ordinates are dropped); Z/M input is read as 2D.
+/// ordinates are dropped); Z/M input is read as 2D. When <see cref="Read(string)"/> or
+/// <see cref="Write(string, FeatureCollection)"/> is given a directory rather than a <c>.shp</c> path,
+/// each <c>.shp</c> in the directory becomes a child layer named after its filename — the natural
+/// representation for a shapefile-as-dataset (e.g. Natural Earth's "ne_10m_admin_0_countries" bundle).
 /// </summary>
 public static class Shapefile
 {
@@ -13,11 +16,16 @@ public static class Shapefile
     const int version = 1000;
     const int headerLength = 100;
 
-    public static FeatureCollection Read(string shpPath)
+    public static FeatureCollection Read(string path)
     {
-        var encoding = ResolveEncoding(shpPath);
-        using var shp = File.OpenRead(shpPath);
-        var dbfPath = Path.ChangeExtension(shpPath, ".dbf");
+        if (Directory.Exists(path))
+        {
+            return ReadDirectory(path);
+        }
+
+        var encoding = ResolveEncoding(path);
+        using var shp = File.OpenRead(path);
+        var dbfPath = Path.ChangeExtension(path, ".dbf");
         if (File.Exists(dbfPath))
         {
             using var dbf = File.OpenRead(dbfPath);
@@ -25,6 +33,35 @@ public static class Shapefile
         }
 
         return Read(shp, null, encoding);
+    }
+
+    static FeatureCollection ReadDirectory(string directory)
+    {
+        var root = new FeatureCollection();
+        // Ordered so the child sequence is stable across filesystems / repeated runs.
+        var shpPaths = Directory.GetFiles(directory, "*.shp");
+        Array.Sort(shpPaths, StringComparer.Ordinal);
+        foreach (var shpPath in shpPaths)
+        {
+            var encoding = ResolveEncoding(shpPath);
+            using var shp = File.OpenRead(shpPath);
+            var dbfPath = Path.ChangeExtension(shpPath, ".dbf");
+            FeatureCollection child;
+            if (File.Exists(dbfPath))
+            {
+                using var dbf = File.OpenRead(dbfPath);
+                child = Read(shp, dbf, encoding);
+            }
+            else
+            {
+                child = Read(shp, null, encoding);
+            }
+
+            child.Name = Path.GetFileNameWithoutExtension(shpPath);
+            root.Children.Add(child);
+        }
+
+        return root;
     }
 
     /// <summary>Reads geometry and attributes, decoding the .dbf as Latin-1.</summary>
@@ -200,8 +237,16 @@ public static class Shapefile
         return new(x, y);
     }
 
-    public static void Write(string shpPath, FeatureCollection collection)
+    public static void Write(string path, FeatureCollection collection)
     {
+        // A directory path writes one .shp per child layer — round-tripping the bundled-dataset shape
+        // produced by Read(directory). Root-level features (if any) go into "data.shp" alongside.
+        if (IsDirectoryPath(path))
+        {
+            WriteDirectory(path, collection);
+            return;
+        }
+
         var shapeType = DetermineShapeType(collection);
         var contents = new List<byte[]>(collection.Count);
         foreach (var feature in collection)
@@ -211,22 +256,48 @@ public static class Shapefile
 
         var bounds = collection.GetBounds();
 
-        using (var shp = File.Create(shpPath))
+        using (var shp = File.Create(path))
         {
             WriteMainFile(shp, shapeType, bounds, contents);
         }
 
-        using (var shx = File.Create(Path.ChangeExtension(shpPath, ".shx")))
+        using (var shx = File.Create(Path.ChangeExtension(path, ".shx")))
         {
             WriteIndexFile(shx, shapeType, bounds, contents);
         }
 
-        using (var dbf = File.Create(Path.ChangeExtension(shpPath, ".dbf")))
+        using (var dbf = File.Create(Path.ChangeExtension(path, ".dbf")))
         {
             Dbf.Write(dbf, PropertyKeys(collection), collection);
         }
 
-        File.WriteAllText(Path.ChangeExtension(shpPath, ".prj"), wgs84Prj);
+        File.WriteAllText(Path.ChangeExtension(path, ".prj"), wgs84Prj);
+    }
+
+    // Treats an existing directory, or a path ending in a directory separator, as a directory target.
+    static bool IsDirectoryPath(string path) =>
+        Directory.Exists(path) ||
+        path.EndsWith(Path.DirectorySeparatorChar) ||
+        path.EndsWith(Path.AltDirectorySeparatorChar);
+
+    static void WriteDirectory(string directory, FeatureCollection collection)
+    {
+        Directory.CreateDirectory(directory);
+        if (collection.Features.Count > 0)
+        {
+            var rootLayer = new FeatureCollection();
+            rootLayer.Features.AddRange(collection.Features);
+            Write(Path.Combine(directory, "data.shp"), rootLayer);
+        }
+
+        var index = 0;
+        foreach (var child in collection.Children)
+        {
+            // Child's Name → filename. Anonymous layers fall back to layer_N.
+            var name = child.Name ?? $"layer_{index}";
+            Write(Path.Combine(directory, name + ".shp"), child);
+            index++;
+        }
     }
 
     static void WriteMainFile(Stream stream, int shapeType, Envelope bounds, List<byte[]> contents)

@@ -1,0 +1,83 @@
+﻿{
+  "features": [],
+  "children": [
+    {
+      "name": "blocks",
+      "features": [
+        {
+          "type": "Feature",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  0,
+                  0
+                ],
+                [
+                  0,
+                  4
+                ],
+                [
+                  4,
+                  4
+                ],
+                [
+                  4,
+                  0
+                ],
+                [
+                  0,
+                  0
+                ]
+              ]
+            ]
+          },
+          "properties": {
+            "name": "blockA",
+            "id": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "islands",
+      "features": [
+        {
+          "type": "Feature",
+          "geometry": {
+            "type": "Polygon",
+            "coordinates": [
+              [
+                [
+                  10,
+                  10
+                ],
+                [
+                  10,
+                  12
+                ],
+                [
+                  12,
+                  12
+                ],
+                [
+                  12,
+                  10
+                ],
+                [
+                  10,
+                  10
+                ]
+              ]
+            ]
+          },
+          "properties": {
+            "name": "islandX",
+            "id": 7
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -105,10 +105,12 @@ public class JsonFormatTests
             """;
         var collection = TopoJson.ReadString(topology);
         await Assert.That(collection.Count).IsEqualTo(2);
-        var point = (Point)collection.Features[0].Geometry!;
+        // TopoJson preserves the top-level "objects" entry "d" as a child layer; navigate into it.
+        var layer = collection.Children[0];
+        var point = (Point)layer.Features[0].Geometry!;
         await Assert.That(point.Coordinate.X).IsEqualTo(10d);
         await Assert.That(point.Coordinate.Y).IsEqualTo(20d);
-        var line = (LineString)collection.Features[1].Geometry!;
+        var line = (LineString)layer.Features[1].Geometry!;
         await Assert.That(line.Positions.Count).IsEqualTo(3);
         await Assert.That(line.Positions[2].X).IsEqualTo(14d);
     }

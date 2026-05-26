@@ -3,8 +3,12 @@ namespace GeoConvert;
 /// <summary>
 /// Reads and writes <see href="https://www.ogc.org/standard/kml/">KML 2.2</see>. Each
 /// <c>&lt;Placemark&gt;</c> maps to a feature; <c>&lt;name&gt;</c>/<c>&lt;description&gt;</c> and
-/// <c>&lt;ExtendedData&gt;</c>/<c>&lt;Data&gt;</c> map to properties. KML coordinates are lon,lat[,alt]
-/// (no measure). Reading streams with <see cref="XmlReader"/> and is namespace-tolerant.
+/// <c>&lt;ExtendedData&gt;</c>/<c>&lt;Data&gt;</c> map to properties. <c>&lt;Folder&gt;</c>s map to
+/// nested <see cref="FeatureCollection.Children"/> (a folder's <c>&lt;name&gt;</c> becomes
+/// <see cref="FeatureCollection.Name"/>, <c>&lt;description&gt;</c> becomes a "description" property),
+/// preserving hierarchy across round-trips. <c>&lt;Document&gt;</c> is treated as the root layer:
+/// its name/description populate the root. KML coordinates are lon,lat[,alt] (no measure). Reading
+/// streams with <see cref="XmlReader"/> and is namespace-tolerant.
 /// </summary>
 public static class Kml
 {
@@ -15,23 +19,54 @@ public static class Kml
         using var reader = Xml.CreateReader(stream);
         var collection = new FeatureCollection();
         reader.MoveToContent();
-        Scan(reader, collection);
+        // The first <Document> we encounter populates the root; nested Documents become child layers.
+        ScanContainer(reader, collection, isRoot: true);
         return collection;
     }
 
-    // Placemarks can be nested under Document/Folder, so walk the tree to any depth.
-    static void Scan(XmlReader reader, FeatureCollection collection) =>
+    // Reads the children of an element (<kml>, <Document>, or <Folder>), populating `target` with
+    // its placemarks, folders, name and description.
+    static void ScanContainer(XmlReader reader, FeatureCollection target, bool isRoot) =>
         Xml.ReadChildren(reader, () =>
         {
-            if (reader.LocalName == "Placemark")
+            switch (reader.LocalName)
             {
-                collection.Add(ReadPlacemark(reader));
-            }
-            else
-            {
-                Scan(reader, collection);
+                case "Placemark":
+                    target.Add(ReadPlacemark(reader));
+                    break;
+                case "Folder":
+                    target.Children.Add(ReadContainer(reader));
+                    break;
+                case "Document":
+                    if (isRoot)
+                    {
+                        // First Document under <kml> is the root layer itself, not a child.
+                        ScanContainer(reader, target, isRoot: false);
+                    }
+                    else
+                    {
+                        target.Children.Add(ReadContainer(reader));
+                    }
+
+                    break;
+                case "name":
+                    target.Name = reader.ReadElementContentAsString();
+                    break;
+                case "description":
+                    target.Properties["description"] = reader.ReadElementContentAsString();
+                    break;
+                default:
+                    reader.Skip();
+                    break;
             }
         });
+
+    static FeatureCollection ReadContainer(XmlReader reader)
+    {
+        var collection = new FeatureCollection();
+        ScanContainer(reader, collection, isRoot: false);
+        return collection;
+    }
 
     static Feature ReadPlacemark(XmlReader reader)
     {
@@ -220,14 +255,35 @@ public static class Kml
         writer.WriteStartDocument();
         writer.WriteStartElement("kml", ns);
         writer.WriteStartElement("Document", ns);
-        foreach (var feature in collection)
+        WriteContainerBody(writer, collection);
+        writer.WriteEndElement();
+        writer.WriteEndElement();
+        writer.WriteEndDocument();
+    }
+
+    static void WriteContainerBody(XmlWriter writer, FeatureCollection collection)
+    {
+        if (collection.Name is { } name)
+        {
+            writer.WriteElementString("name", ns, name);
+        }
+
+        if (collection.Properties.TryGetValue("description", out var description) && description != null)
+        {
+            writer.WriteElementString("description", ns, Scalars.Format(description));
+        }
+
+        foreach (var feature in collection.Features)
         {
             WritePlacemark(writer, feature);
         }
 
-        writer.WriteEndElement();
-        writer.WriteEndElement();
-        writer.WriteEndDocument();
+        foreach (var child in collection.Children)
+        {
+            writer.WriteStartElement("Folder", ns);
+            WriteContainerBody(writer, child);
+            writer.WriteEndElement();
+        }
     }
 
     static void WritePlacemark(XmlWriter writer, Feature feature)

@@ -20,6 +20,62 @@ static class TestSupport
         return Shapefile.Read(path);
     }
 
+    // Serializes a FeatureCollection tree (Name/Properties/Features/Children) as indented JSON,
+    // so layer-preserving round trips can be snapshotted without losing hierarchy. Features are
+    // emitted via GeoJson so the snapshot stays human-readable.
+    public static string AsLayerJson(FeatureCollection collection)
+    {
+        var stream = new MemoryStream();
+        using (var writer = new System.Text.Json.Utf8JsonWriter(stream, new() { Indented = true }))
+        {
+            WriteLayer(writer, collection);
+        }
+
+        return Encoding.UTF8.GetString(stream.ToArray());
+    }
+
+    static void WriteLayer(System.Text.Json.Utf8JsonWriter writer, FeatureCollection layer)
+    {
+        writer.WriteStartObject();
+        if (layer.Name is { } name)
+        {
+            writer.WriteString("name", name);
+        }
+
+        if (layer.Properties.Count > 0)
+        {
+            writer.WriteStartObject("properties");
+            foreach (var property in layer.Properties)
+            {
+                writer.WriteString(property.Key, property.Value?.ToString());
+            }
+
+            writer.WriteEndObject();
+        }
+
+        // Round-trip the layer's direct features through GeoJson so the snapshot reuses that format.
+        var flat = new FeatureCollection();
+        flat.Features.AddRange(layer.Features);
+        using (var doc = System.Text.Json.JsonDocument.Parse(GeoJson.WriteString(flat)))
+        {
+            writer.WritePropertyName("features");
+            doc.RootElement.GetProperty("features").WriteTo(writer);
+        }
+
+        if (layer.Children.Count > 0)
+        {
+            writer.WriteStartArray("children");
+            foreach (var child in layer.Children)
+            {
+                WriteLayer(writer, child);
+            }
+
+            writer.WriteEndArray();
+        }
+
+        writer.WriteEndObject();
+    }
+
     public static bool ThrowsGeo(Action action)
     {
         try

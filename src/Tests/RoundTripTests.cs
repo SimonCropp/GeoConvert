@@ -46,6 +46,35 @@ public class RoundTripTests
     public Task Roundtrip_shapefile() =>
         VerifyRoundTrip(GeoFormat.Shapefile, Sample.Polygons());
 
+    // Layer-aware round trips: snapshot the tree (not just flattened features) to prove hierarchy survives.
+    [Test]
+    public Task Roundtrip_kml_layered() =>
+        VerifyLayerRoundTrip(GeoFormat.Kml, Sample.Layered());
+
+    [Test]
+    public Task Roundtrip_topojson_layered() =>
+        VerifyLayerRoundTrip(GeoFormat.TopoJson, Sample.Layered());
+
+    [Test]
+    public Task Roundtrip_kmz_layered() =>
+        VerifyLayerRoundTrip(GeoFormat.Kmz, Sample.Layered());
+
+    [Test]
+    public Task Roundtrip_gpx_layered() =>
+        VerifyLayerRoundTrip(GeoFormat.Gpx, Sample.GpxLayered());
+
+    [Test]
+    public async Task Roundtrip_shapefile_directory()
+    {
+        using var directory = new TempDirectory();
+        Shapefile.Write(directory + Path.DirectorySeparatorChar, Sample.ShapefileBundle());
+        var back = Shapefile.Read(directory);
+        await Verify(TestSupport.AsLayerJson(back));
+    }
+
+    static Task VerifyLayerRoundTrip(GeoFormat format, FeatureCollection source) =>
+        Verify(TestSupport.AsLayerJson(RoundTrip(format, source)));
+
     static Task VerifyRoundTrip(GeoFormat format, FeatureCollection source) =>
         Verify(GeoJson.WriteString(RoundTrip(format, source)));
 

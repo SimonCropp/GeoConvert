@@ -44,6 +44,33 @@ static class Snippets
         Console.WriteLine(geoJson);
     }
 
+    public static void Layered()
+    {
+        #region Layered
+        // A FeatureCollection can hold nested child layers, each with its own Name. Formats with a
+        // native layer concept (KML folders, TopoJSON objects, KMZ documents, GPX wpt/rte/trk,
+        // Shapefile bundle directories) round-trip this structure; everything else flattens via the
+        // recursive enumerator.
+        var cities = new FeatureCollection { Name = "cities" };
+        cities.Add(new Feature(new Point(new(151.21, -33.87))));
+
+        var roads = new FeatureCollection { Name = "roads" };
+        roads.Add(new Feature(new LineString([new(151.20, -33.86), new(151.22, -33.88)])));
+
+        var root = new FeatureCollection { Name = "sydney" };
+        root.Children.Add(cities);
+        root.Children.Add(roads);
+
+        GeoConverter.Write(root, "sydney.kml"); // emits <Folder name="cities">… <Folder name="roads">…
+
+        // Single-layer formats just flatten — iterating any collection always yields every feature.
+        foreach (var feature in root)
+        {
+            Console.WriteLine(feature.Geometry);
+        }
+        #endregion
+    }
+
     public static void RenderToPng()
     {
         #region RenderToPng
