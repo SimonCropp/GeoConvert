@@ -6,8 +6,6 @@
 /// </summary>
 static class ParquetEncoding
 {
-    // ---- PLAIN writers ----
-
     public static byte[] PlainInt64(IReadOnlyList<long> values)
     {
         var bytes = new byte[values.Count * 8];
@@ -64,8 +62,6 @@ static class ParquetEncoding
 
         return bytes;
     }
-
-    // ---- PLAIN readers ----
 
     public static long[] ReadPlainInt64(byte[] data, int offset, int count)
     {
@@ -125,8 +121,6 @@ static class ParquetEncoding
 
         return values;
     }
-
-    // ---- RLE / bit-packed hybrid ----
 
     /// <summary>Number of bits needed to represent values up to <paramref name="max"/> (minimum 1).</summary>
     public static int BitWidth(int max)

@@ -6,11 +6,10 @@
 /// </summary>
 sealed class ThriftCompactReader(byte[] data, int offset = 0)
 {
-    readonly Stack<int> pending = new();
-    int position = offset;
+    Stack<int> pending = new();
     int lastFieldId;
 
-    public int Position => position;
+    public int Position { get; private set; } = offset;
 
     public void StructBegin()
     {
@@ -23,7 +22,7 @@ sealed class ThriftCompactReader(byte[] data, int offset = 0)
     /// <summary>Reads a field header; a returned type of 0 is the struct stop.</summary>
     public (byte Type, int Id) ReadFieldHeader()
     {
-        var header = data[position++];
+        var header = data[Position++];
         if (header == 0)
         {
             return (0, 0);
@@ -44,24 +43,22 @@ sealed class ThriftCompactReader(byte[] data, int offset = 0)
 
     public double ReadDouble()
     {
-        var value = BinaryPrimitives.ReadDoubleLittleEndian(data.AsSpan(position, 8));
-        position += 8;
+        var value = BinaryPrimitives.ReadDoubleLittleEndian(data.AsSpan(Position, 8));
+        Position += 8;
         return value;
     }
 
-    public string ReadString() => Encoding.UTF8.GetString(ReadBinary());
-
-    public byte[] ReadBinary()
+    public string ReadString()
     {
         var length = (int)ReadVarint();
-        var bytes = data.AsSpan(position, length).ToArray();
-        position += length;
-        return bytes;
+        var bytes = data.AsSpan(Position, length).ToArray();
+        Position += length;
+        return Encoding.UTF8.GetString(bytes);
     }
 
     public (byte Element, int Count) ReadListHeader()
     {
-        var header = data[position++];
+        var header = data[Position++];
         var count = (header >> 4) & 0x0F;
         var type = (byte)(header & 0x0F);
         if (count == 15)
@@ -84,13 +81,13 @@ sealed class ThriftCompactReader(byte[] data, int offset = 0)
                 // A boolean field carries its value in the type nibble; a list element is one byte.
                 if (element)
                 {
-                    position++;
+                    Position++;
                 }
 
                 break;
             // i8
             case 3:
-                position++;
+                Position++;
                 break;
             // i16
             case 4:
@@ -99,12 +96,12 @@ sealed class ThriftCompactReader(byte[] data, int offset = 0)
                 ReadZigZag();
                 break;
             case ThriftCompactWriter.TypeDouble:
-                position += 8;
+                Position += 8;
                 break;
             case ThriftCompactWriter.TypeBinary:
             {
                 var length = (int)ReadVarint();
-                position += length;
+                Position += length;
                 break;
             }
             case ThriftCompactWriter.TypeList:
@@ -125,7 +122,7 @@ sealed class ThriftCompactReader(byte[] data, int offset = 0)
                 var count = (int)ReadVarint();
                 if (count > 0)
                 {
-                    var types = data[position++];
+                    var types = data[Position++];
                     var keyType = (byte)((types >> 4) & 0x0F);
                     var valueType = (byte)(types & 0x0F);
                     for (var i = 0; i < count; i++)
@@ -169,7 +166,7 @@ sealed class ThriftCompactReader(byte[] data, int offset = 0)
         var shift = 0;
         while (true)
         {
-            var b = data[position++];
+            var b = data[Position++];
             result |= (ulong)(b & 0x7F) << shift;
             if ((b & 0x80) == 0)
             {

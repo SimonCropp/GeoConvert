@@ -39,7 +39,10 @@ public class FlatGeobufAlignmentTests
             polygons.Add(new([[new(dx, 0), new(dx + 1, 0), new(dx + 1, 1), new(dx, 1), new(dx, 0)]]));
         }
 
-        var collection = new FeatureCollection { new Feature(new MultiPolygon(polygons)) };
+        var collection = new FeatureCollection
+        {
+            new Feature(new MultiPolygon(polygons))
+        };
         AssertAlignedFeature(WriteBytes(collection));
         return Task.CompletedTask;
     }
@@ -85,8 +88,6 @@ public class FlatGeobufAlignmentTests
         var innerPos = rootPos + 4 + innerUoffset;
         await Assert.That(innerPos % 4).IsEqualTo(0);
     }
-
-    // --- helpers -----------------------------------------------------------------------------------
 
     static byte[] WriteBytes(FeatureCollection collection)
     {

@@ -56,13 +56,11 @@ sealed class ThriftCompactWriter
         buffer.Write(bytes);
     }
 
-    public void String(int id, string value) =>
-        Binary(id, Encoding.UTF8.GetBytes(value));
-
-    public void Binary(int id, byte[] value)
+    public void String(int id, string value)
     {
+        var bytes = Encoding.UTF8.GetBytes(value);
         FieldHeader(id, TypeBinary);
-        WriteBinaryValue(value);
+        WriteBinaryValue(bytes);
     }
 
     /// <summary>Writes a struct field header and opens the nested struct (close with <see cref="StructEnd"/>).</summary>

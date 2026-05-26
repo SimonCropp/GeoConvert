@@ -140,7 +140,8 @@ sealed class FlatBufferBuilder
     {
         var byteCount = Encoding.UTF8.GetByteCount(value);
         Prep(4, byteCount + 1);
-        buffer[--space] = 0; // null terminator
+        // null terminator
+        buffer[--space] = 0;
         space -= byteCount;
         Encoding.UTF8.GetBytes(value, buffer.AsSpan(space, byteCount));
         vectorElements = byteCount;
@@ -233,7 +234,8 @@ sealed class FlatBufferBuilder
         // the buffer has room first — otherwise large tables underflow space and overrun the buffer.
         EnsureSpace(sizeof(int) + (fieldCount + 2) * sizeof(short));
 
-        PutInt(0); // placeholder for the soffset to the vtable
+        // placeholder for the soffset to the vtable
+        PutInt(0);
         var tableLocation = Offset;
 
         for (var i = fieldCount - 1; i >= 0; i--)
@@ -257,7 +259,8 @@ sealed class FlatBufferBuilder
         Prep(minAlign, 8);
         // root table uoffset
         PutInt(Offset - rootTable + 4);
-        PutInt(buffer.Length - space); // size prefix (length of everything after it)
+        // size prefix (length of everything after it)
+        PutInt(buffer.Length - space);
         return ToArray();
     }
 

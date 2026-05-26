@@ -15,25 +15,46 @@ readonly struct FlatBufferTable(byte[] buffer, int position)
         }
 
         var offset = BinaryPrimitives.ReadInt16LittleEndian(buffer.AsSpan(vtable + slot));
-        return offset == 0 ? 0 : position + offset;
+
+        if (offset == 0)
+        {
+            return 0;
+        }
+
+        return position + offset;
     }
 
     public byte GetByte(int field, byte defaultValue)
     {
         var offset = FieldOffset(field);
-        return offset == 0 ? defaultValue : buffer[offset];
+        if (offset == 0)
+        {
+            return defaultValue;
+        }
+
+        return buffer[offset];
     }
 
     public ushort GetUShort(int field, ushort defaultValue)
     {
         var offset = FieldOffset(field);
-        return offset == 0 ? defaultValue : BinaryPrimitives.ReadUInt16LittleEndian(buffer.AsSpan(offset));
+        if (offset == 0)
+        {
+            return defaultValue;
+        }
+
+        return BinaryPrimitives.ReadUInt16LittleEndian(buffer.AsSpan(offset));
     }
 
     public ulong GetULong(int field, ulong defaultValue)
     {
         var offset = FieldOffset(field);
-        return offset == 0 ? defaultValue : BinaryPrimitives.ReadUInt64LittleEndian(buffer.AsSpan(offset));
+        if (offset == 0)
+        {
+            return defaultValue;
+        }
+
+        return BinaryPrimitives.ReadUInt64LittleEndian(buffer.AsSpan(offset));
     }
 
     public string? GetString(int field)

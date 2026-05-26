@@ -101,7 +101,8 @@ public static class Kml
                 case "Polygon":
                 case "MultiGeometry":
                     var geometry = ReadGeometry(reader);
-                    feature.Geometry ??= geometry; // first geometry wins
+                    // first geometry wins
+                    feature.Geometry ??= geometry;
                     break;
                 default:
                     reader.Skip();

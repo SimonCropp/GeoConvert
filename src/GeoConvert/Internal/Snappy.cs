@@ -6,11 +6,11 @@
 /// </summary>
 static class Snappy
 {
-    const int MaxBlockSize = 65536;
-    const int MaxTableSize = 1 << 14;
-    const int TableMask = MaxTableSize - 1;
-    const int InputMargin = 15;
-    const int MinNonLiteralBlockSize = 1 + 1 + InputMargin;
+    const int maxBlockSize = 65536;
+    const int maxTableSize = 1 << 14;
+    const int tableMask = maxTableSize - 1;
+    const int inputMargin = 15;
+    const int minNonLiteralBlockSize = 1 + 1 + inputMargin;
 
     public static byte[] Compress(byte[] input)
     {
@@ -19,7 +19,7 @@ static class Snappy
         var start = 0;
         while (start < input.Length)
         {
-            var length = Math.Min(input.Length - start, MaxBlockSize);
+            var length = Math.Min(input.Length - start, maxBlockSize);
             EncodeBlock(input, start, length, output);
             start += length;
         }
@@ -120,20 +120,32 @@ static class Snappy
 
     static void EncodeBlock(byte[] src, int start, int length, MemoryStream destination)
     {
-        if (length < MinNonLiteralBlockSize)
+        if (length < minNonLiteralBlockSize)
         {
             EmitLiteral(destination, src, start, length);
             return;
         }
 
+        var nextEmit = EmitMatches(src, start, length, destination);
+        if (nextEmit < length)
+        {
+            EmitLiteral(destination, src, start + nextEmit, length - nextEmit);
+        }
+    }
+
+    // Hash-matched encoder over a single ≤64KB block. Returns the position of the first byte not yet
+    // emitted, so the caller can flush the trailing literal. Structured as a method so the two
+    // "out of room, stop searching" exits are returns instead of gotos out of nested loops.
+    static int EmitMatches(byte[] src, int start, int length, MemoryStream destination)
+    {
         var shift = 32 - 8;
-        for (var tableSize = 1 << 8; tableSize < MaxTableSize && tableSize < length; tableSize <<= 1)
+        for (var tableSize = 1 << 8; tableSize < maxTableSize && tableSize < length; tableSize <<= 1)
         {
             shift--;
         }
 
-        var table = new int[MaxTableSize];
-        var limit = length - InputMargin;
+        var table = new int[maxTableSize];
+        var limit = length - inputMargin;
         var nextEmit = 0;
         var s = 1;
         var nextHash = Hash(Load32(src, start, s), shift);
@@ -151,11 +163,11 @@ static class Snappy
                 skip += step;
                 if (nextS > limit)
                 {
-                    goto emitRemainder;
+                    return nextEmit;
                 }
 
-                candidate = table[nextHash & TableMask];
-                table[nextHash & TableMask] = s;
+                candidate = table[nextHash & tableMask];
+                table[nextHash & tableMask] = s;
                 nextHash = Hash(Load32(src, start, nextS), shift);
                 if (Load32(src, start, s) == Load32(src, start, candidate))
                 {
@@ -180,27 +192,21 @@ static class Snappy
                 nextEmit = s;
                 if (s >= limit)
                 {
-                    goto emitRemainder;
+                    return nextEmit;
                 }
 
                 var x = Load64(src, start, s - 1);
-                table[Hash((uint)x, shift) & TableMask] = s - 1;
-                var currentHash = Hash((uint)(x >> 8), shift);
-                candidate = table[currentHash & TableMask];
-                table[currentHash & TableMask] = s;
-                if ((uint)(x >> 8) != Load32(src, start, candidate))
+                table[Hash((uint) x, shift) & tableMask] = s - 1;
+                var currentHash = Hash((uint) (x >> 8), shift);
+                candidate = table[currentHash & tableMask];
+                table[currentHash & tableMask] = s;
+                if ((uint) (x >> 8) != Load32(src, start, candidate))
                 {
-                    nextHash = Hash((uint)(x >> 16), shift);
+                    nextHash = Hash((uint) (x >> 16), shift);
                     s++;
                     break;
                 }
             }
-        }
-
-    emitRemainder:
-        if (nextEmit < length)
-        {
-            EmitLiteral(destination, src, start + nextEmit, length - nextEmit);
         }
     }
 
