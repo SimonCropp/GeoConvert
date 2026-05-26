@@ -17,61 +17,58 @@ static class Dbf
         // Field values are decoded with this; defaults to Latin-1 for legacy dBASE. Shapefiles that
         // declare UTF-8 via a .cpg sidecar pass it in (Natural Earth and most modern data are UTF-8).
         var textEncoding = encoding ?? Encoding.Latin1;
+        // Buffer once and read straight from the backing array — the prior code piped through a
+        // BinaryReader that did one byte[] allocation per cell.
         using var memory = new MemoryStream();
         stream.CopyTo(memory);
-        memory.Position = 0;
-        using var reader = new BinaryReader(memory, Encoding.Latin1);
+        var length = (int)memory.Length;
+        var data = memory.GetBuffer();
 
-        // version
-        reader.ReadByte();
-        // last update date
-        reader.ReadBytes(3);
-        var recordCount = reader.ReadUInt32();
-        // header length
-        reader.ReadUInt16();
-        // record length
-        reader.ReadUInt16();
-        // reserved
-        reader.ReadBytes(20);
+        var position = 0;
+        // header: 1 version + 3 date + 4 recordCount + 2 headerLen + 2 recordLen + 20 reserved = 32 bytes
+        var recordCount = BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(4));
+        position = 32;
 
         var fields = new List<Field>();
-        while (true)
+        Span<byte> nameBytes = stackalloc byte[11];
+        while (position < length)
         {
-            var marker = reader.ReadByte();
-            if (marker == 0x0D)
+            if (data[position] == 0x0D)
             {
+                position++;
                 break;
             }
 
-            var nameBytes = new byte[11];
-            nameBytes[0] = marker;
-            for (var i = 1; i < 11; i++)
-            {
-                nameBytes[i] = reader.ReadByte();
-            }
-
+            data.AsSpan(position, 11).CopyTo(nameBytes);
+            position += 11;
             var name = Encoding.Latin1.GetString(nameBytes).TrimEnd('\0', ' ');
-            var type = (char)reader.ReadByte();
+            var type = (char)data[position];
+            position++;
             // reserved / field data address
-            reader.ReadBytes(4);
-            var length = reader.ReadByte();
-            var decimals = reader.ReadByte();
+            position += 4;
+            var fieldLength = data[position];
+            position++;
+            var decimals = data[position];
+            position++;
             // reserved
-            reader.ReadBytes(14);
+            position += 14;
 
-            fields.Add(new() { Name = name, Type = type, Length = length, Decimals = decimals });
+            fields.Add(new() { Name = name, Type = type, Length = fieldLength, Decimals = decimals });
         }
 
         var rows = new List<object?[]>((int)recordCount);
         for (var r = 0; r < recordCount; r++)
         {
-            var deletion = reader.ReadByte();
+            var deletion = data[position];
+            position++;
             var values = new object?[fields.Count];
             for (var f = 0; f < fields.Count; f++)
             {
                 var field = fields[f];
-                var text = textEncoding.GetString(reader.ReadBytes(field.Length));
+                // Decode directly from the slice — no intermediate byte[] per cell.
+                var text = textEncoding.GetString(data.AsSpan(position, field.Length));
                 values[f] = ParseValue(field, text);
+                position += field.Length;
             }
 
             if (deletion != 0x2A)
@@ -80,7 +77,13 @@ static class Dbf
             }
         }
 
-        return ([.. fields.Select(_ => _.Name)], rows);
+        var names = new List<string>(fields.Count);
+        foreach (var field in fields)
+        {
+            names.Add(field.Name);
+        }
+
+        return (names, rows);
     }
 
     static object? ParseValue(Field field, string text)
@@ -122,92 +125,140 @@ static class Dbf
     public static void Write(Stream stream, IReadOnlyList<string> keys, FeatureCollection collection)
     {
         var fields = BuildFields(keys, collection);
-        var recordLength = 1 + fields.Sum(_ => _.Length);
-        var headerLength = 32 + 32 * fields.Count + 1;
-
-        using var writer = new BinaryWriter(stream, Encoding.Latin1, leaveOpen: true);
-        writer.Write((byte)0x03);
-        // 1980
-        writer.Write((byte)80);
-        writer.Write((byte)1);
-        writer.Write((byte)1);
-        writer.Write((uint)collection.Count);
-        writer.Write((ushort)headerLength);
-        writer.Write((ushort)recordLength);
-        writer.Write(new byte[20]);
-
+        var recordLength = 1;
         foreach (var field in fields)
         {
-            var nameBytes = new byte[11];
-            var encoded = Encoding.Latin1.GetBytes(field.Name);
-            Array.Copy(encoded, nameBytes, Math.Min(encoded.Length, 10));
-            writer.Write(nameBytes);
-            writer.Write((byte)field.Type);
-            writer.Write(new byte[4]);
-            writer.Write(field.Length);
-            writer.Write(field.Decimals);
-            writer.Write(new byte[14]);
+            recordLength += field.Length;
         }
 
-        writer.Write((byte)0x0D);
+        var headerLength = 32 + 32 * fields.Count + 1;
 
-        // Each record is the same width, so encode into one reusable buffer instead of allocating a
-        // byte[] per field. FormatField pads every value to its field width, so each field fills exactly
-        // its slice of the record.
+        // Hand-write the fixed-width header instead of layering BinaryWriter on top of the stream —
+        // the writer was only used for byte/short scalars and forced per-field new byte[N] padding.
+        Span<byte> header = stackalloc byte[32];
+        header[0] = 0x03;
+        header[1] = 80;
+        header[2] = 1;
+        header[3] = 1;
+        BinaryPrimitives.WriteUInt32LittleEndian(header[4..], (uint)collection.Count);
+        BinaryPrimitives.WriteUInt16LittleEndian(header[8..], (ushort)headerLength);
+        BinaryPrimitives.WriteUInt16LittleEndian(header[10..], (ushort)recordLength);
+        stream.Write(header);
+
+        Span<byte> fieldDescriptor = stackalloc byte[32];
+        foreach (var field in fields)
+        {
+            fieldDescriptor.Clear();
+            var nameLength = Math.Min(field.Name.Length, 10);
+            Encoding.Latin1.GetBytes(field.Name.AsSpan(0, nameLength), fieldDescriptor[..nameLength]);
+            fieldDescriptor[11] = (byte)field.Type;
+            fieldDescriptor[16] = field.Length;
+            fieldDescriptor[17] = field.Decimals;
+            stream.Write(fieldDescriptor);
+        }
+
+        Span<byte> terminator = stackalloc byte[1] { 0x0D };
+        stream.Write(terminator);
+
+        // One reusable record buffer; format directly into per-field slices, skipping the per-cell
+        // string allocation that the previous `FormatField` returned.
         var record = new byte[recordLength];
+        var recordSpan = record.AsSpan();
+        Span<char> numberScratch = stackalloc char[64];
         foreach (var feature in collection)
         {
             // not deleted
-            record[0] = 0x20;
+            recordSpan[0] = 0x20;
             var offset = 1;
             for (var i = 0; i < keys.Count; i++)
             {
                 feature.Properties.TryGetValue(keys[i], out var value);
-                var formatted = FormatField(fields[i], value);
-                Encoding.Latin1.GetBytes(formatted, record.AsSpan(offset, fields[i].Length));
+                var fieldSlice = recordSpan.Slice(offset, fields[i].Length);
+                FormatFieldInto(fields[i], value, fieldSlice, numberScratch);
                 offset += fields[i].Length;
             }
 
-            writer.Write(record);
+            stream.Write(record);
         }
 
-        writer.Write((byte)0x1A);
+        Span<byte> eof = stackalloc byte[1] { 0x1A };
+        stream.Write(eof);
     }
 
-    static string FormatField(Field field, object? value)
+    static void FormatFieldInto(Field field, object? value, Span<byte> destination, Span<char> numberScratch)
     {
         switch (field.Type)
         {
             case 'L':
-                return value switch
-                {
-                    bool b => b ? "T" : "F",
-                    _ => "?",
-                };
+                // BuildField always assigns L a length of 1, so we only need to write the one byte.
+                destination[0] = value is bool b ? (b ? (byte)'T' : (byte)'F') : (byte)'?';
+                return;
             case 'N':
                 if (value == null)
                 {
-                    return new(' ', field.Length);
+                    destination.Fill((byte)' ');
+                    return;
                 }
 
-                var number = field.Decimals == 0
-                    ? Convert.ToInt64(value, CultureInfo.InvariantCulture).ToString(CultureInfo.InvariantCulture)
-                    : Convert.ToDouble(value, CultureInfo.InvariantCulture)
-                        .ToString("F" + field.Decimals, CultureInfo.InvariantCulture);
-                return Fit(number, field.Length, rightAlign: true);
+                int written;
+                if (field.Decimals == 0)
+                {
+                    Convert.ToInt64(value, CultureInfo.InvariantCulture)
+                        .TryFormat(numberScratch, out written, default, CultureInfo.InvariantCulture);
+                }
+                else
+                {
+                    Span<char> format = stackalloc char[4];
+                    format[0] = 'F';
+                    field.Decimals.TryFormat(format[1..], out var formatLen, default, CultureInfo.InvariantCulture);
+                    Convert.ToDouble(value, CultureInfo.InvariantCulture)
+                        .TryFormat(numberScratch, out written, format[..(1 + formatLen)], CultureInfo.InvariantCulture);
+                }
+
+                FitNumeric(numberScratch[..written], destination);
+                return;
             default:
-                return Fit(Scalars.Format(value), field.Length, rightAlign: false);
+                // Latin-1 is 1 byte per char, so we can encode straight into the destination span (or
+                // the truncated slice of it) without an intermediate buffer — saves a per-cell
+                // allocation that the previous PadLeft + byte[] dance forced.
+                FitText(Scalars.Format(value), destination);
+                return;
         }
     }
 
-    static string Fit(string text, int width, bool rightAlign)
+    // Right-aligns ASCII (numeric) text into the destination, padding the leading bytes with spaces.
+    // Numeric is the only alignment FormatFieldInto ever requests, so the left-align branch from the
+    // prior code path is removed.
+    static void FitNumeric(ReadOnlySpan<char> text, Span<byte> destination)
     {
-        if (text.Length > width)
+        if (text.Length >= destination.Length)
         {
-            return text[..width];
+            for (var i = 0; i < destination.Length; i++)
+            {
+                destination[i] = (byte)text[i];
+            }
+
+            return;
         }
 
-        return rightAlign ? text.PadLeft(width) : text.PadRight(width);
+        var pad = destination.Length - text.Length;
+        destination[..pad].Fill((byte)' ');
+        for (var i = 0; i < text.Length; i++)
+        {
+            destination[pad + i] = (byte)text[i];
+        }
+    }
+
+    static void FitText(string text, Span<byte> destination)
+    {
+        if (text.Length >= destination.Length)
+        {
+            Encoding.Latin1.GetBytes(text.AsSpan(0, destination.Length), destination);
+            return;
+        }
+
+        var byteCount = Encoding.Latin1.GetBytes(text, destination);
+        destination[byteCount..].Fill((byte)' ');
     }
 
     static List<Field> BuildFields(IReadOnlyList<string> keys, FeatureCollection collection)

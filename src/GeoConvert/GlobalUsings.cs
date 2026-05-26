@@ -1,3 +1,4 @@
+global using System.Buffers;
 global using System.Buffers.Binary;
 global using System.Globalization;
 global using System.IO.Compression;

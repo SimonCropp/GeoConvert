@@ -122,19 +122,22 @@ public static class Shapefile
 
     static List<Geometry?> ReadGeometries(Stream stream)
     {
+        // Buffer the stream into a MemoryStream and read directly from its backing array — avoids the
+        // ToArray() copy of the previous code while still keeping the slice-based parser.
         using var memory = new MemoryStream();
         stream.CopyTo(memory);
-        var data = memory.ToArray();
+        var length = (int)memory.Length;
+        var data = memory.GetBuffer();
 
         var geometries = new List<Geometry?>();
         var position = headerLength;
-        while (position + 8 <= data.Length)
+        while (position + 8 <= length)
         {
             // Record header is big-endian: record number, then content length in 16-bit words.
             var contentWords = BinaryPrimitives.ReadInt32BigEndian(data.AsSpan(position + 4, 4));
             position += 8;
             var contentBytes = contentWords * 2;
-            if (position + contentBytes > data.Length)
+            if (position + contentBytes > length)
             {
                 break;
             }

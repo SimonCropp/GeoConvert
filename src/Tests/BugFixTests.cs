@@ -358,6 +358,16 @@ public class BugFixTests
         await Assert.That(G.ThrowsGeo(() => FlatGeobuf.Read(stream))).IsTrue();
     }
 
+    [Test]
+    public async Task FlatGeobuf_size_prefix_overruns_buffer_surfaces_geoconvert_exception()
+    {
+        // Magic + a size prefix that declares 1000 bytes follow, but only 4 do. Without the
+        // length-bounded read this would walk off the end of the GetBuffer() backing array.
+        byte[] truncated = [0x66, 0x67, 0x62, 0x03, 0x66, 0x67, 0x62, 0x00, 0xE8, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+        using var stream = new MemoryStream(truncated);
+        await Assert.That(G.ThrowsGeo(() => FlatGeobuf.Read(stream))).IsTrue();
+    }
+
     // The above XML-malformed inputs already exercise the GeoConvertException re-throw path. These
     // exercise the *other* catch (Exception) branch where a non-GCE BCL exception (XmlException for
     // garbage input) gets translated into a GeoConvertException.

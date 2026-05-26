@@ -4,6 +4,9 @@ using System.Runtime.InteropServices;
 sealed class Canvas
 {
     readonly byte[] pixels;
+    // Reused across FillPolygon calls so a render with hundreds of polygons doesn't allocate a fresh
+    // crossings list per call.
+    readonly List<double> scanlineCrossings = [];
 
     public Canvas(int width, int height, Rgba background)
     {
@@ -44,11 +47,18 @@ sealed class Canvas
         }
 
         var a = color.A / 255d;
-        var inverse = 1 - a;
-        pixels[i] = (byte)(color.R * a + pixels[i] * inverse);
-        pixels[i + 1] = (byte)(color.G * a + pixels[i + 1] * inverse);
-        pixels[i + 2] = (byte)(color.B * a + pixels[i + 2] * inverse);
-        pixels[i + 3] = (byte)(color.A + pixels[i + 3] * inverse);
+        BlendTranslucent(i, color.R * a, color.G * a, color.B * a, color.A, 1 - a);
+    }
+
+    // Source-over alpha blend at a known-valid pixel offset. Factored out so the per-pixel translucent
+    // path is the same code whether reached via Blend (bounds-checked) or FillPolygon's inner loop
+    // (which clips to the span ends once, then runs without bounds checks).
+    void BlendTranslucent(int i, double preR, double preG, double preB, double aByte, double inverse)
+    {
+        pixels[i] = (byte)(preR + pixels[i] * inverse);
+        pixels[i + 1] = (byte)(preG + pixels[i + 1] * inverse);
+        pixels[i + 2] = (byte)(preB + pixels[i + 2] * inverse);
+        pixels[i + 3] = (byte)(aByte + pixels[i + 3] * inverse);
     }
 
     public void FillDisc(double cx, double cy, double radius, Rgba color)
@@ -108,7 +118,15 @@ sealed class Canvas
         var last = Math.Min(Height - 1, (int)Math.Floor(maxY));
         var opaque = color.A == 255;
         var packed = Pack(color);
-        var crossings = new List<double>();
+        // Precompute alpha factors once per polygon — the inner per-pixel loop avoids a division by 255
+        // on every pixel of a translucent fill.
+        var a = color.A / 255d;
+        var inverse = 1 - a;
+        var preR = color.R * a;
+        var preG = color.G * a;
+        var preB = color.B * a;
+        var preA = (double)color.A;
+        var crossings = scanlineCrossings;
         for (var y = first; y <= last; y++)
         {
             var scan = y + 0.5;
@@ -117,12 +135,12 @@ sealed class Canvas
             {
                 for (var i = 0; i < ring.Length; i++)
                 {
-                    var a = ring[i];
-                    var b = ring[i + 1 == ring.Length ? 0 : i + 1];
-                    if ((a.Y <= scan && b.Y > scan) || (b.Y <= scan && a.Y > scan))
+                    var pa = ring[i];
+                    var pb = ring[i + 1 == ring.Length ? 0 : i + 1];
+                    if ((pa.Y <= scan && pb.Y > scan) || (pb.Y <= scan && pa.Y > scan))
                     {
-                        var t = (scan - a.Y) / (b.Y - a.Y);
-                        crossings.Add(a.X + t * (b.X - a.X));
+                        var t = (scan - pa.Y) / (pb.Y - pa.Y);
+                        crossings.Add(pa.X + t * (pb.X - pa.X));
                     }
                 }
             }
@@ -145,9 +163,14 @@ sealed class Canvas
                 }
                 else
                 {
-                    for (var x = startX; x <= endX; x++)
+                    // Spans are already clipped to [0, Width) by startX/endX, so blend directly into
+                    // the pixel buffer instead of re-bounds-checking each pixel in Blend. Goes through
+                    // BlendTranslucent for the per-pixel math so the formula stays in one place.
+                    var rowStart = (y * Width + startX) * 4;
+                    var rowEnd = (y * Width + endX + 1) * 4;
+                    for (var p = rowStart; p < rowEnd; p += 4)
                     {
-                        Blend(x, y, color);
+                        BlendTranslucent(p, preR, preG, preB, preA, inverse);
                     }
                 }
             }

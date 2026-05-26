@@ -19,6 +19,16 @@ sealed class FlatBufferBuilder
         space = buffer.Length;
     }
 
+    /// <summary>Resets the builder so its byte[] and vtable scratch buffer can be reused for the next message.</summary>
+    public void Reset()
+    {
+        space = buffer.Length;
+        minAlign = 1;
+        vtableSize = 0;
+        objectStart = 0;
+        vectorElements = 0;
+    }
+
     int Offset => buffer.Length - space;
 
     void GrowBuffer()
@@ -148,10 +158,10 @@ sealed class FlatBufferBuilder
         return EndVector();
     }
 
-    public int CreateDoubleVector(IReadOnlyList<double> data)
+    public int CreateDoubleVector(ReadOnlySpan<double> data)
     {
-        StartVector(8, data.Count, 8);
-        for (var i = data.Count - 1; i >= 0; i--)
+        StartVector(8, data.Length, 8);
+        for (var i = data.Length - 1; i >= 0; i--)
         {
             PutDouble(data[i]);
         }
@@ -159,10 +169,10 @@ sealed class FlatBufferBuilder
         return EndVector();
     }
 
-    public int CreateUIntVector(IReadOnlyList<uint> data)
+    public int CreateUIntVector(ReadOnlySpan<uint> data)
     {
-        StartVector(4, data.Count, 4);
-        for (var i = data.Count - 1; i >= 0; i--)
+        StartVector(4, data.Length, 4);
+        for (var i = data.Length - 1; i >= 0; i--)
         {
             PutUInt(data[i]);
         }
@@ -170,7 +180,7 @@ sealed class FlatBufferBuilder
         return EndVector();
     }
 
-    public int CreateByteVector(byte[] data)
+    public int CreateByteVector(ReadOnlySpan<byte> data)
     {
         StartVector(1, data.Length, 1);
         space -= data.Length;
@@ -178,12 +188,58 @@ sealed class FlatBufferBuilder
         return EndVector();
     }
 
-    public int CreateOffsetVector(IReadOnlyList<int> offsets)
+    public int CreateOffsetVector(ReadOnlySpan<int> offsets)
     {
-        StartVector(4, offsets.Count, 4);
-        for (var i = offsets.Count - 1; i >= 0; i--)
+        StartVector(4, offsets.Length, 4);
+        for (var i = offsets.Length - 1; i >= 0; i--)
         {
             PutInt(Offset - offsets[i] + 4);
+        }
+
+        return EndVector();
+    }
+
+    /// <summary>
+    /// Writes X/Y pairs from <paramref name="positions"/> as a FlatBuffers double vector, avoiding the
+    /// intermediate <c>List&lt;double&gt;</c> in the caller. Walks back-to-front so the doubles land in
+    /// schema order in the back-built buffer.
+    /// </summary>
+    public int CreateXyVector(IReadOnlyList<Position> positions)
+    {
+        var count = positions.Count * 2;
+        StartVector(8, count, 8);
+        for (var i = positions.Count - 1; i >= 0; i--)
+        {
+            var position = positions[i];
+            PutDouble(position.Y);
+            PutDouble(position.X);
+        }
+
+        return EndVector();
+    }
+
+    /// <summary>
+    /// Writes X/Y pairs for the concatenation of multiple position lists (used for polygon ring fans
+    /// where the FlatGeobuf <c>xy</c> vector is the flat sequence of all rings).
+    /// </summary>
+    public int CreateXyVector(IReadOnlyList<IReadOnlyList<Position>> rings)
+    {
+        var total = 0;
+        for (var r = 0; r < rings.Count; r++)
+        {
+            total += rings[r].Count;
+        }
+
+        StartVector(8, total * 2, 8);
+        for (var r = rings.Count - 1; r >= 0; r--)
+        {
+            var ring = rings[r];
+            for (var i = ring.Count - 1; i >= 0; i--)
+            {
+                var position = ring[i];
+                PutDouble(position.Y);
+                PutDouble(position.X);
+            }
         }
 
         return EndVector();
@@ -254,6 +310,20 @@ sealed class FlatBufferBuilder
         return tableLocation;
     }
 
+    /// <summary>
+    /// Finalises the message with a 4-byte size prefix and writes it directly to <paramref name="stream"/>
+    /// — avoids the per-feature <c>byte[]</c> copy that callers in tight loops otherwise pay.
+    /// </summary>
+    public void FinishSizePrefixed(int rootTable, Stream stream)
+    {
+        Prep(minAlign, 8);
+        // root table uoffset
+        PutInt(Offset - rootTable + 4);
+        // size prefix: bytes written so far (everything *after* the prefix we're about to put down).
+        PutInt(buffer.Length - space);
+        stream.Write(buffer.AsSpan(space, buffer.Length - space));
+    }
+
     public byte[] FinishSizePrefixed(int rootTable)
     {
         Prep(minAlign, 8);
@@ -261,11 +331,6 @@ sealed class FlatBufferBuilder
         PutInt(Offset - rootTable + 4);
         // size prefix (length of everything after it)
         PutInt(buffer.Length - space);
-        return ToArray();
-    }
-
-    byte[] ToArray()
-    {
         var length = buffer.Length - space;
         var result = new byte[length];
         Array.Copy(buffer, space, result, 0, length);

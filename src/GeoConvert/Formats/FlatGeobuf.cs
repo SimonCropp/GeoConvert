@@ -36,13 +36,15 @@ public static class FlatGeobuf
 
     public static FeatureCollection Read(Stream stream)
     {
+        // Buffer the whole stream into a MemoryStream's growable backing array and read straight from
+        // that — the previous code copied the backing array out via ToArray(), doubling peak memory
+        // for no benefit.
         using var memory = new MemoryStream();
         stream.CopyTo(memory);
-        var data = memory.ToArray();
+        var length = (int)memory.Length;
+        var data = memory.GetBuffer();
 
-        // Validate the full 8-byte magic (3-byte "fgb" tag + version per half). A v2 file or a
-        // near-miss garbage file otherwise sneaks past the prefix check, then crashes deeper in.
-        if (data.Length < 8 ||
+        if (length < 8 ||
             data[0] != magic[0] ||
             data[1] != magic[1] ||
             data[2] != magic[2] ||
@@ -57,7 +59,7 @@ public static class FlatGeobuf
 
         try
         {
-            return ReadCore(data);
+            return ReadCore(data, length);
         }
         catch (GeoConvertException)
         {
@@ -71,10 +73,10 @@ public static class FlatGeobuf
         }
     }
 
-    static FeatureCollection ReadCore(byte[] data)
+    static FeatureCollection ReadCore(byte[] data, int length)
     {
         var position = 8;
-        var header = ReadSizePrefixed(data, ref position);
+        var header = ReadSizePrefixed(data, length, ref position);
 
         var columns = new List<Column>();
         var columnCount = header.VectorLength(headerColumns);
@@ -93,9 +95,9 @@ public static class FlatGeobuf
         }
 
         var collection = new FeatureCollection();
-        while (position < data.Length)
+        while (position < length)
         {
-            var feature = ReadSizePrefixed(data, ref position);
+            var feature = ReadSizePrefixed(data, length, ref position);
             collection.Add(ReadFeature(feature, columns, fallbackType));
         }
 
@@ -170,19 +172,28 @@ public static class FlatGeobuf
 
     static List<IReadOnlyList<Position>> SplitRings(FlatBufferTable table)
     {
-        var positions = ReadPositions(table);
         var endsLength = table.VectorLength(geometryEnds);
         if (endsLength == 0)
         {
-            return [positions];
+            return [ReadPositions(table)];
         }
 
+        // Materialise each ring directly from the xy vector instead of reading one flat list and then
+        // copying ranges out of it — saves O(points) of duplicated allocations on multi-ring geometries.
         var rings = new List<IReadOnlyList<Position>>(endsLength);
         var start = 0;
         for (var i = 0; i < endsLength; i++)
         {
             var end = (int)table.GetUIntElement(geometryEnds, i);
-            rings.Add(positions.GetRange(start, end - start));
+            var ring = new List<Position>(end - start);
+            for (var p = start; p < end; p++)
+            {
+                ring.Add(new(
+                    table.GetDoubleElement(geometryXy, p * 2),
+                    table.GetDoubleElement(geometryXy, p * 2 + 1)));
+            }
+
+            rings.Add(ring);
             start = end;
         }
 
@@ -207,11 +218,24 @@ public static class FlatGeobuf
         }
     }
 
-    static FlatBufferTable ReadSizePrefixed(byte[] data, ref int position)
+    static FlatBufferTable ReadSizePrefixed(byte[] data, int length, ref int position)
     {
-        var size = BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(position));
+        // GetBuffer() may hand back a backing array longer than the logical stream length, so the prior
+        // `data.AsSpan(position)` would happily read past the end of valid data on a truncated file.
+        // Bounds-check against `length` explicitly and trigger the outer try/catch on overrun.
+        if (position + 8 > length)
+        {
+            throw new IndexOutOfRangeException();
+        }
+
+        var size = BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(position, 4));
         var bufferStart = position + 4;
-        var rootOffset = BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(bufferStart));
+        if (bufferStart + size > (uint)length)
+        {
+            throw new IndexOutOfRangeException();
+        }
+
+        var rootOffset = BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(bufferStart, 4));
         var table = new FlatBufferTable(data, bufferStart + rootOffset);
         position = bufferStart + (int)size;
         return table;
@@ -242,33 +266,36 @@ public static class FlatGeobuf
     {
         var columns = BuildColumns(collection);
         stream.Write(magic);
-        stream.Write(BuildHeader(collection, columns));
+        // One reusable builder for header + every feature: avoids a fresh 1 KB byte[] (plus its
+        // GrowBuffer copies and a final ToArray) per feature for large collections.
+        var builder = new FlatBufferBuilder();
+        WriteHeader(builder, stream, collection, columns);
+        var propertyBuffer = new MemoryStream();
         foreach (var feature in collection)
         {
-            stream.Write(BuildFeature(feature, columns));
+            WriteFeature(builder, stream, feature, columns, propertyBuffer);
         }
     }
 
-    static byte[] BuildHeader(FeatureCollection collection, List<Column> columns)
+    static void WriteHeader(FlatBufferBuilder builder, Stream stream, FeatureCollection collection, List<Column> columns)
     {
-        var builder = new FlatBufferBuilder();
-
-        var columnOffsets = new List<int>(columns.Count);
-        foreach (var column in columns)
+        var columnOffsets = columns.Count == 0 ? [] : new int[columns.Count];
+        for (var i = 0; i < columns.Count; i++)
         {
+            var column = columns[i];
             var name = builder.CreateString(column.Name);
             builder.StartTable(11);
             builder.AddOffset(columnName, name);
             builder.AddByte(columnType, column.Type, 0);
-            columnOffsets.Add(builder.EndTable());
+            columnOffsets[i] = builder.EndTable();
         }
 
-        var columnsVector = columnOffsets.Count > 0 ? builder.CreateOffsetVector(columnOffsets) : 0;
+        var columnsVector = columnOffsets.Length > 0 ? builder.CreateOffsetVector(columnOffsets) : 0;
 
         var bounds = collection.GetBounds();
         var envelope = bounds.IsEmpty
             ? 0
-            : builder.CreateDoubleVector([bounds.MinX, bounds.MinY, bounds.MaxX, bounds.MaxY]);
+            : builder.CreateDoubleVector(stackalloc double[] { bounds.MinX, bounds.MinY, bounds.MaxX, bounds.MaxY });
 
         builder.StartTable(14);
         builder.AddOffset(headerEnvelope, envelope);
@@ -277,22 +304,27 @@ public static class FlatGeobuf
         builder.AddULong(headerFeaturesCount, (ulong)collection.Count, 0);
         // 0 => no spatial index
         builder.AddUShort(headerIndexNodeSize, 0, 16);
-        return builder.FinishSizePrefixed(builder.EndTable());
+        builder.FinishSizePrefixed(builder.EndTable(), stream);
+        builder.Reset();
     }
 
-    static byte[] BuildFeature(Feature feature, List<Column> columns)
+    static void WriteFeature(FlatBufferBuilder builder, Stream stream, Feature feature, List<Column> columns, MemoryStream propertyBuffer)
     {
-        var builder = new FlatBufferBuilder();
-
         var geometryOffset = feature.Geometry is { } geometry ? BuildGeometry(builder, geometry) : 0;
 
-        var propertyBytes = EncodeProperties(feature, columns);
-        var propertiesOffset = propertyBytes.Length > 0 ? builder.CreateByteVector(propertyBytes) : 0;
+        var propertiesOffset = 0;
+        propertyBuffer.SetLength(0);
+        EncodeProperties(feature, columns, propertyBuffer);
+        if (propertyBuffer.Length > 0)
+        {
+            propertiesOffset = builder.CreateByteVector(propertyBuffer.GetBuffer().AsSpan(0, (int)propertyBuffer.Length));
+        }
 
         builder.StartTable(3);
         builder.AddOffset(featureGeometry, geometryOffset);
         builder.AddOffset(featureProperties, propertiesOffset);
-        return builder.FinishSizePrefixed(builder.EndTable());
+        builder.FinishSizePrefixed(builder.EndTable(), stream);
+        builder.Reset();
     }
 
     static int BuildGeometry(FlatBufferBuilder builder, Geometry geometry)
@@ -308,15 +340,34 @@ public static class FlatGeobuf
             case Polygon polygon:
                 return BuildRings(builder, polygon.Rings, 3);
             case MultiLineString multiLine:
-                return BuildRings(builder, [.. multiLine.LineStrings.Select(_ => _.Positions)], 5);
+            {
+                // Reify once as IReadOnlyList<IReadOnlyList<Position>>; BuildRings only ever indexes.
+                var lines = new IReadOnlyList<Position>[multiLine.LineStrings.Count];
+                for (var i = 0; i < lines.Length; i++)
+                {
+                    lines[i] = multiLine.LineStrings[i].Positions;
+                }
+
+                return BuildRings(builder, lines, 5);
+            }
             case MultiPolygon multiPolygon:
             {
-                var parts = multiPolygon.Polygons.Select(_ => BuildRings(builder, _.Rings, 3)).ToList();
+                var parts = new int[multiPolygon.Polygons.Count];
+                for (var i = 0; i < parts.Length; i++)
+                {
+                    parts[i] = BuildRings(builder, multiPolygon.Polygons[i].Rings, 3);
+                }
+
                 return BuildParts(builder, parts, 6);
             }
             case GeometryCollection collection:
             {
-                var parts = collection.Geometries.Select(_ => BuildGeometry(builder, _)).ToList();
+                var parts = new int[collection.Geometries.Count];
+                for (var i = 0; i < parts.Length; i++)
+                {
+                    parts[i] = BuildGeometry(builder, collection.Geometries[i]);
+                }
+
                 return BuildParts(builder, parts, 7);
             }
             default:
@@ -326,7 +377,7 @@ public static class FlatGeobuf
 
     static int BuildSimple(FlatBufferBuilder builder, IReadOnlyList<Position> positions, byte fgbType)
     {
-        var xy = builder.CreateDoubleVector(Flatten(positions));
+        var xy = builder.CreateXyVector(positions);
         builder.StartTable(8);
         builder.AddOffset(geometryXy, xy);
         builder.AddByte(geometryType, fgbType, 0);
@@ -335,23 +386,21 @@ public static class FlatGeobuf
 
     static int BuildRings(FlatBufferBuilder builder, IReadOnlyList<IReadOnlyList<Position>> rings, byte fgbType)
     {
-        var coordinates = new List<double>();
-        var ends = new List<uint>();
-        var count = 0;
-        foreach (var ring in rings)
+        var xy = builder.CreateXyVector(rings);
+        var endsOffset = 0;
+        if (rings.Count > 1)
         {
-            foreach (var position in ring)
+            var ends = new uint[rings.Count];
+            var count = 0u;
+            for (var i = 0; i < rings.Count; i++)
             {
-                coordinates.Add(position.X);
-                coordinates.Add(position.Y);
+                count += (uint)rings[i].Count;
+                ends[i] = count;
             }
 
-            count += ring.Count;
-            ends.Add((uint)count);
+            endsOffset = builder.CreateUIntVector(ends);
         }
 
-        var xy = builder.CreateDoubleVector(coordinates);
-        var endsOffset = rings.Count > 1 ? builder.CreateUIntVector(ends) : 0;
         builder.StartTable(8);
         builder.AddOffset(geometryEnds, endsOffset);
         builder.AddOffset(geometryXy, xy);
@@ -359,7 +408,7 @@ public static class FlatGeobuf
         return builder.EndTable();
     }
 
-    static int BuildParts(FlatBufferBuilder builder, IReadOnlyList<int> parts, byte fgbType)
+    static int BuildParts(FlatBufferBuilder builder, ReadOnlySpan<int> parts, byte fgbType)
     {
         var partsVector = builder.CreateOffsetVector(parts);
         builder.StartTable(8);
@@ -368,22 +417,11 @@ public static class FlatGeobuf
         return builder.EndTable();
     }
 
-    static List<double> Flatten(IReadOnlyList<Position> positions)
+    static void EncodeProperties(Feature feature, List<Column> columns, MemoryStream destination)
     {
-        var coordinates = new List<double>(positions.Count * 2);
-        foreach (var position in positions)
-        {
-            coordinates.Add(position.X);
-            coordinates.Add(position.Y);
-        }
-
-        return coordinates;
-    }
-
-    static byte[] EncodeProperties(Feature feature, List<Column> columns)
-    {
-        using var memory = new MemoryStream();
-        using var writer = new BinaryWriter(memory);
+        // The caller resets destination.Length to 0 between features so a single MemoryStream serves the
+        // whole collection — avoiding a per-feature stream + BinaryWriter allocation pair.
+        Span<byte> scratch = stackalloc byte[10];
         for (var i = 0; i < columns.Count; i++)
         {
             if (!feature.Properties.TryGetValue(columns[i].Name, out var value) || value == null)
@@ -391,27 +429,42 @@ public static class FlatGeobuf
                 continue;
             }
 
-            writer.Write((ushort)i);
+            BinaryPrimitives.WriteUInt16LittleEndian(scratch, (ushort)i);
             switch (columns[i].Type)
             {
                 case columnBool:
-                    writer.Write((byte)((bool)value ? 1 : 0));
+                    scratch[2] = (bool)value ? (byte)1 : (byte)0;
+                    destination.Write(scratch[..3]);
                     break;
                 case columnLong:
-                    writer.Write(Convert.ToInt64(value, CultureInfo.InvariantCulture));
+                    BinaryPrimitives.WriteInt64LittleEndian(scratch[2..], Convert.ToInt64(value, CultureInfo.InvariantCulture));
+                    destination.Write(scratch[..10]);
                     break;
                 case columnDouble:
-                    writer.Write(Convert.ToDouble(value, CultureInfo.InvariantCulture));
+                    BinaryPrimitives.WriteDoubleLittleEndian(scratch[2..], Convert.ToDouble(value, CultureInfo.InvariantCulture));
+                    destination.Write(scratch[..10]);
                     break;
                 default:
-                    var bytes = Encoding.UTF8.GetBytes(Scalars.Format(value));
-                    writer.Write((uint)bytes.Length);
-                    writer.Write(bytes);
+                    var text = Scalars.Format(value);
+                    var byteCount = Encoding.UTF8.GetByteCount(text);
+                    BinaryPrimitives.WriteUInt32LittleEndian(scratch[2..], (uint)byteCount);
+                    destination.Write(scratch[..6]);
+                    // ArrayPool keeps the allocation off the per-feature path while staying inside the
+                    // no-3rd-party-deps rule. stackalloc here would be in a loop (CA2014).
+                    var rented = ArrayPool<byte>.Shared.Rent(byteCount);
+                    try
+                    {
+                        Encoding.UTF8.GetBytes(text, rented.AsSpan(0, byteCount));
+                        destination.Write(rented, 0, byteCount);
+                    }
+                    finally
+                    {
+                        ArrayPool<byte>.Shared.Return(rented);
+                    }
+
                     break;
             }
         }
-
-        return memory.ToArray();
     }
 
     static List<Column> BuildColumns(FeatureCollection collection)

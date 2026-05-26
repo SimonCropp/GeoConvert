@@ -109,6 +109,45 @@ public class PngTests
     }
 
     [Test]
+    public async Task Strokes_with_translucent_color_blends_against_background()
+    {
+        // Blend's translucent branch is reached when a stroke (per-pixel disc fill) uses a non-opaque
+        // colour. Without a test that exercises this, the FillPolygon path keeps it dead.
+        var collection = new FeatureCollection
+        {
+            new Feature(new LineString([new(0, 0), new(10, 10)])),
+        };
+        var options = new RenderOptions
+        {
+            Bounds = new Envelope(0, 0, 10, 10),
+            Width = 32,
+            Height = 32,
+            Background = new(255, 255, 255),
+            Stroke = new(255, 0, 0, 128),
+            StrokeWidth = 4,
+        };
+
+        var (_, _, pixels) = Decode(MapRenderer.RenderPng(collection, options));
+        // A blended pixel is neither pure-white background nor pure-red stroke: green/blue should
+        // have lifted toward white as alpha=128 was composited over the background.
+        var blended = 0;
+        for (var p = 0; p + 4 <= pixels.Length; p += 4)
+        {
+            var r = pixels[p];
+            var g = pixels[p + 1];
+            var b = pixels[p + 2];
+            // Background is (255,255,255); fully-opaque stroke would write (255,0,0). A blend lands
+            // between, with green/blue strictly above 0 but below 255.
+            if (r > 200 && g > 0 && g < 255 && b > 0 && b < 255)
+            {
+                blended++;
+            }
+        }
+
+        await Assert.That(blended).IsGreaterThan(0);
+    }
+
+    [Test]
     public Task Render_snapshot()
     {
         var collection = new FeatureCollection

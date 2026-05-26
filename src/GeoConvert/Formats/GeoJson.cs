@@ -83,8 +83,9 @@ public static class GeoJson
         var type = element.GetProperty("type").GetString();
         if (type == "GeometryCollection")
         {
-            var geometries = new List<Geometry>();
-            foreach (var child in element.GetProperty("geometries").EnumerateArray())
+            var geometriesElement = element.GetProperty("geometries");
+            var geometries = new List<Geometry>(geometriesElement.GetArrayLength());
+            foreach (var child in geometriesElement.EnumerateArray())
             {
                 if (ReadGeometry(child) is { } geometry)
                 {
@@ -129,7 +130,9 @@ public static class GeoJson
 
     static List<Position> ReadPositions(JsonElement element)
     {
-        var positions = new List<Position>();
+        // JsonElement.GetArrayLength is O(1) on a parsed document; presizing the list avoids the
+        // doubling-resize cascade for rings with thousands of vertices (the common geo case).
+        var positions = new List<Position>(element.GetArrayLength());
         foreach (var item in element.EnumerateArray())
         {
             positions.Add(ReadPosition(item));
@@ -140,7 +143,7 @@ public static class GeoJson
 
     static List<IReadOnlyList<Position>> ReadRings(JsonElement element)
     {
-        var rings = new List<IReadOnlyList<Position>>();
+        var rings = new List<IReadOnlyList<Position>>(element.GetArrayLength());
         foreach (var ring in element.EnumerateArray())
         {
             rings.Add(ReadPositions(ring));
@@ -151,7 +154,7 @@ public static class GeoJson
 
     static List<LineString> ReadLines(JsonElement element)
     {
-        var lines = new List<LineString>();
+        var lines = new List<LineString>(element.GetArrayLength());
         foreach (var line in element.EnumerateArray())
         {
             lines.Add(new(ReadPositions(line)));
@@ -162,7 +165,7 @@ public static class GeoJson
 
     static List<Polygon> ReadPolygons(JsonElement element)
     {
-        var polygons = new List<Polygon>();
+        var polygons = new List<Polygon>(element.GetArrayLength());
         foreach (var polygon in element.EnumerateArray())
         {
             polygons.Add(new(ReadRings(polygon)));
