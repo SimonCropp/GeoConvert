@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project>
   <PropertyGroup>
-    <Version>0.1.5</Version>
+    <Version>0.1.6</Version>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -9,5 +9,4 @@
     <PackageTags>geojson;shapefile;flatgeobuf;topojson;kml;kmz;gpx;wkt;wkb;gis;geospatial;conversion</PackageTags>
     <NoWarn>$(NoWarn);CS1591;NU1608;NU1109;IDE0005</NoWarn>
   </PropertyGroup>
-
 </Project>

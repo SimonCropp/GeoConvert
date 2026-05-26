@@ -222,6 +222,13 @@ sealed class FlatBufferBuilder
             fieldCount--;
         }
 
+        // The soffset to the vtable is read as a 32-bit int, so it must land on a 4-aligned position
+        // in the finished buffer. Without this, a table that ends on a 1-byte field (e.g. FlatGeobuf's
+        // geometry `type` byte) leaves the soffset at an unaligned offset and strict FlatBuffers
+        // verifiers — including GDAL's, which the canonical FlatGeobuf readers run — reject every
+        // feature with "Buffer verification failed".
+        Prep(sizeof(int), 0);
+
         // The writes below (the soffset placeholder plus the vtable shorts) bypass Prep, so make sure
         // the buffer has room first — otherwise large tables underflow space and overrun the buffer.
         EnsureSpace(sizeof(int) + (fieldCount + 2) * sizeof(short));

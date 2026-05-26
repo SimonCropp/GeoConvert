@@ -8,7 +8,7 @@ namespace GeoConvert;
 /// </summary>
 public static class Csv
 {
-    static readonly HashSet<string> wktHeaders = new(StringComparer.OrdinalIgnoreCase)
+    static HashSet<string> wktHeaders = new(StringComparer.OrdinalIgnoreCase)
     {
         "wkt",
         "geometry",
@@ -16,7 +16,7 @@ public static class Csv
         "the_geom",
     };
 
-    static readonly HashSet<string> longitudeHeaders = new(StringComparer.OrdinalIgnoreCase)
+    static HashSet<string> longitudeHeaders = new(StringComparer.OrdinalIgnoreCase)
     {
         "x",
         "lon",
@@ -25,7 +25,7 @@ public static class Csv
         "longitude",
     };
 
-    static readonly HashSet<string> latitudeHeaders = new(StringComparer.OrdinalIgnoreCase)
+    static HashSet<string> latitudeHeaders = new(StringComparer.OrdinalIgnoreCase)
     {
         "y",
         "lat",
