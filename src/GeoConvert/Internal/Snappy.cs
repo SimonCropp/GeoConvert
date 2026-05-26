@@ -35,7 +35,18 @@ static class Snappy
     {
         var position = start;
         var end = start + length;
-        var blockLength = (int)ReadVarint(input, ref position);
+        var declared = ReadVarint(input, ref position);
+        // Bound the decompressed size: cap at 64x the compressed slice (Snappy's worst-case expansion
+        // is far smaller, ~6x for incompressible-ish data with copies). Without this a hostile or
+        // corrupt varint can demand a multi-GB allocation or — once it overflows int — throw
+        // OverflowException instead of the documented GeoConvertException.
+        if (declared > (ulong)length * 64UL + 256UL || declared > int.MaxValue)
+        {
+            throw new GeoConvertException(
+                $"Snappy block declares a decompressed size ({declared}) that exceeds the safety bound.");
+        }
+
+        var blockLength = (int)declared;
         var output = new byte[blockLength];
         var outPosition = 0;
         while (position < end)

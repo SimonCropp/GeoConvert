@@ -46,22 +46,45 @@ public static class Wkb
     {
         using var memory = new MemoryStream();
         stream.CopyTo(memory);
-
-        var cursor = new Cursor(memory.GetBuffer().AsSpan(0, (int)memory.Length));
-        var collection = new FeatureCollection();
-        while (!cursor.AtEnd)
+        try
         {
-            collection.Add(new Feature(ReadGeometry(ref cursor)));
-        }
+            var cursor = new Cursor(memory.GetBuffer().AsSpan(0, (int)memory.Length));
+            var collection = new FeatureCollection();
+            while (!cursor.AtEnd)
+            {
+                collection.Add(new Feature(ReadGeometry(ref cursor)));
+            }
 
-        return collection;
+            return collection;
+        }
+        catch (GeoConvertException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            // Truncated WKB raises IndexOutOfRangeException/ArgumentOutOfRangeException from the cursor;
+            // route everything through GeoConvertException so callers see the documented type.
+            throw new GeoConvertException($"Invalid WKB data: {exception.Message}");
+        }
     }
 
     /// <summary>Parses a single geometry from its WKB representation.</summary>
     public static Geometry ParseGeometry(ReadOnlySpan<byte> bytes)
     {
-        var cursor = new Cursor(bytes);
-        return ReadGeometry(ref cursor);
+        try
+        {
+            var cursor = new Cursor(bytes);
+            return ReadGeometry(ref cursor);
+        }
+        catch (GeoConvertException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            throw new GeoConvertException($"Invalid WKB data: {exception.Message}");
+        }
     }
 
     static Geometry ReadGeometry(ref Cursor cursor)
@@ -104,7 +127,7 @@ public static class Wkb
                 var positions = new List<Position>((int)count);
                 for (var i = 0; i < count; i++)
                 {
-                    positions.Add(((Point)ReadGeometry(ref cursor)).Coordinate);
+                    positions.Add(ExpectSubGeometry<Point>(ReadGeometry(ref cursor), "MultiPoint").Coordinate);
                 }
 
                 return new MultiPoint(positions);
@@ -115,7 +138,7 @@ public static class Wkb
                 var lines = new List<LineString>((int)count);
                 for (var i = 0; i < count; i++)
                 {
-                    lines.Add((LineString)ReadGeometry(ref cursor));
+                    lines.Add(ExpectSubGeometry<LineString>(ReadGeometry(ref cursor), "MultiLineString"));
                 }
 
                 return new MultiLineString(lines);
@@ -126,7 +149,7 @@ public static class Wkb
                 var polygons = new List<Polygon>((int)count);
                 for (var i = 0; i < count; i++)
                 {
-                    polygons.Add((Polygon)ReadGeometry(ref cursor));
+                    polygons.Add(ExpectSubGeometry<Polygon>(ReadGeometry(ref cursor), "MultiPolygon"));
                 }
 
                 return new MultiPolygon(polygons);
@@ -145,6 +168,17 @@ public static class Wkb
             default:
                 throw new GeoConvertException($"Unsupported WKB geometry type {baseType}.");
         }
+    }
+
+    static T ExpectSubGeometry<T>(Geometry geometry, string container) where T : Geometry
+    {
+        if (geometry is T typed)
+        {
+            return typed;
+        }
+
+        throw new GeoConvertException(
+            $"WKB {container} expected a {typeof(T).Name} sub-geometry but got {geometry.Type}.");
     }
 
     static List<IReadOnlyList<Position>> ReadRings(ref Cursor cursor, bool little, bool hasZ, bool hasM)

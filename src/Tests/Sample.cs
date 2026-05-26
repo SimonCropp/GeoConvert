@@ -53,17 +53,20 @@ static class Sample
                 new Feature(
                     new Point(new(0, 0)),
                     Props(("name", "origin")))
+            },
+            Properties =
+            {
+                ["description"] = "demo"
             }
         };
-        root.Properties["description"] = "demo";
 
         var cities = new FeatureCollection
         {
             Name = "cities",
             Features =
             {
-                new Feature(new Point(new(10, 20)), Props(("name", "A"))),
-                new Feature(new Point(new(11, 21)), Props(("name", "B")))
+                new(new Point(new(10, 20)), Props(("name", "A"))),
+                new(new Point(new(11, 21)), Props(("name", "B")))
             }
         };
 
@@ -73,7 +76,7 @@ static class Sample
             Name = "highways",
             Features =
             {
-                new Feature(
+                new(
                     new LineString([new(0, 0), new(1, 1), new(2, 0)]),
                     Props(("name", "M1")))
             }

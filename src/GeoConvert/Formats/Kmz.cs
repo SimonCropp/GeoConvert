@@ -13,7 +13,7 @@ public static class Kmz
 {
     public static FeatureCollection Read(Stream stream)
     {
-        using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
+        using var archive = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
         var kmlEntries = archive.Entries
             .Where(_ => _.FullName.EndsWith(".kml", StringComparison.OrdinalIgnoreCase))
             .ToList();

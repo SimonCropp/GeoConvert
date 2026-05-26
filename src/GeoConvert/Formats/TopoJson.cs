@@ -93,7 +93,13 @@ public static class TopoJson
         switch (type)
         {
             case "Point":
-                return new Point(DecodePoint(element.GetProperty("coordinates"), scale, translate));
+            {
+                var coordinates = element.GetProperty("coordinates");
+                // An empty coordinates array round-trips to an empty Point (matches GeoJson behavior).
+                return coordinates.GetArrayLength() == 0
+                    ? new Point(new(double.NaN, double.NaN))
+                    : new Point(DecodePoint(coordinates, scale, translate));
+            }
             case "MultiPoint":
                 return new MultiPoint(DecodePoints(element.GetProperty("coordinates"), scale, translate));
             case "LineString":
@@ -286,8 +292,8 @@ public static class TopoJson
             foreach (var position in arc)
             {
                 writer.WriteStartArray();
-                writer.WriteNumberValue(position.X);
-                writer.WriteNumberValue(position.Y);
+                WriteOrdinate(writer, position.X);
+                WriteOrdinate(writer, position.Y);
                 writer.WriteEndArray();
             }
 
@@ -362,7 +368,17 @@ public static class TopoJson
         {
             case Point point:
                 writer.WritePropertyName("coordinates");
-                WritePosition(writer, point.Coordinate);
+                if (point.IsEmpty)
+                {
+                    // Avoid crashing WriteNumberValue(NaN) for empty points; mirror GeoJSON's empty-array form.
+                    writer.WriteStartArray();
+                    writer.WriteEndArray();
+                }
+                else
+                {
+                    WritePosition(writer, point.Coordinate);
+                }
+
                 break;
             case MultiPoint multiPoint:
                 writer.WriteStartArray("coordinates");
@@ -429,8 +445,19 @@ public static class TopoJson
     static void WritePosition(Utf8JsonWriter writer, Position position)
     {
         writer.WriteStartArray();
-        writer.WriteNumberValue(position.X);
-        writer.WriteNumberValue(position.Y);
+        WriteOrdinate(writer, position.X);
+        WriteOrdinate(writer, position.Y);
         writer.WriteEndArray();
+    }
+
+    // Utf8JsonWriter throws ArgumentException on NaN/Infinity; convert to GeoConvertException.
+    static void WriteOrdinate(Utf8JsonWriter writer, double value)
+    {
+        if (!double.IsFinite(value))
+        {
+            throw new GeoConvertException("TopoJSON cannot encode a non-finite coordinate.");
+        }
+
+        writer.WriteNumberValue(value);
     }
 }

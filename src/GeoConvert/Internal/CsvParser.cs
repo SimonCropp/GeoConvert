@@ -48,8 +48,6 @@ static class CsvParser
                     i++;
                     break;
                 case '\r':
-                    i++;
-                    break;
                 case '\n':
                     row.Add(field.ToString());
                     field.Clear();
@@ -57,6 +55,12 @@ static class CsvParser
                     row = [];
                     fieldStarted = false;
                     i++;
+                    // A CRLF terminator is a single line break; treat a trailing \n after \r as already consumed.
+                    if (c == '\r' && i < text.Length && text[i] == '\n')
+                    {
+                        i++;
+                    }
+
                     break;
                 default:
                 {

@@ -18,6 +18,22 @@ public static class Gpx
 
     public static FeatureCollection Read(Stream stream)
     {
+        try
+        {
+            return ReadCore(stream);
+        }
+        catch (GeoConvertException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            throw new GeoConvertException($"Invalid GPX data: {exception.Message}");
+        }
+    }
+
+    static FeatureCollection ReadCore(Stream stream)
+    {
         using var reader = Xml.CreateReader(stream);
         var collection = new FeatureCollection();
         var waypoints = new FeatureCollection { Name = "waypoints" };
@@ -145,8 +161,8 @@ public static class Gpx
     // Reads lat/lon (and optional ele) from a wpt/rtept/trkpt; populates name/desc into metadata when given.
     static Position ReadWaypoint(XmlReader reader, Feature? metadata)
     {
-        var lat = double.Parse(reader.GetAttribute("lat")!, CultureInfo.InvariantCulture);
-        var lon = double.Parse(reader.GetAttribute("lon")!, CultureInfo.InvariantCulture);
+        var lat = ParseRequiredAttribute(reader, "lat");
+        var lon = ParseRequiredAttribute(reader, "lon");
         double? ele = null;
 
         Xml.ReadChildren(reader, () =>
@@ -154,7 +170,13 @@ public static class Gpx
             switch (reader.LocalName)
             {
                 case "ele":
-                    ele = double.Parse(reader.ReadElementContentAsString(), CultureInfo.InvariantCulture);
+                    var eleText = reader.ReadElementContentAsString();
+                    if (!double.TryParse(eleText, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed))
+                    {
+                        throw new GeoConvertException($"GPX element <ele> is not a valid number: '{eleText}'.");
+                    }
+
+                    ele = parsed;
                     break;
                 case "name" when metadata != null:
                     metadata.Properties["name"] = reader.ReadElementContentAsString();
@@ -169,6 +191,24 @@ public static class Gpx
         });
 
         return new(lon, lat, ele);
+    }
+
+    static double ParseRequiredAttribute(XmlReader reader, string attribute)
+    {
+        var text = reader.GetAttribute(attribute);
+        if (text == null)
+        {
+            throw new GeoConvertException(
+                $"GPX <{reader.LocalName}> is missing required '{attribute}' attribute.");
+        }
+
+        if (!double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
+        {
+            throw new GeoConvertException(
+                $"GPX <{reader.LocalName}> '{attribute}' is not a valid number: '{text}'.");
+        }
+
+        return value;
     }
 
     public static void Write(Stream stream, FeatureCollection collection)

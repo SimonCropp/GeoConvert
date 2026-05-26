@@ -1,6 +1,7 @@
 /// <summary>
 /// Converts between JSON scalar values and the CLR scalars used in <see cref="Feature.Properties"/>.
-/// Nested objects/arrays are preserved as their raw JSON string.
+/// Nested objects/arrays are surfaced as <see cref="JsonRaw"/> so they round-trip back to JSON
+/// without being re-quoted as a string.
 /// </summary>
 static class JsonValue
 {
@@ -13,7 +14,7 @@ static class JsonValue
             JsonValueKind.True => true,
             JsonValueKind.False => false,
             JsonValueKind.Null => null,
-            _ => element.GetRawText(),
+            _ => new JsonRaw(element.GetRawText()),
         };
 
     public static void Write(Utf8JsonWriter writer, object? value)
@@ -22,6 +23,10 @@ static class JsonValue
         {
             case null:
                 writer.WriteNullValue();
+                break;
+            case JsonRaw raw:
+                // Preserves nested objects/arrays read from JSON without re-quoting them as strings.
+                writer.WriteRawValue(raw.Json);
                 break;
             case string s:
                 writer.WriteStringValue(s);
@@ -33,7 +38,17 @@ static class JsonValue
                 writer.WriteNumberValue(Convert.ToInt64(value, CultureInfo.InvariantCulture));
                 break;
             case float or double or decimal:
-                writer.WriteNumberValue(Convert.ToDouble(value, CultureInfo.InvariantCulture));
+                var d = Convert.ToDouble(value, CultureInfo.InvariantCulture);
+                if (double.IsFinite(d))
+                {
+                    writer.WriteNumberValue(d);
+                }
+                else
+                {
+                    // JSON has no representation for NaN/Infinity; emit null so the document stays valid.
+                    writer.WriteNullValue();
+                }
+
                 break;
             default:
                 writer.WriteStringValue(value.ToString());

@@ -40,11 +40,39 @@ public static class FlatGeobuf
         stream.CopyTo(memory);
         var data = memory.ToArray();
 
-        if (data.Length < 8 || data[0] != magic[0] || data[1] != magic[1] || data[2] != magic[2])
+        // Validate the full 8-byte magic (3-byte "fgb" tag + version per half). A v2 file or a
+        // near-miss garbage file otherwise sneaks past the prefix check, then crashes deeper in.
+        if (data.Length < 8 ||
+            data[0] != magic[0] ||
+            data[1] != magic[1] ||
+            data[2] != magic[2] ||
+            data[3] != magic[3] ||
+            data[4] != magic[4] ||
+            data[5] != magic[5] ||
+            data[6] != magic[6] ||
+            data[7] != magic[7])
         {
             throw new GeoConvertException("Not a FlatGeobuf file (bad magic bytes).");
         }
 
+        try
+        {
+            return ReadCore(data);
+        }
+        catch (GeoConvertException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            // Truncated or malformed FlatBuffers tables raise IndexOutOfRange/ArgumentOutOfRange/
+            // ArgumentException from the buffer reader; surface the documented exception instead.
+            throw new GeoConvertException($"Invalid FlatGeobuf data: {exception.Message}");
+        }
+    }
+
+    static FeatureCollection ReadCore(byte[] data)
+    {
         var position = 8;
         var header = ReadSizePrefixed(data, ref position);
 
@@ -168,8 +196,8 @@ public static class FlatGeobuf
         while (memory.Position < memory.Length)
         {
             var index = reader.ReadUInt16();
-            var column = columns[index];
-            feature.Properties[column.Name] = column.Type switch
+            var (name, type) = columns[index];
+            feature.Properties[name] = type switch
             {
                 columnBool => reader.ReadByte() != 0,
                 columnLong => reader.ReadInt64(),

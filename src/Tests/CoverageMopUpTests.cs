@@ -228,14 +228,14 @@ public class CoverageMopUpTests
             """<kml xmlns="http://www.opengis.net/kml/2.2"><Document><Placemark><name>p2</name><Point><coordinates>3,4</coordinates></Point></Placemark></Document></kml>""";
 
         using var memory = new MemoryStream();
-        using (var archive = new ZipArchive(memory, ZipArchiveMode.Create, leaveOpen: true))
+        await using (var archive = new ZipArchive(memory, ZipArchiveMode.Create, leaveOpen: true))
         {
-            using (var entry = archive.CreateEntry("one.kml").Open())
+            await using (var entry = await archive.CreateEntry("one.kml").OpenAsync())
             {
                 entry.Write(Encoding.UTF8.GetBytes(oneKml));
             }
 
-            using (var entry = archive.CreateEntry("two.kml").Open())
+            await using (var entry = await archive.CreateEntry("two.kml").OpenAsync())
             {
                 entry.Write(Encoding.UTF8.GetBytes(twoKml));
             }
@@ -320,8 +320,9 @@ public class CoverageMopUpTests
     public async Task Xml_read_children_skips_text_nodes()
     {
         // Significant text mixed with elements forces the non-element branch in ReadChildren.
-        using var stream = new MemoryStream(Encoding.UTF8.GetBytes("<root>text<child/></root>"));
+        using var stream = new MemoryStream("<root>text<child/></root>"u8.ToArray());
         using var reader = XmlReader.Create(stream);
+        // ReSharper disable once MethodHasAsyncOverload
         reader.MoveToContent();
         var seen = 0;
         Xml.ReadChildren(reader, () =>

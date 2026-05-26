@@ -98,7 +98,10 @@ public static class GeoJson
         var coordinates = element.GetProperty("coordinates");
         return type switch
         {
-            "Point" => new Point(ReadPosition(coordinates)),
+            // An empty coordinates array (round-tripped from a NaN-Point write) reads back as an empty Point.
+            "Point" => coordinates.GetArrayLength() == 0
+                ? new Point(new(double.NaN, double.NaN))
+                : new Point(ReadPosition(coordinates)),
             "LineString" => new LineString(ReadPositions(coordinates)),
             "Polygon" => new Polygon(ReadRings(coordinates)),
             "MultiPoint" => new MultiPoint(ReadPositions(coordinates)),
@@ -256,7 +259,19 @@ public static class GeoJson
         switch (geometry)
         {
             case Point point:
-                WritePosition(writer, point.Coordinate);
+                if (point.IsEmpty)
+                {
+                    // RFC 7946 doesn't formally define a literal for an empty Point; mirroring the
+                    // empty-array form used by LineString/Polygon keeps the JSON valid and round-trips
+                    // to a null geometry on read rather than crashing WriteNumberValue on NaN.
+                    writer.WriteStartArray();
+                    writer.WriteEndArray();
+                }
+                else
+                {
+                    WritePosition(writer, point.Coordinate);
+                }
+
                 break;
             case LineString line:
                 WritePositions(writer, line.Positions);
@@ -293,9 +308,12 @@ public static class GeoJson
     static void WriteRings(Utf8JsonWriter writer, IReadOnlyList<IReadOnlyList<Position>> rings)
     {
         writer.WriteStartArray();
-        foreach (var ring in rings)
+        // RFC 7946 §3.1.6: the exterior ring is CCW (positive signed area), holes are CW. Re-orient
+        // here so a shapefile-sourced polygon (CW exteriors) emits as spec-compliant GeoJSON.
+        for (var i = 0; i < rings.Count; i++)
         {
-            WritePositions(writer, ring);
+            var oriented = Ring.Orient(rings[i], clockwise: i != 0);
+            WritePositions(writer, oriented);
         }
 
         writer.WriteEndArray();
@@ -315,13 +333,25 @@ public static class GeoJson
     static void WritePosition(Utf8JsonWriter writer, Position position)
     {
         writer.WriteStartArray();
-        writer.WriteNumberValue(position.X);
-        writer.WriteNumberValue(position.Y);
+        WriteOrdinate(writer, position.X);
+        WriteOrdinate(writer, position.Y);
         if (position.Z is { } z)
         {
-            writer.WriteNumberValue(z);
+            WriteOrdinate(writer, z);
         }
 
         writer.WriteEndArray();
+    }
+
+    // Utf8JsonWriter throws ArgumentException on NaN/Infinity; convert to GeoConvertException so
+    // callers see the documented exception type rather than the raw BCL one.
+    static void WriteOrdinate(Utf8JsonWriter writer, double value)
+    {
+        if (!double.IsFinite(value))
+        {
+            throw new GeoConvertException("GeoJSON cannot encode a non-finite coordinate.");
+        }
+
+        writer.WriteNumberValue(value);
     }
 }

@@ -214,20 +214,42 @@ public static class Shapefile
         var polygons = new List<List<IReadOnlyList<Position>>>();
         foreach (var ring in rings)
         {
-            // Clockwise rings start a new polygon; counter-clockwise rings are holes of the current one.
-            if (polygons.Count == 0 || Ring.IsClockwise(ring))
+            // Shapefile spec: clockwise rings are exteriors, counter-clockwise are holes of the
+            // preceding exterior. A clockwise ring (or the very first ring) always starts a new polygon.
+            if (Ring.IsClockwise(ring) || polygons.Count == 0)
             {
                 polygons.Add([ring]);
+                continue;
+            }
+
+            // Counter-clockwise ring after at least one exterior. Per spec it's a hole; but if the
+            // file is malformed (e.g. exteriors written CCW), every ring after the first would be
+            // attached as a hole of polygon 0 — silently flattening N polygons into one. Use a
+            // bounding-box containment check to break out a stray ring into its own polygon when it
+            // clearly doesn't lie inside the current exterior.
+            var exterior = polygons[^1][0];
+            if (BboxContains(exterior, ring))
+            {
+                polygons[^1].Add(ring);
             }
             else
             {
-                polygons[^1].Add(ring);
+                polygons.Add([ring]);
             }
         }
 
         return polygons.Count == 1
             ? new Polygon(polygons[0])
             : new MultiPolygon([.. polygons.Select(_ => new Polygon(_))]);
+    }
+
+    static bool BboxContains(IReadOnlyList<Position> outer, IReadOnlyList<Position> inner)
+    {
+        var o = Bounds.Of(outer);
+        var i = Bounds.Of(inner);
+        return !o.IsEmpty && !i.IsEmpty &&
+               o.MinX <= i.MinX && o.MaxX >= i.MaxX &&
+               o.MinY <= i.MinY && o.MaxY >= i.MaxY;
     }
 
     static Position ReadPosition(ReadOnlySpan<byte> content, int offset)

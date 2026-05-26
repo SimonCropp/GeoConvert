@@ -234,14 +234,43 @@ static class Dbf
             }
         }
 
+        // DBF field names are capped at 10 chars; a naive truncate of two keys sharing the first 10
+        // chars (e.g. "PopulationDensity"/"PopulationGrowth") produces duplicate column names and the
+        // second value silently clobbers the first on read. Disambiguate by suffix.
         var fields = new List<Field>(keys.Count);
+        var usedNames = new HashSet<string>(keys.Count, StringComparer.OrdinalIgnoreCase);
         for (var i = 0; i < keys.Count; i++)
         {
             var stat = ordered[i];
-            fields.Add(BuildField(keys[i], stat.SawValue, stat.IsBool, stat.IsInteger, stat.IsNumber, stat.MaxLength, stat.MaxDecimals));
+            var name = UniqueName(keys[i], usedNames);
+            fields.Add(BuildField(name, stat.SawValue, stat.IsBool, stat.IsInteger, stat.IsNumber, stat.MaxLength, stat.MaxDecimals));
         }
 
         return fields;
+    }
+
+    static string UniqueName(string key, HashSet<string> used)
+    {
+        var truncated = key.Length > 10 ? key[..10] : key;
+        if (used.Add(truncated))
+        {
+            return truncated;
+        }
+
+        // Reserve up to three digits for the disambiguator; "Name_1".."Name_999" covers any reasonable
+        // collision count without overflowing dBASE's 10-char limit.
+        for (var suffix = 1; suffix < 1000; suffix++)
+        {
+            var tag = "_" + suffix.ToString(CultureInfo.InvariantCulture);
+            var prefixLen = Math.Min(key.Length, 10 - tag.Length);
+            var candidate = key[..prefixLen] + tag;
+            if (used.Add(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        throw new GeoConvertException($"Could not disambiguate DBF field name for '{key}'.");
     }
 
     sealed class FieldStats
@@ -290,7 +319,7 @@ static class Dbf
     }
 
     static Field BuildField(
-        string key,
+        string name,
         bool sawValue,
         bool isBool,
         bool isInteger,
@@ -298,8 +327,7 @@ static class Dbf
         int maxLength,
         int maxDecimals)
     {
-        var name = key.Length > 10 ? key[..10] : key;
-
+        // `name` is pre-truncated and disambiguated by BuildFields.
         if (sawValue && isBool)
         {
             return new() { Name = name, Type = 'L', Length = 1, Decimals = 0 };

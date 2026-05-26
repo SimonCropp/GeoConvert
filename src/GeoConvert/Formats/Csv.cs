@@ -61,9 +61,11 @@ public static class Csv
             {
                 feature.Geometry = Wkt.ParseGeometry(row[wktIndex]);
             }
-            else if (usesXy && xIndex < row.Count && yIndex < row.Count)
+            else if (usesXy && xIndex < row.Count &&
+                yIndex < row.Count)
             {
-                if (TryParse(row[xIndex], out var x) && TryParse(row[yIndex], out var y))
+                if (TryParse(row[xIndex], out var x) &&
+                    TryParse(row[yIndex], out var y))
                 {
                     feature.Geometry = new Point(x, y);
                 }

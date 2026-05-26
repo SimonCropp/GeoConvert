@@ -16,12 +16,23 @@ public static class Kml
 
     public static FeatureCollection Read(Stream stream)
     {
-        using var reader = Xml.CreateReader(stream);
-        var collection = new FeatureCollection();
-        reader.MoveToContent();
-        // The first <Document> we encounter populates the root; nested Documents become child layers.
-        ScanContainer(reader, collection, isRoot: true);
-        return collection;
+        try
+        {
+            using var reader = Xml.CreateReader(stream);
+            var collection = new FeatureCollection();
+            reader.MoveToContent();
+            // The first <Document> we encounter populates the root; nested Documents become child layers.
+            ScanContainer(reader, collection, isRoot: true);
+            return collection;
+        }
+        catch (GeoConvertException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            throw new GeoConvertException($"Invalid KML data: {exception.Message}");
+        }
     }
 
     // Reads the children of an element (<kml>, <Document>, or <Folder>), populating `target` with
@@ -242,11 +253,27 @@ public static class Kml
         foreach (var tuple in text.Split([' ', '\t', '\n', '\r'], StringSplitOptions.RemoveEmptyEntries))
         {
             var parts = tuple.Split(',');
-            var x = double.Parse(parts[0], CultureInfo.InvariantCulture);
-            var y = double.Parse(parts[1], CultureInfo.InvariantCulture);
-            double? z = parts.Length > 2 ? double.Parse(parts[2], CultureInfo.InvariantCulture) : null;
+            if (parts.Length < 2)
+            {
+                throw new GeoConvertException(
+                    $"KML coordinate tuple needs at least lon,lat: '{tuple}'.");
+            }
+
+            var x = ParseOrdinate(parts[0], tuple);
+            var y = ParseOrdinate(parts[1], tuple);
+            double? z = parts.Length > 2 ? ParseOrdinate(parts[2], tuple) : null;
             positions.Add(new(x, y, z));
         }
+    }
+
+    static double ParseOrdinate(string text, string tuple)
+    {
+        if (!double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
+        {
+            throw new GeoConvertException($"KML coordinate is not a valid number: '{text}' in '{tuple}'.");
+        }
+
+        return value;
     }
 
     public static void Write(Stream stream, FeatureCollection collection)

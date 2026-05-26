@@ -69,12 +69,26 @@ public class JsonFormatTests
     }
 
     [Test]
-    public async Task GeoJson_flattens_nested_property_to_json()
+    public async Task GeoJson_preserves_nested_property_as_jsonraw()
     {
         var collection = GeoJson.ReadString(
             """{"type":"Feature","geometry":null,"properties":{"obj":{"a":1},"arr":[1,2]}}""");
-        await Assert.That(collection.Features[0].Properties["obj"]).IsTypeOf<string>();
-        await Assert.That(collection.Features[0].Properties["arr"]).IsTypeOf<string>();
+        await Assert.That(collection.Features[0].Properties["obj"]).IsTypeOf<JsonRaw>();
+        await Assert.That(collection.Features[0].Properties["arr"]).IsTypeOf<JsonRaw>();
+        await Assert.That(((JsonRaw)collection.Features[0].Properties["obj"]!).Json).IsEqualTo("""{"a":1}""");
+    }
+
+    [Test]
+    public async Task GeoJson_nested_property_round_trips()
+    {
+        // Previously a nested object came back as a quoted string blob and re-emitted as more nesting
+        // — verify the value survives a full read/write/read cycle as the original JSON shape.
+        const string source =
+            """{"type":"Feature","geometry":null,"properties":{"obj":{"a":1,"b":[true,null]},"arr":[1,2]}}""";
+        var roundTripped = GeoJson.WriteString(GeoJson.ReadString(source));
+        var back = GeoJson.ReadString(roundTripped).Features[0];
+        await Assert.That(((JsonRaw)back.Properties["obj"]!).Json).IsEqualTo("""{"a":1,"b":[true,null]}""");
+        await Assert.That(((JsonRaw)back.Properties["arr"]!).Json).IsEqualTo("[1,2]");
     }
 
     [Test]
