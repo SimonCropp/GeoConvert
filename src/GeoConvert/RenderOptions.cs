@@ -64,6 +64,33 @@ public sealed class RenderOptions
     public Func<FeatureCollection, LayerStyle?>? LayerStyle { get; set; }
 
     /// <summary>
+    /// Resolves the label text for a feature when its layer's <see cref="GeoConvert.LayerStyle.Label"/>
+    /// is null — the default-for-every-layer label rule. Typical use: <c>feature =>
+    /// feature.Properties.TryGetValue("name", out var v) ? v as string : null</c>. Labels render in
+    /// a single-stroke vector font (printable ASCII only) sized to <see cref="LabelSize"/>,
+    /// centred on the geometry's pixel-space anchor (polygon centroid, line midpoint, point
+    /// itself). A greedy collision pass drops labels that would overlap an already-placed one or
+    /// extend off the canvas — no rotation, no candidate-offset search.
+    /// </summary>
+    public Func<Feature, string?>? Label { get; set; }
+
+    /// <summary>Cap height of label text in pixels. The stroke font scales continuously, so any
+    /// positive value works; 12–16 reads comfortably on a 2k-pixel canvas, larger on bigger
+    /// renders. Stroke weight grows gently with size to keep the text from looking reedy when
+    /// large.</summary>
+    public double LabelSize { get; set; } = 14;
+
+    /// <summary>Color of label text.</summary>
+    public Rgba LabelColor { get; set; } = new(20, 20, 20);
+
+    /// <summary>
+    /// Color of the one-pixel halo painted under label text for legibility against busy fills.
+    /// Defaults to a semi-transparent white so labels stay readable on dark backgrounds out of the
+    /// box. Set to null to skip the halo pass entirely.
+    /// </summary>
+    public Rgba? LabelHalo { get; set; } = new(255, 255, 255, 200);
+
+    /// <summary>
     /// Deflate level used for the PNG <c>IDAT</c> chunk. Defaults to <see cref="CompressionLevel.Optimal"/>;
     /// drop to <see cref="CompressionLevel.Fastest"/> for quicker writes or
     /// <see cref="CompressionLevel.SmallestSize"/> when output size matters more than CPU.

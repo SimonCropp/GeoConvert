@@ -133,9 +133,80 @@ public class CliTests
     [Arguments(new[] { "a", "b", "--size", "1x2x3" }, 2)]
     [Arguments(new[] { "a", "b", "--projection" }, 2)]
     [Arguments(new[] { "a", "b", "--projection", "moon" }, 2)]
+    [Arguments(new[] { "a", "b", "--label" }, 2)]
+    [Arguments(new[] { "a", "b", "--label-size" }, 2)]
+    [Arguments(new[] { "a", "b", "--label-size", "0" }, 2)]
+    [Arguments(new[] { "a", "b", "--label-size", "abc" }, 2)]
+    [Arguments(new[] { "a", "b", "--label-color" }, 2)]
+    [Arguments(new[] { "a", "b", "--label-color", "red" }, 2)]
+    [Arguments(new[] { "a", "b", "--label-color", "#GGG" }, 2)]
+    [Arguments(new[] { "a", "b", "--label-color", "#ZZZZZZ" }, 2)]
+    [Arguments(new[] { "a", "b", "--label-color", "#FFFFFFZZ" }, 2)]
+    [Arguments(new[] { "a", "b", "--label-color", "#FFFFFFF" }, 2)]
+    [Arguments(new[] { "a", "b", "--label-color", "FFFFFF" }, 2)]
+    [Arguments(new[] { "a", "b", "--label-halo" }, 2)]
+    [Arguments(new[] { "a", "b", "--label-halo", "red" }, 2)]
     [Arguments(new[] { "--unknown" }, 2)]
     public async Task InvalidArguments(string[] args, int expected) =>
         await Assert.That(Runner.Run(args, new StringWriter(), new StringWriter())).IsEqualTo(expected);
+
+    [Test]
+    public async Task RendersPngWithLabels()
+    {
+        // End-to-end: --label reads the named property, --label-scale grows the text,
+        // --label-color picks the text colour, --label-halo accepts a hex with alpha. Validation
+        // that the resulting PNG exists is enough — the label-pixel checks live in LabelTests.
+        using var directory = new TempDirectory();
+        var input = Path.Combine(directory, "in.geojson");
+        await File.WriteAllTextAsync(input, GeoJson.WriteString(Sample.Polygons()));
+        var output = Path.Combine(directory, "out.png");
+
+        var code = Runner.Run(
+            [input, output, "--size", "300", "--label", "name", "--label-size", "18", "--label-color", "#102030", "--label-halo", "#FFFFFFCC"],
+            new StringWriter(),
+            new StringWriter());
+
+        await Assert.That(code).IsEqualTo(0);
+        await Assert.That(File.Exists(output)).IsTrue();
+    }
+
+    [Test]
+    public async Task RendersPngWithLabelHaloNone()
+    {
+        // 'none' explicitly suppresses the halo (distinct from leaving the flag off entirely,
+        // which inherits the default semi-transparent white). Exercises the labelHaloExplicit=true
+        // path with labelHalo=null.
+        using var directory = new TempDirectory();
+        var input = Path.Combine(directory, "in.geojson");
+        await File.WriteAllTextAsync(input, GeoJson.WriteString(Sample.Polygons()));
+        var output = Path.Combine(directory, "out.png");
+
+        var code = Runner.Run(
+            [input, output, "--size", "200", "--label", "name", "--label-halo", "none"],
+            new StringWriter(),
+            new StringWriter());
+
+        await Assert.That(code).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task LabelWithMissingPropertyRendersAnyway()
+    {
+        // The --label callback returns null for features missing the requested key, so they
+        // simply don't get labelled — the render shouldn't error.
+        using var directory = new TempDirectory();
+        var input = Path.Combine(directory, "in.geojson");
+        // Sample.Polygons features carry "name" but not "missing".
+        await File.WriteAllTextAsync(input, GeoJson.WriteString(Sample.Polygons()));
+        var output = Path.Combine(directory, "out.png");
+
+        var code = Runner.Run(
+            [input, output, "--size", "100", "--label", "missing"],
+            new StringWriter(),
+            new StringWriter());
+
+        await Assert.That(code).IsEqualTo(0);
+    }
 
     [Test]
     public async Task BadConversionReturnsError()

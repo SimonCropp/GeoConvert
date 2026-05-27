@@ -147,7 +147,7 @@ var options = new RenderOptions
 
 MapRenderer.RenderPng(features, "world.png", options);
 ```
-<sup><a href='/src/Tests/Snippets.cs#L234-L249' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderWebMercator' title='Start of snippet'>anchor</a></sup>
+<sup><a href='/src/Tests/Snippets.cs#L267-L282' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderWebMercator' title='Start of snippet'>anchor</a></sup>
 <!-- endSnippet -->
 
 From the command line, pass `--projection`:
@@ -173,7 +173,7 @@ var options = new RenderOptions
 
 MapRenderer.RenderPng(features, "states.png", options);
 ```
-<sup><a href='/src/Tests/Snippets.cs#L254-L268' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderLambert' title='Start of snippet'>anchor</a></sup>
+<sup><a href='/src/Tests/Snippets.cs#L287-L301' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderLambert' title='Start of snippet'>anchor</a></sup>
 <!-- endSnippet -->
 
 ```
@@ -202,7 +202,7 @@ var options = new RenderOptions
 
 MapRenderer.RenderPng(features, "world.png", options);
 ```
-<sup><a href='/src/Tests/Snippets.cs#L273-L292' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderGoode' title='Start of snippet'>anchor</a></sup>
+<sup><a href='/src/Tests/Snippets.cs#L306-L325' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderGoode' title='Start of snippet'>anchor</a></sup>
 <!-- endSnippet -->
 
 ```
@@ -303,6 +303,43 @@ MapRenderer.RenderPng([basemap, roads], "stacked.png", options);
 <!-- endSnippet -->
 
 
+## Labels
+
+Set `RenderOptions.Label` (or `LayerStyle.Label` for a per-layer override) to a callback that pulls the label text off each feature; the renderer adds a label pass after geometry that anchors each label at the geometry's centre (polygon centroid, line arclength midpoint, point itself), runs a greedy collision check against already-placed labels, and drops anything off-canvas or overlapping. The single-stroke vector font (Hershey-style, hand-rolled) covers printable ASCII — non-ASCII renders as `?`. `LabelSize` is the cap height in pixels and the font scales continuously, so any positive value works (12–16 reads comfortably on a 2k canvas, 20+ on high-res). A halo traces the strokes in semi-transparent white by default for legibility — pass `LabelHalo = null` to skip it.
+
+<!-- snippet: RenderLabels -->
+<a id='snippet-RenderLabels'></a>
+```cs
+// Label every feature with its "name" property. The renderer anchors each label at the
+// geometry's centre (polygon centroid, line arclength midpoint, point itself),
+// collision-checks against already-placed labels, and drops off-canvas or overlapping
+// ones silently. The single-stroke vector font handles printable ASCII only; non-ASCII
+// renders as '?'. LabelSize is the cap height in pixels — the font scales continuously,
+// so any positive value works (12–16 for 2k canvases, 20+ for high-res).
+var features = GeoConverter.Read("cities.geojson");
+
+var options = new RenderOptions
+{
+    Label = feature =>
+        feature.Properties.TryGetValue("name", out var value) ? value as string : null,
+    LabelSize = 18,
+    LabelColor = new(20, 20, 20),
+    LabelHalo = new(255, 255, 255, 220),
+};
+
+MapRenderer.RenderPng(features, "cities.png", options);
+
+// Per-layer override: a child layer can carry its own label callback (or scale/color/halo)
+// independent of the options-wide default. Setting Label = _ => null on a LayerStyle
+// suppresses labelling for that layer.
+options.LayerStyle = layer => layer.Name == "annotations"
+    ? new LayerStyle { Label = feature => feature.Properties["text"] as string }
+    : null;
+```
+<sup><a href='/src/Tests/Snippets.cs#L202-L230' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderLabels' title='Start of snippet'>anchor</a></sup>
+<!-- endSnippet -->
+
+
 ## Compression
 
 Three formats compress their output and let the caller pick the speed/ratio trade-off. All three default to `CompressionLevel.Optimal`, so existing callers keep their current output:
@@ -341,7 +378,7 @@ using (var parquet = File.Create("world.parquet"))
     GeoParquet.Write(parquet, features, ParquetCompression.Gzip, CompressionLevel.SmallestSize);
 }
 ```
-<sup><a href='/src/Tests/Snippets.cs#L204-L229' title='Snippet source file'>snippet source</a> | <a href='#snippet-Compression' title='Start of snippet'>anchor</a></sup>
+<sup><a href='/src/Tests/Snippets.cs#L237-L262' title='Snippet source file'>snippet source</a> | <a href='#snippet-Compression' title='Start of snippet'>anchor</a></sup>
 <!-- endSnippet -->
 
 

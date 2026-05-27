@@ -35,6 +35,11 @@ public static class Runner
         var width = 0;
         var height = 0;
         var projection = MapProjection.Auto;
+        string? labelProperty = null;
+        double? labelSize = null;
+        Rgba? labelColor = null;
+        Rgba? labelHalo = null;
+        var labelHaloExplicit = false;
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -90,6 +95,70 @@ public static class Runner
                         return 2;
                     }
 
+                    break;
+                case "--label":
+                    if (i + 1 >= args.Length)
+                    {
+                        error.WriteLine("Missing value for --label.");
+                        return 2;
+                    }
+
+                    labelProperty = args[++i];
+                    break;
+                case "--label-size":
+                    if (i + 1 >= args.Length)
+                    {
+                        error.WriteLine("Missing value for --label-size.");
+                        return 2;
+                    }
+
+                    if (!double.TryParse(args[++i], NumberStyles.Float, CultureInfo.InvariantCulture, out var sizeValue) || sizeValue <= 0)
+                    {
+                        error.WriteLine("--label-size must be a positive number (cap height in pixels).");
+                        return 2;
+                    }
+
+                    labelSize = sizeValue;
+                    break;
+                case "--label-color":
+                    if (i + 1 >= args.Length)
+                    {
+                        error.WriteLine("Missing value for --label-color.");
+                        return 2;
+                    }
+
+                    if (!TryParseColor(args[++i], out var color))
+                    {
+                        error.WriteLine("--label-color must be '#RRGGBB' or '#RRGGBBAA'.");
+                        return 2;
+                    }
+
+                    labelColor = color;
+                    break;
+                case "--label-halo":
+                    if (i + 1 >= args.Length)
+                    {
+                        error.WriteLine("Missing value for --label-halo.");
+                        return 2;
+                    }
+
+                    labelHaloExplicit = true;
+                    var haloText = args[++i];
+                    if (haloText.Equals("none", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Explicit "none" suppresses the halo, distinct from leaving the flag off
+                        // (which inherits RenderOptions' semi-transparent-white default).
+                        labelHalo = null;
+                        break;
+                    }
+
+                    if (!TryParseColor(haloText, out var halo))
+                    {
+                        error.WriteLine("--label-halo must be '#RRGGBB', '#RRGGBBAA', or 'none'.");
+                        return 2;
+                    }
+
+                    labelHalo = halo;
                     break;
                 case "--from":
                 case "--to":
@@ -159,6 +228,33 @@ public static class Runner
                 }
 
                 renderOptions.Height = height;
+                if (labelProperty != null)
+                {
+                    // Property lookup with a ToString() fallback so non-string scalars (int/long/double)
+                    // render as their natural string form rather than silently dropping. Skips features
+                    // that don't carry the key or whose value is explicitly null.
+                    var key = labelProperty;
+                    renderOptions.Label = feature =>
+                        feature.Properties.TryGetValue(key, out var value) && value != null
+                            ? value.ToString()
+                            : null;
+                }
+
+                if (labelSize.HasValue)
+                {
+                    renderOptions.LabelSize = labelSize.Value;
+                }
+
+                if (labelColor.HasValue)
+                {
+                    renderOptions.LabelColor = labelColor.Value;
+                }
+
+                if (labelHaloExplicit)
+                {
+                    renderOptions.LabelHalo = labelHalo;
+                }
+
                 MapRenderer.RenderPng(features, outputPath, renderOptions);
             }
             else
@@ -236,6 +332,42 @@ public static class Runner
         }
     }
 
+    static bool TryParseColor(string text, out Rgba color)
+    {
+        // #RRGGBB and #RRGGBBAA hex strings — the standard CSS-ish web syntax. Anything else
+        // (named colours, rgba() functions) is intentionally out of scope; the CLI is for batch
+        // conversion, not styling, and the library API exposes the full Rgba struct for callers
+        // that want more control.
+        color = default;
+        if (text.Length < 7 || text[0] != '#')
+        {
+            return false;
+        }
+
+        var hex = text.AsSpan(1);
+        if (hex.Length != 6 && hex.Length != 8)
+        {
+            return false;
+        }
+
+        if (!byte.TryParse(hex.Slice(0, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var r) ||
+            !byte.TryParse(hex.Slice(2, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var g) ||
+            !byte.TryParse(hex.Slice(4, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var b))
+        {
+            return false;
+        }
+
+        byte a = 255;
+        if (hex.Length == 8 &&
+            !byte.TryParse(hex.Slice(6, 2), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out a))
+        {
+            return false;
+        }
+
+        color = new(r, g, b, a);
+        return true;
+    }
+
     static bool TryParseSize(string text, out int width, out int height)
     {
         width = 0;
@@ -280,6 +412,14 @@ public static class Runner
                                      goode for world), 'plate-carree', 'web-mercator', 'lambert'
                                      (Lambert Conformal Conic, low distortion at country/state
                                      scale), or 'goode' (Goode's Homolosine, equal-area world map).
+              --label <property>     PNG only: render each feature's property value as a text label
+                                     (single-stroke vector font, printable ASCII only). Anchored at
+                                     polygon centroid / line midpoint / point. Off-canvas and
+                                     overlapping labels are dropped silently.
+              --label-size <pixels>  Cap height of label text in pixels. Default 14.
+              --label-color <#hex>   Label text color, '#RRGGBB' or '#RRGGBBAA'. Default near-black.
+              --label-halo <#hex|none>  Halo color painted under label text. Default semi-transparent
+                                     white; pass 'none' to disable.
               --list                 List supported formats.
               -h, --help             Show this help.
 
@@ -291,6 +431,7 @@ public static class Runner
               geoconvert world.geojson world.png --projection web-mercator --size 1200
               geoconvert states.geojson states.png --projection lambert --size 1600
               geoconvert world.geojson world.png --projection goode --size 1600
+              geoconvert cities.geojson cities.png --label name --label-size 18
             """);
 
     static void PrintFormats(TextWriter writer) =>

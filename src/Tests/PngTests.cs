@@ -272,12 +272,7 @@ public class PngTests
         // of the central meridian doesn't project to the same X as it would under linear lon/lat.
         // Render a single off-centre point in each projection and confirm the pixel column moves —
         // without this, a future refactor could silently fall back to PlateCarree and pass everything.
-        static FeatureCollection Build() => new()
-        {
-            // Far west corner of a US-shaped bounds: under Lambert this point swings inward toward the
-            // central meridian, so it should land further right than under linear PlateCarree.
-            new Feature(new Point(-120, 30))
-        };
+        static FeatureCollection Build() => [new Feature(new Point(-120, 30))];
 
         static RenderOptions Options(MapProjection projection) => new()
         {

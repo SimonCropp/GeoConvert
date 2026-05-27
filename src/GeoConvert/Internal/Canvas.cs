@@ -126,11 +126,10 @@ sealed class Canvas
         var preG = color.G * a;
         var preB = color.B * a;
         var preA = (double)color.A;
-        var crossings = scanlineCrossings;
         for (var y = first; y <= last; y++)
         {
             var scan = y + 0.5;
-            crossings.Clear();
+            scanlineCrossings.Clear();
             foreach (var ring in rings)
             {
                 for (var i = 0; i < ring.Length; i++)
@@ -140,16 +139,16 @@ sealed class Canvas
                     if ((pa.Y <= scan && pb.Y > scan) || (pb.Y <= scan && pa.Y > scan))
                     {
                         var t = (scan - pa.Y) / (pb.Y - pa.Y);
-                        crossings.Add(pa.X + t * (pb.X - pa.X));
+                        scanlineCrossings.Add(pa.X + t * (pb.X - pa.X));
                     }
                 }
             }
 
-            crossings.Sort();
-            for (var i = 0; i + 1 < crossings.Count; i += 2)
+            scanlineCrossings.Sort();
+            for (var i = 0; i + 1 < scanlineCrossings.Count; i += 2)
             {
-                var startX = Math.Max((int)Math.Ceiling(crossings[i] - 0.5), 0);
-                var endX = Math.Min((int)Math.Floor(crossings[i + 1] - 0.5), Width - 1);
+                var startX = Math.Max((int)Math.Ceiling(scanlineCrossings[i] - 0.5), 0);
+                var endX = Math.Min((int)Math.Floor(scanlineCrossings[i + 1] - 0.5), Width - 1);
                 if (startX > endX)
                 {
                     continue;

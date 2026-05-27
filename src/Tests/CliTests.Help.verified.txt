@@ -1,4 +1,4 @@
-geoconvert - convert maps between geospatial formats.
+﻿geoconvert - convert maps between geospatial formats.
 
 Usage:
   geoconvert <input> <output> [--from <format>] [--to <format>]
@@ -15,6 +15,14 @@ Options:
                          goode for world), 'plate-carree', 'web-mercator', 'lambert'
                          (Lambert Conformal Conic, low distortion at country/state
                          scale), or 'goode' (Goode's Homolosine, equal-area world map).
+  --label <property>     PNG only: render each feature's property value as a text label
+                         (single-stroke vector font, printable ASCII only). Anchored at
+                         polygon centroid / line midpoint / point. Off-canvas and
+                         overlapping labels are dropped silently.
+  --label-size <pixels>  Cap height of label text in pixels. Default 14.
+  --label-color <#hex>   Label text color, '#RRGGBB' or '#RRGGBBAA'. Default near-black.
+  --label-halo <#hex|none>  Halo color painted under label text. Default semi-transparent
+                         white; pass 'none' to disable.
   --list                 List supported formats.
   -h, --help             Show this help.
 
@@ -26,3 +34,4 @@ Examples:
   geoconvert world.geojson world.png --projection web-mercator --size 1200
   geoconvert states.geojson states.png --projection lambert --size 1600
   geoconvert world.geojson world.png --projection goode --size 1600
+  geoconvert cities.geojson cities.png --label name --label-size 18

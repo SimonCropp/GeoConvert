@@ -197,6 +197,39 @@ static class Snippets
         #endregion
     }
 
+    public static void RenderLabels()
+    {
+        #region RenderLabels
+
+        // Label every feature with its "name" property. The renderer anchors each label at the
+        // geometry's centre (polygon centroid, line arclength midpoint, point itself),
+        // collision-checks against already-placed labels, and drops off-canvas or overlapping
+        // ones silently. The single-stroke vector font handles printable ASCII only; non-ASCII
+        // renders as '?'. LabelSize is the cap height in pixels — the font scales continuously,
+        // so any positive value works (12–16 for 2k canvases, 20+ for high-res).
+        var features = GeoConverter.Read("cities.geojson");
+
+        var options = new RenderOptions
+        {
+            Label = feature =>
+                feature.Properties.TryGetValue("name", out var value) ? value as string : null,
+            LabelSize = 18,
+            LabelColor = new(20, 20, 20),
+            LabelHalo = new(255, 255, 255, 220),
+        };
+
+        MapRenderer.RenderPng(features, "cities.png", options);
+
+        // Per-layer override: a child layer can carry its own label callback (or scale/color/halo)
+        // independent of the options-wide default. Setting Label = _ => null on a LayerStyle
+        // suppresses labelling for that layer.
+        options.LayerStyle = layer => layer.Name == "annotations"
+            ? new LayerStyle { Label = feature => feature.Properties["text"] as string }
+            : null;
+
+        #endregion
+    }
+
     public static void Compression()
     {
         var features = GeoConverter.Read("countries.geojson");

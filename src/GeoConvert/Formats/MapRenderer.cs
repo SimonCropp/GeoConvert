@@ -125,6 +125,16 @@ public static class MapRenderer
             DrawLayer(canvas, layer, projection, options);
         }
 
+        // Labels run after every geometry pass so they sit on top of all fills and strokes —
+        // burying a label under a later layer's fill would defeat the point. A single Labeller is
+        // shared across every layer so collisions are global: a child layer's label can't overlap a
+        // parent layer's label, even though their geometry passes paint independently.
+        var labeller = new Labeller(canvas);
+        foreach (var layer in layers)
+        {
+            DrawLabels(layer, projection, options, labeller);
+        }
+
         Png.Write(stream, canvas.Pixels, canvas.Width, canvas.Height, options.Compression);
     }
 
@@ -242,7 +252,315 @@ public static class MapRenderer
         }
     }
 
+    // Pre-order walk matching DrawLayer's order: a parent's labels are placed before its children's,
+    // so on collision the higher-up-the-tree label wins. That mirrors the typical cartographic
+    // hierarchy (country labels outrank state labels outrank city labels) when callers build their
+    // layer tree from coarse-to-fine.
+    static void DrawLabels(FeatureCollection layer, Projection projection, RenderOptions options, Labeller labeller)
+    {
+        var style = ResolveLabel(options.LayerStyle?.Invoke(layer), options);
+        if (style.Label != null)
+        {
+            // Process features biggest-first within the layer: a polygon's "label priority" is its
+            // outer-ring area (lon/lat shoelace — strictly that's not the projected area but it's a
+            // reliable enough proxy for relative size within one projection); lines use total
+            // length; points fall to the bottom. Greedy collision then lets the bigger feature
+            // anchor its label first, so a small neighbour can't grab the spot a bigger feature
+            // would have wanted — without the sort, file order decided that, which on Natural
+            // Earth meant Ireland's label was placed before the United Kingdom's and visually
+            // overran into Great Britain.
+            // List.Sort is a stable sort in .NET — features with identical priority keep their
+            // original file order, so the sort doesn't churn label placement for, say, a layer of
+            // uniformly-sized point features.
+            var sorted = new List<Feature>(layer.Features);
+            sorted.Sort((a, b) => LabelPriority(b.Geometry).CompareTo(LabelPriority(a.Geometry)));
+            foreach (var feature in sorted)
+            {
+                if (feature.Geometry is not { } geometry)
+                {
+                    continue;
+                }
+
+                var text = style.Label(feature);
+                if (string.IsNullOrEmpty(text))
+                {
+                    continue;
+                }
+
+                if (ComputeAnchor(geometry, projection) is { } anchor)
+                {
+                    labeller.TryPlace(text, anchor.X, anchor.Y, style.Size, style.Color, style.Halo);
+                }
+            }
+        }
+
+        foreach (var child in layer.Children)
+        {
+            DrawLabels(child, projection, options, labeller);
+        }
+    }
+
+    // Relative "how important is this label" score used to order placement within a layer. Computed
+    // in lon/lat so it's projection-independent — the absolute number is meaningless, only the
+    // ordering matters. Polygon area trumps line length trumps point (constant 0) on the
+    // assumption that bigger map features carry more important names; that aligns with the
+    // common cartographic convention of country > state > city. GeometryCollection takes the max
+    // of its children so a country represented as Polygon+annotations still ranks like a country.
+    static double LabelPriority(Geometry? geometry)
+    {
+        switch (geometry)
+        {
+            case Polygon polygon:
+                return polygon.Rings.Count == 0 ? 0 : Math.Abs(Ring.SignedArea(polygon.Rings[0]));
+            case MultiPolygon multiPolygon:
+                var total = 0d;
+                foreach (var p in multiPolygon.Polygons)
+                {
+                    if (p.Rings.Count > 0)
+                    {
+                        total += Math.Abs(Ring.SignedArea(p.Rings[0]));
+                    }
+                }
+
+                return total;
+            case LineString line:
+                return PathLength(line.Positions);
+            case MultiLineString multiLine:
+                var length = 0d;
+                foreach (var l in multiLine.LineStrings)
+                {
+                    length += PathLength(l.Positions);
+                }
+
+                return length;
+            case GeometryCollection collection:
+                var best = 0d;
+                foreach (var child in collection.Geometries)
+                {
+                    var priority = LabelPriority(child);
+                    if (priority > best)
+                    {
+                        best = priority;
+                    }
+                }
+
+                return best;
+            default:
+                return 0;
+        }
+    }
+
+    static double PathLength(IReadOnlyList<Position> positions)
+    {
+        var total = 0d;
+        for (var i = 0; i + 1 < positions.Count; i++)
+        {
+            total += SegmentLength(positions[i], positions[i + 1]);
+        }
+
+        return total;
+    }
+
+    // Mirrors Resolve for the label knobs: per-layer overrides take precedence, falling back to the
+    // RenderOptions defaults independently per property. Label itself can be left null on the layer
+    // to inherit the options-wide default (the typical "label every layer using this property" case).
+    static ResolvedLabelStyle ResolveLabel(LayerStyle? overrides, RenderOptions options) =>
+        new(
+            overrides?.Label ?? options.Label,
+            overrides?.LabelSize ?? options.LabelSize,
+            overrides?.LabelColor ?? options.LabelColor,
+            overrides?.LabelHalo ?? options.LabelHalo);
+
+    // Pixel-space anchor for a label. Polygons use the signed-area-weighted centroid of their
+    // outer ring; lines use the arclength midpoint; multi-* picks the largest sub-piece (so a
+    // multi-polygon country like New Zealand labels on the North Island, not Stewart Island).
+    // For non-linear projections (Lambert, Goode) the centroid is computed in lon/lat then
+    // projected — strictly that's not the projected centroid, but it's the right ballpark for
+    // label placement at this fidelity. GeometryCollection descends into its first member with
+    // a usable anchor.
+    static (double X, double Y)? ComputeAnchor(Geometry geometry, Projection projection)
+    {
+        switch (geometry)
+        {
+            case Point point:
+                return projection.ToPixel(point.Coordinate);
+            case MultiPoint multiPoint:
+                return multiPoint.Positions.Count == 0
+                    ? null
+                    : projection.ToPixel(multiPoint.Positions[0]);
+            case LineString line:
+                return LineAnchor(line.Positions, projection);
+            case MultiLineString multiLine:
+                return LongestLineAnchor(multiLine.LineStrings, projection);
+            case Polygon polygon:
+                return polygon.Rings.Count == 0 ? null : PolygonAnchor(polygon.Rings[0], projection);
+            case MultiPolygon multiPolygon:
+                return LargestPolygonAnchor(multiPolygon.Polygons, projection);
+            case GeometryCollection collection:
+                foreach (var child in collection.Geometries)
+                {
+                    if (ComputeAnchor(child, projection) is { } anchor)
+                    {
+                        return anchor;
+                    }
+                }
+
+                return null;
+            default:
+                return null;
+        }
+    }
+
+    static (double X, double Y)? LineAnchor(IReadOnlyList<Position> positions, Projection projection)
+    {
+        if (positions.Count == 0)
+        {
+            return null;
+        }
+
+        if (positions.Count == 1)
+        {
+            return projection.ToPixel(positions[0]);
+        }
+
+        // Total length first; midpoint is the position at half the cumulative arclength. Computed
+        // in lon/lat — for non-linear projections the projected midpoint of a long line could drift
+        // off the line slightly, but for the per-segment lengths typical of real geodata the
+        // difference is invisible against the label-collision tolerance.
+        var total = 0.0;
+        for (var i = 0; i + 1 < positions.Count; i++)
+        {
+            total += SegmentLength(positions[i], positions[i + 1]);
+        }
+
+        if (total == 0)
+        {
+            // All vertices coincide — treat as a point. Without this, the search loop would
+            // divide by zero on the first segment.
+            return projection.ToPixel(positions[0]);
+        }
+
+        var target = total / 2;
+        var accum = 0.0;
+        // Always returns: the final iteration's `accum >= target` (after summing all segments) is
+        // accum == total >= total/2 = target, and the `i + 2 == positions.Count` clause handles
+        // floating-point drift where the cumulative sum can fall an ulp short of `total`. So the
+        // loop is guaranteed to hit its return on or before the last segment.
+        for (var i = 0; ; i++)
+        {
+            var segment = SegmentLength(positions[i], positions[i + 1]);
+            accum += segment;
+            if (accum >= target || i + 2 == positions.Count)
+            {
+                // `segment > 0` here: the only path that could reach this return with a zero-length
+                // segment is the `accum >= target` branch fired on a zero-length segment after
+                // accum was already < target — impossible, since a zero-length segment doesn't
+                // change accum. The clamp covers the FP-drift fall-through where the computed t
+                // could land an ulp outside [0, 1].
+                var t = Math.Clamp((target - (accum - segment)) / segment, 0, 1);
+                var from = positions[i];
+                var to = positions[i + 1];
+                return projection.ToPixel(new(from.X + t * (to.X - from.X), from.Y + t * (to.Y - from.Y)));
+            }
+        }
+    }
+
+    static (double X, double Y)? LongestLineAnchor(IReadOnlyList<LineString> lines, Projection projection)
+    {
+        LineString? longest = null;
+        var longestLength = -1.0;
+        foreach (var line in lines)
+        {
+            var length = 0.0;
+            for (var i = 0; i + 1 < line.Positions.Count; i++)
+            {
+                length += SegmentLength(line.Positions[i], line.Positions[i + 1]);
+            }
+
+            if (length > longestLength)
+            {
+                longestLength = length;
+                longest = line;
+            }
+        }
+
+        return longest == null ? null : LineAnchor(longest.Positions, projection);
+    }
+
+    static (double X, double Y)? PolygonAnchor(IReadOnlyList<Position> ring, Projection projection)
+    {
+        if (ring.Count < 3)
+        {
+            return null;
+        }
+
+        // Signed-area-weighted centroid (the standard shoelace centroid). Handles closed rings
+        // (first == last) and unclosed equally because the duplicate-vertex edge contributes a
+        // zero cross product. For a self-intersecting or zero-area ring the formula collapses;
+        // fall back to the arithmetic mean of vertices so we still emit *some* anchor — placing
+        // the label even slightly off is better than dropping it silently for a malformed input.
+        double cx = 0;
+        double cy = 0;
+        double areaSum = 0;
+        for (var i = 0; i < ring.Count; i++)
+        {
+            var p = ring[i];
+            var q = ring[(i + 1) % ring.Count];
+            var cross = p.X * q.Y - q.X * p.Y;
+            areaSum += cross;
+            cx += (p.X + q.X) * cross;
+            cy += (p.Y + q.Y) * cross;
+        }
+
+        if (Math.Abs(areaSum) < 1e-12)
+        {
+            double sumX = 0;
+            double sumY = 0;
+            foreach (var position in ring)
+            {
+                sumX += position.X;
+                sumY += position.Y;
+            }
+
+            return projection.ToPixel(new(sumX / ring.Count, sumY / ring.Count));
+        }
+
+        return projection.ToPixel(new(cx / (3 * areaSum), cy / (3 * areaSum)));
+    }
+
+    static (double X, double Y)? LargestPolygonAnchor(IReadOnlyList<Polygon> polygons, Projection projection)
+    {
+        Polygon? largest = null;
+        var largestArea = -1.0;
+        foreach (var polygon in polygons)
+        {
+            if (polygon.Rings.Count == 0)
+            {
+                continue;
+            }
+
+            // Absolute signed area — orientation only signals winding, not size.
+            var area = Math.Abs(Ring.SignedArea(polygon.Rings[0]));
+            if (area > largestArea)
+            {
+                largestArea = area;
+                largest = polygon;
+            }
+        }
+
+        return largest == null ? null : PolygonAnchor(largest.Rings[0], projection);
+    }
+
+    static double SegmentLength(Position a, Position b)
+    {
+        var dx = b.X - a.X;
+        var dy = b.Y - a.Y;
+        return Math.Sqrt(dx * dx + dy * dy);
+    }
+
     readonly record struct ResolvedStyle(Rgba Stroke, Rgba Fill, int StrokeWidth, int PointRadius);
+
+    readonly record struct ResolvedLabelStyle(Func<Feature, string?>? Label, double Size, Rgba Color, Rgba? Halo);
 
     /// <summary>One projected polygon piece: closed rings to fill (even-odd) plus the open
     /// polylines to stroke. Fill and Strokes diverge for interrupted Goode, where the clipped
