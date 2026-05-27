@@ -86,8 +86,11 @@ has no area type, so a polygon is written as a track (one segment per ring), a m
 its rings into one track, and a geometry collection writes each member in turn (so areas read back as
 lines). WKT/WKB carry geometry only (attributes dropped). PNG is write-only and needs an extent
 (defaults to the data bounds); `RenderOptions.Projection` selects the layout — `PlateCarree` (default,
-linear lon/lat) or `WebMercator` (latitude clamped to ±85.0511°). The CLI exposes this as
-`--projection plate-carree|web-mercator` (with `equirectangular` and `mercator` as accepted aliases).
+linear lon/lat), `WebMercator` (latitude clamped to ±85.0511°), or `Lambert` (Lambert Conformal Conic
+with standard parallels auto-picked at 1/6 and 5/6 of the data's latitude range; degenerates on
+equator-symmetric bounds and silently falls back to `PlateCarree` there). The CLI exposes this as
+`--projection plate-carree|web-mercator|lambert` (with `equirectangular`, `mercator`, `lcc`, and
+`lambert-conformal-conic` as accepted aliases).
 
 ### Layer-aware codecs
 

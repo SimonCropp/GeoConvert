@@ -10,8 +10,9 @@ Options:
   --to <format>          Force the output format.
   --bbox minX,minY,maxX,maxY   Extent to render (PNG output only).
   --size WIDTH[xHEIGHT]  Image size in pixels (PNG output only).
-  --projection <name>    Projection for PNG output: 'plate-carree' (default) or
-                         'web-mercator'.
+  --projection <name>    Projection for PNG output: 'plate-carree' (default),
+                         'web-mercator', or 'lambert' (Lambert Conformal Conic,
+                         for country/state-scale maps with low distortion).
   --list                 List supported formats.
   -h, --help             Show this help.
 
@@ -21,3 +22,4 @@ Examples:
   geoconvert data.csv data.geojson --from csv
   geoconvert world.geojson europe.png --bbox -10,35,30,60 --size 1200x900
   geoconvert world.geojson world.png --projection web-mercator --size 1200
+  geoconvert states.geojson states.png --projection lambert --size 1600

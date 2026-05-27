@@ -23,4 +23,15 @@ public enum MapProjection
     /// a full-world view, pair this with <see cref="MapRenderer.WebMercatorWorldBounds"/>.
     /// </summary>
     WebMercator,
+
+    /// <summary>
+    /// Spherical Lambert Conformal Conic with two standard parallels auto-picked from the data bounds
+    /// (the 1/6 and 5/6 of the latitude range convention used by national mapping agencies for
+    /// country-scale layouts). Conformal — preserves local shape and angles — and keeps area distortion
+    /// low across regions a few hundred to a couple thousand kilometres wide, so this is the right pick
+    /// for a single country, state, or province. Outside that scale the cone unfolds badly: it
+    /// degenerates near the equator if the bounds are vertically symmetric (the cone flattens) and is
+    /// not meant for a world view — use <see cref="WebMercator"/> or <see cref="PlateCarree"/> there.
+    /// </summary>
+    Lambert,
 }

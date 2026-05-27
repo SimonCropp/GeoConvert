@@ -151,9 +151,40 @@ From the command line, pass `--projection`:
 geoconvert world.geojson world.png --projection web-mercator --size 1200
 ```
 
-Anything more exotic (UTM, Lambert Conformal, Albers, polar stereographic, …) is out of scope — the
-input model is always WGS84, so reprojection has to happen upstream and the renderer is fed
-already-projected coordinates (it treats X/Y as planar either way).
+For a single country, state, or province where neither plate carrée's high-latitude squish nor Web
+Mercator's pole stretch is acceptable, use `MapProjection.Lambert` — spherical Lambert Conformal Conic
+with two standard parallels auto-picked at 1/6 and 5/6 of the data's latitude range (the de facto
+convention for country-scale layouts). It's conformal and keeps area distortion low across a region
+a few hundred to a couple thousand kilometres wide; outside that scale it degenerates (the cone
+flattens at the equator if bounds are vertically symmetric, in which case the renderer falls back to
+plate carrée), so it isn't a world projection — pair it with regional `Bounds`:
+
+<!-- snippet: RenderLambert -->
+<a id='snippet-RenderLambert'></a>
+```cs
+var features = GeoConverter.Read("states.geojson");
+
+// Lambert Conformal Conic with standard parallels picked from the data bounds — the textbook
+// choice for state/country-scale maps. Conformal and low-distortion across a regional extent,
+// so this avoids both plate-carrée's high-latitude squish and Web Mercator's pole stretch.
+var options = new RenderOptions
+{
+    Width = 1600,
+    Projection = MapProjection.Lambert,
+};
+
+MapRenderer.RenderPng(features, "states.png", options);
+```
+<sup><a href='/src/Tests/Snippets.cs#L144-L157' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderLambert' title='Start of snippet'>anchor</a></sup>
+<!-- endSnippet -->
+
+```
+geoconvert states.geojson states.png --projection lambert --size 1600
+```
+
+Anything more exotic (UTM, Albers Equal-Area, polar stereographic, …) is out of scope — the input
+model is always WGS84, so reprojection has to happen upstream and the renderer is fed already-projected
+coordinates (it treats X/Y as planar either way).
 
 
 ## Compression

@@ -138,4 +138,22 @@ static class Snippets
         MapRenderer.RenderPng(features, "world.png", options);
         #endregion
     }
+
+    public static void RenderLambert()
+    {
+        #region RenderLambert
+        var features = GeoConverter.Read("states.geojson");
+
+        // Lambert Conformal Conic with standard parallels picked from the data bounds — the textbook
+        // choice for state/country-scale maps. Conformal and low-distortion across a regional extent,
+        // so this avoids both plate-carrée's high-latitude squish and Web Mercator's pole stretch.
+        var options = new RenderOptions
+        {
+            Width = 1600,
+            Projection = MapProjection.Lambert,
+        };
+
+        MapRenderer.RenderPng(features, "states.png", options);
+        #endregion
+    }
 }

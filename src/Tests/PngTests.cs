@@ -258,6 +258,101 @@ public class PngTests
     }
 
     [Test]
+    public async Task Lambert_differs_from_plate_carree_at_country_scale()
+    {
+        // LCC's whole point is that meridians fan in toward the cone's apex, so a feature on one side
+        // of the central meridian doesn't project to the same X as it would under linear lon/lat.
+        // Render a single off-centre point in each projection and confirm the pixel column moves —
+        // without this, a future refactor could silently fall back to PlateCarree and pass everything.
+        static FeatureCollection Build() => new()
+        {
+            // Far west corner of a US-shaped bounds: under Lambert this point swings inward toward the
+            // central meridian, so it should land further right than under linear PlateCarree.
+            new Feature(new Point(-120, 30))
+        };
+
+        static RenderOptions Options(MapProjection projection) => new()
+        {
+            Bounds = new Envelope(-125, 25, -65, 50),
+            Width = 600,
+            Height = 400,
+            Padding = 0,
+            Projection = projection,
+            PointRadius = 1,
+        };
+
+        var (_, _, platePixels) = Decode(MapRenderer.RenderPng(Build(), Options(MapProjection.PlateCarree)));
+        var (_, _, lambertPixels) = Decode(MapRenderer.RenderPng(Build(), Options(MapProjection.Lambert)));
+
+        // The point renders as a small disc; locate its centroid column in each image.
+        await Assert.That(NonBackgroundCentroidX(platePixels, 600))
+            .IsNotEqualTo(NonBackgroundCentroidX(lambertPixels, 600));
+    }
+
+    [Test]
+    public async Task Lambert_handles_zero_height_latitude_span()
+    {
+        // φ₁ and φ₂ collapse to the same parallel when the data has no latitudinal extent (a single
+        // east-west line of points). The LCC formulas hit a 0/0 in that case, so the parameter
+        // calculation falls back to n = sin(φ₁) for a one-parallel cone — without this branch the
+        // projection would emit NaN pixels.
+        var features = new FeatureCollection
+        {
+            new Feature(new LineString([new(-100, 40), new(-80, 40), new(-60, 40)])),
+        };
+
+        var png = MapRenderer.RenderPng(features, new()
+        {
+            Width = 200,
+            Height = 100,
+            Projection = MapProjection.Lambert,
+        });
+
+        var (_, _, pixels) = Decode(png);
+        await Assert.That(NonBackgroundCount(pixels)).IsGreaterThan(0);
+    }
+
+    [Test]
+    public async Task Lambert_falls_back_to_plate_carree_when_cone_degenerates()
+    {
+        // Equator-symmetric bounds collapse the LCC cone into a cylinder (n → 0, ρ → ∞). Rather than
+        // throwing or rendering NaN-filled pixels, the projection silently falls back to PlateCarree;
+        // assert that by rendering identical bounds in both projections and comparing the output.
+        var features = new FeatureCollection
+        {
+            new Feature(new Polygon([[new(-10, -10), new(10, -10), new(10, 10), new(-10, 10), new(-10, -10)]])),
+        };
+
+        static RenderOptions Build(MapProjection projection) => new()
+        {
+            Bounds = new Envelope(-20, -20, 20, 20),
+            Width = 200,
+            Height = 200,
+            Padding = 0,
+            Projection = projection,
+        };
+
+        var lambert = MapRenderer.RenderPng(features, Build(MapProjection.Lambert));
+        var plate = MapRenderer.RenderPng(features, Build(MapProjection.PlateCarree));
+        await Assert.That(lambert).IsEquivalentTo(plate);
+    }
+
+    [Test]
+    public Task Render_snapshot_lambert()
+    {
+        var features = GeoConverter.Read(ProjectFiles.australian_suburbs_geojson);
+        var png = MapRenderer.RenderPng(
+            features,
+            new()
+            {
+                Width = 3000,
+                Projection = MapProjection.Lambert,
+            });
+
+        return Verify(new MemoryStream(png), "png");
+    }
+
+    [Test]
     public Task Render_snapshot_web_mercator()
     {
         var features = GeoConverter.Read(ProjectFiles.australian_suburbs_geojson);
@@ -395,6 +490,27 @@ public class PngTests
         }
 
         return count;
+    }
+
+    static double NonBackgroundCentroidX(byte[] pixels, int width)
+    {
+        // Average X of every non-background pixel — a stable summary of where a small drawn feature
+        // lands, even when it spans a few columns (point disc), without depending on exact stroke
+        // bookkeeping.
+        double sum = 0;
+        var count = 0;
+        for (var i = 0; i < pixels.Length; i += 4)
+        {
+            if (pixels[i] == 255 && pixels[i + 1] == 255 && pixels[i + 2] == 255)
+            {
+                continue;
+            }
+
+            sum += (i / 4) % width;
+            count++;
+        }
+
+        return count == 0 ? -1 : sum / count;
     }
 
     // A small decoder for GeoConvert's own PNG output (8-bit RGBA, filter 0 rows).
