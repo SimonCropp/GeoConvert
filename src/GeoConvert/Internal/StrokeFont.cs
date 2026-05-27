@@ -105,7 +105,7 @@ static class StrokeFont
                     var ay = baselineY - stroke[p].Y * unit;
                     var bx = penX + stroke[p + 1].X * unit;
                     var by = baselineY - stroke[p + 1].Y * unit;
-                    canvas.StrokeLineAntialiased(ax, ay, bx, by, strokeWidth, color);
+                    canvas.StrokeLine(ax, ay, bx, by, strokeWidth, color);
                 }
             }
 

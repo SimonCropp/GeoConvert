@@ -92,26 +92,24 @@ public class LabelTests
     }
 
     [Test]
-    public async Task Canvas_antialiased_stroke_handles_zero_length_segment()
+    public async Task Canvas_stroke_handles_zero_length_segment()
     {
-        // Zero-length segment is the degenerate-line case StrokeLineAntialiased delegates to
-        // FillDiscAntialiased — without it the projection math would divide by zero. Confirm by
-        // painting a "line" from a point to itself and checking pixels were laid down (and that
-        // the call doesn't throw).
+        // Zero-length segment is the degenerate-line case StrokeLine delegates to FillDisc —
+        // without it the projection math would divide by zero. Confirm by painting a "line" from
+        // a point to itself and checking pixels were laid down (and that the call doesn't throw).
         var canvas = new Canvas(32, 32, Rgba.White);
-        canvas.StrokeLineAntialiased(16, 16, 16, 16, width: 4, Rgba.Black);
+        canvas.StrokeLine(16, 16, 16, 16, width: 4, Rgba.Black);
         await Assert.That(NonBackgroundCount(canvas.Pixels)).IsGreaterThan(0);
     }
 
     [Test]
-    public async Task Canvas_antialiased_disc_paints_soft_edge()
+    public async Task Canvas_disc_paints_full_coverage_at_centre()
     {
-        // FillDiscAntialiased painted directly. The very centre pixel sits at distance 0 from
-        // the centre and is well inside the radius, so it gets full coverage (alpha clamps to 1)
-        // — the centre channel value should be the colour as-given. An off-disc pixel stays
-        // background.
+        // FillDisc painted directly. The very centre pixel sits at distance 0 from the centre and
+        // is well inside the radius, so it gets full coverage (alpha clamps to 1) — the centre
+        // channel value should be the colour as-given. An off-disc pixel stays background.
         var canvas = new Canvas(20, 20, Rgba.White);
-        canvas.FillDiscAntialiased(10, 10, radius: 3, new(200, 50, 50));
+        canvas.FillDisc(10, 10, radius: 3, new(200, 50, 50));
 
         // Centre pixel: full coverage (distance 0 from centre, well under the inner-1.0 boundary).
         var centre = (10 * 20 + 10) * 4;

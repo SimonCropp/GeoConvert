@@ -72,7 +72,10 @@ Hub-and-spoke around one in-memory model:
 - **Hand-rolled internals** (`src/GeoConvert/Internal/`) exist because of the no-dependency rule:
   `FlatBufferBuilder`/`FlatBufferTable` (FlatGeobuf's FlatBuffers wire format), `Dbf` (dBASE attribute
   table), `WktParser`, `CsvParser`, `Png` (encoder, uses BCL `ZLibStream` + a hand-written CRC32),
-  `Canvas` (software rasterizer with even-odd polygon fill), `Ring` (orientation), `Scalars`/`JsonValue`
+  `Canvas` (software rasterizer with even-odd polygon fill and antialiased thick-line strokes / disc
+  fills via fractional-coverage blending; polygon fill edges are binary — sharp boundaries where
+  filled features meet untextured background still show stair-stepping, but in typical configs the
+  polygon's stroke covers its fill edge), `Ring` (orientation), `Scalars`/`JsonValue`
   (property type inference). Prefer extending these over taking a dependency.
 
 Format codec conventions: a writer must **not** close a caller-provided `Stream` (wrap with

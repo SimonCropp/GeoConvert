@@ -61,49 +61,15 @@ sealed class Canvas
         pixels[i + 3] = (byte)(aByte + pixels[i + 3] * inverse);
     }
 
-    public void FillDisc(double cx, double cy, double radius, Rgba color)
-    {
-        var r = Math.Max(radius, 0.5);
-        var minX = (int)Math.Floor(cx - r);
-        var maxX = (int)Math.Ceiling(cx + r);
-        var minY = (int)Math.Floor(cy - r);
-        var maxY = (int)Math.Ceiling(cy + r);
-        var r2 = r * r;
-        for (var y = minY; y <= maxY; y++)
-        {
-            for (var x = minX; x <= maxX; x++)
-            {
-                var dx = x - cx;
-                var dy = y - cy;
-                if (dx * dx + dy * dy <= r2)
-                {
-                    Blend(x, y, color);
-                }
-            }
-        }
-    }
-
-    public void StrokeLine(double x0, double y0, double x1, double y1, double width, Rgba color)
-    {
-        var radius = Math.Max(width / 2, 0.5);
-        var distance = Math.Sqrt((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0));
-        var steps = Math.Max(1, (int)Math.Ceiling(distance));
-        for (var i = 0; i <= steps; i++)
-        {
-            var t = (double)i / steps;
-            FillDisc(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, radius, color);
-        }
-    }
-
     /// <summary>
     /// Soft-edged thick-line stroke: every pixel within <c>width/2 + 0.5</c> of the line segment
     /// gets a fractional alpha based on its perpendicular distance, blended at that coverage.
-    /// Used by <see cref="StrokeFont"/> so labels stay readable at small cap heights (14px etc.)
-    /// where the 1-pixel-wide jagged strokes from <see cref="StrokeLine"/> read as pixelated.
-    /// Bounded geometry rendering still uses the crisp binary <see cref="StrokeLine"/> — sharp
-    /// coastlines and polygon edges read better than antialiased ones at typical map scales.
+    /// Antialiased everywhere — used both for label glyph strokes and for the renderer's polygon
+    /// outlines / polyline geometry so the whole output reads consistently. The trade-off is a
+    /// 1-pixel-wide stroke blooms slightly into a ~1.5px soft band; on typical map scales the
+    /// smoothness wins over the lost pixel sharpness.
     /// </summary>
-    public void StrokeLineAntialiased(double x0, double y0, double x1, double y1, double width, Rgba color)
+    public void StrokeLine(double x0, double y0, double x1, double y1, double width, Rgba color)
     {
         var radius = Math.Max(width / 2, 0.5);
         // One extra pixel beyond the geometric radius gives room for the fractional-coverage
@@ -122,7 +88,7 @@ sealed class Canvas
         {
             // Zero-length segment degenerates to a single antialiased disc — the projection math
             // below would otherwise divide by zero.
-            FillDiscAntialiased(x0, y0, radius, color);
+            FillDisc(x0, y0, radius, color);
             return;
         }
 
@@ -164,9 +130,9 @@ sealed class Canvas
     }
 
     /// <summary>Antialiased disc — every pixel within <c>radius + 0.5</c> gets fractional
-    /// coverage based on its distance to the centre. Used by
-    /// <see cref="StrokeLineAntialiased"/> for the zero-length segment fast path.</summary>
-    public void FillDiscAntialiased(double cx, double cy, double radius, Rgba color)
+    /// coverage based on its distance to the centre. Used directly for point markers, and via
+    /// <see cref="StrokeLine"/>'s zero-length fast path.</summary>
+    public void FillDisc(double cx, double cy, double radius, Rgba color)
     {
         var r = Math.Max(radius, 0.5);
         var outer = r + 0.5;
