@@ -11,6 +11,13 @@ public sealed class RenderOptions
     /// </summary>
     public Envelope? Bounds { get; set; }
 
+    /// <summary>
+    /// How longitude/latitude is mapped into planar pixel space. Defaults to
+    /// <see cref="MapProjection.PlateCarree"/>; switch to <see cref="MapProjection.WebMercator"/> for
+    /// tiled-map-style layouts.
+    /// </summary>
+    public MapProjection Projection { get; set; } = MapProjection.PlateCarree;
+
     /// <summary>Image width in pixels.</summary>
     public int Width { get; set; } = 1024;
 

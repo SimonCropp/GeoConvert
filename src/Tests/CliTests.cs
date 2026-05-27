@@ -78,6 +78,29 @@ public class CliTests
     }
 
     [Test]
+    [Arguments("plate-carree")]
+    [Arguments("PlateCarree")]
+    [Arguments("equirectangular")]
+    [Arguments("web-mercator")]
+    [Arguments("Mercator")]
+    [Arguments("WEBMERCATOR")]
+    public async Task RendersPngWithProjection(string projection)
+    {
+        using var directory = new TempDirectory();
+        var input = Path.Combine(directory, "in.geojson");
+        await File.WriteAllTextAsync(input, GeoJson.WriteString(Sample.Polygons()));
+        var output = Path.Combine(directory, "out.png");
+
+        var code = Runner.Run(
+            [input, output, "--projection", projection, "--size", "100"],
+            new StringWriter(),
+            new StringWriter());
+
+        await Assert.That(code).IsEqualTo(0);
+        await Assert.That(File.Exists(output)).IsTrue();
+    }
+
+    [Test]
     public async Task RendersPngWithSizeOnly()
     {
         using var directory = new TempDirectory();
@@ -99,6 +122,8 @@ public class CliTests
     [Arguments(new[] { "a", "b", "--size", "axb" }, 2)]
     [Arguments(new[] { "a", "b", "--size", "10x0" }, 2)]
     [Arguments(new[] { "a", "b", "--size", "1x2x3" }, 2)]
+    [Arguments(new[] { "a", "b", "--projection" }, 2)]
+    [Arguments(new[] { "a", "b", "--projection", "moon" }, 2)]
     [Arguments(new[] { "--unknown" }, 2)]
     public async Task InvalidArguments(string[] args, int expected) =>
         await Assert.That(Runner.Run(args, new StringWriter(), new StringWriter())).IsEqualTo(expected);

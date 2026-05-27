@@ -117,6 +117,42 @@ geoconvert world.geojson europe.png --bbox -10,35,30,60 --size 1200x900
 ```
 
 
+### Projection
+
+The default `MapProjection.PlateCarree` treats longitude/latitude as planar X/Y with a uniform scale.
+It's faithful for small extents near the equator but compresses high-latitude features at world scale.
+Switch to `MapProjection.WebMercator` for the tiled-map layout most users expect (longitude stays
+linear, latitude is projected through `ln(tan(π/4 + φ/2))` and clamped to ±85.0511° — the cutoff where
+the projection blows up at the poles):
+
+<!-- snippet: RenderWebMercator -->
+<a id='snippet-RenderWebMercator'></a>
+```cs
+var collection = GeoConverter.Read("countries.geojson");
+
+// Web Mercator matches the layout of standard web tile maps. Latitude is clamped to ±85.0511°.
+var options = new RenderOptions
+{
+    Width = 1200,
+    Projection = MapProjection.WebMercator,
+};
+
+MapRenderer.RenderPng(collection, "world.png", options);
+```
+<sup><a href='/src/Tests/Snippets.cs#L93-L104' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderWebMercator' title='Start of snippet'>anchor</a></sup>
+<!-- endSnippet -->
+
+From the command line, pass `--projection`:
+
+```
+geoconvert world.geojson world.png --projection web-mercator --size 1200
+```
+
+Anything more exotic (UTM, Lambert Conformal, Albers, polar stereographic, …) is out of scope — the
+input model is always WGS84, so reprojection has to happen upstream and the renderer is fed
+already-projected coordinates (it treats X/Y as planar either way).
+
+
 ### Exampl generated png
 
 All Australian suburbs

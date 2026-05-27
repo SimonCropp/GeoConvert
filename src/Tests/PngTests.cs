@@ -180,6 +180,62 @@ public class PngTests
     }
 
     [Test]
+    public async Task WebMercator_stretches_high_latitudes_relative_to_plate_carree()
+    {
+        // Same bounds, derived height: in Web Mercator a 0–80° lat strip projects to roughly 14× the
+        // longitudinal width, vs 8× under plate carrée. So Mercator must produce a taller image.
+        var collection = new FeatureCollection { new Feature(new Point(5, 40)) };
+        RenderOptions Build(MapProjection projection) => new()
+        {
+            Bounds = new Envelope(0, 0, 10, 80),
+            Width = 100,
+            Padding = 0,
+            Projection = projection,
+        };
+
+        var (_, plateHeight, _) = Decode(MapRenderer.RenderPng(collection, Build(MapProjection.PlateCarree)));
+        var (_, mercatorHeight, _) = Decode(MapRenderer.RenderPng(collection, Build(MapProjection.WebMercator)));
+
+        await Assert.That(plateHeight).IsEqualTo(800);
+        await Assert.That(mercatorHeight).IsGreaterThan(plateHeight);
+    }
+
+    [Test]
+    public async Task WebMercator_clamps_polar_latitudes()
+    {
+        // ln(tan) at lat 90° is +∞. Anything past the ±85.0511° cutoff should clamp to the limit, so two
+        // points well past the cutoff (one slightly, one extreme) must render identically. Without the
+        // clamp this throws or NaNs through the rasterizer.
+        var near = new FeatureCollection { new Feature(new Point(0, 86)) };
+        var far = new FeatureCollection { new Feature(new Point(0, 89.9)) };
+        RenderOptions Build() => new()
+        {
+            // Bounds stop at exactly the cutoff so neither bound is itself clamped — only the data is.
+            Bounds = new Envelope(-10, -85.05112877980659, 10, 85.05112877980659),
+            Width = 64,
+            Height = 64,
+            Projection = MapProjection.WebMercator,
+        };
+
+        var (_, _, nearPixels) = Decode(MapRenderer.RenderPng(near, Build()));
+        var (_, _, farPixels) = Decode(MapRenderer.RenderPng(far, Build()));
+
+        await Assert.That(NonBackgroundCount(nearPixels)).IsGreaterThan(0);
+        await Assert.That(farPixels).IsEquivalentTo(nearPixels);
+    }
+
+    [Test]
+    public Task Render_snapshot_web_mercator()
+    {
+        var collection = GeoConverter.Read(ProjectFiles.australian_suburbs_geojson);
+        var png = MapRenderer.RenderPng(
+            collection,
+            new() { Width = 3000, Projection = MapProjection.WebMercator });
+
+        return Verify(new MemoryStream(png), "png");
+    }
+
+    [Test]
     public async Task Rejects_non_positive_width()
     {
         var threw = false;

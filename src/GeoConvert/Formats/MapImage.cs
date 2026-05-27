@@ -141,19 +141,29 @@ public static class MapRenderer
         }
     }
 
-    /// <summary>Maps longitude/latitude into pixel space: uniform scale, centered, with the Y axis flipped.</summary>
+    /// <summary>
+    /// Maps longitude/latitude into pixel space: first through the chosen <see cref="MapProjection"/>
+    /// (planar coords), then a uniform scale that fits the projected extent into the canvas, centered,
+    /// with the Y axis flipped.
+    /// </summary>
     sealed class Projection
     {
-        readonly Envelope bounds;
+        // Standard Web Mercator latitude cutoff: ln(tan) blows up at ±90°, and ±85.0511° is where the
+        // projected square world meets its longitudinal width — the convention every tile provider uses.
+        const double WebMercatorMaxLatitude = 85.05112877980659;
+
+        readonly MapProjection kind;
+        readonly Envelope projectedBounds;
         readonly double scale;
         readonly double offsetX;
         readonly double offsetY;
 
         public Projection(Envelope bounds, RenderOptions options)
         {
-            this.bounds = bounds;
-            var boundsWidth = bounds.Width > 0 ? bounds.Width : 1;
-            var boundsHeight = bounds.Height > 0 ? bounds.Height : 1;
+            kind = options.Projection;
+            projectedBounds = ProjectEnvelope(bounds);
+            var boundsWidth = projectedBounds.Width > 0 ? projectedBounds.Width : 1;
+            var boundsHeight = projectedBounds.Height > 0 ? projectedBounds.Height : 1;
 
             Width = options.Width;
             Height = options.Height > 0
@@ -173,8 +183,9 @@ public static class MapRenderer
 
         public (double X, double Y) ToPixel(Position position)
         {
-            var x = offsetX + (position.X - bounds.MinX) * scale;
-            var y = Height - offsetY - (position.Y - bounds.MinY) * scale;
+            var projectedY = ProjectLatitude(position.Y);
+            var x = offsetX + (position.X - projectedBounds.MinX) * scale;
+            var y = Height - offsetY - (projectedY - projectedBounds.MinY) * scale;
             return (x, y);
         }
 
@@ -187,6 +198,27 @@ public static class MapRenderer
             }
 
             return result;
+        }
+
+        Envelope ProjectEnvelope(Envelope bounds) =>
+            // X is linear in both projections supported here, so projecting the corners suffices.
+            kind == MapProjection.PlateCarree
+                ? bounds
+                : new Envelope(bounds.MinX, ProjectLatitude(bounds.MinY), bounds.MaxX, ProjectLatitude(bounds.MaxY));
+
+        double ProjectLatitude(double latitude)
+        {
+            if (kind == MapProjection.PlateCarree)
+            {
+                return latitude;
+            }
+
+            var clamped = Math.Clamp(latitude, -WebMercatorMaxLatitude, WebMercatorMaxLatitude);
+            var radians = clamped * Math.PI / 180;
+            // Scale back to degree-equivalent units so the projected envelope reads in the same unit as
+            // longitude — the downstream pixel math is scale-invariant either way, but this keeps the
+            // aspect ratio of a degree-square patch at the equator equal to 1 in both projections.
+            return Math.Log(Math.Tan(Math.PI / 4 + radians / 2)) * 180 / Math.PI;
         }
     }
 }
