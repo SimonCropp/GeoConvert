@@ -34,6 +34,7 @@ public static class Runner
         Envelope? bounds = null;
         var width = 0;
         var height = 0;
+        var projection = MapProjection.PlateCarree;
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -72,6 +73,20 @@ public static class Runner
                     if (!TryParseSize(args[++i], out width, out height))
                     {
                         error.WriteLine("--size must be 'WIDTH' or 'WIDTHxHEIGHT'.");
+                        return 2;
+                    }
+
+                    break;
+                case "--projection":
+                    if (i + 1 >= args.Length)
+                    {
+                        error.WriteLine("Missing value for --projection.");
+                        return 2;
+                    }
+
+                    if (!TryParseProjection(args[++i], out projection))
+                    {
+                        error.WriteLine("--projection must be 'plate-carree' or 'web-mercator'.");
                         return 2;
                     }
 
@@ -135,7 +150,8 @@ public static class Runner
                 var collection = GeoConverter.Read(input, fromFormat);
                 var renderOptions = new RenderOptions
                 {
-                    Bounds = bounds
+                    Bounds = bounds,
+                    Projection = projection,
                 };
                 if (width > 0)
                 {
@@ -182,6 +198,28 @@ public static class Runner
         return true;
     }
 
+    static bool TryParseProjection(string text, out MapProjection projection)
+    {
+        // Hyphenated names are canonical (matches CLI conventions); the unhyphenated and short forms
+        // are accepted so users don't have to remember the exact spelling.
+        switch (text.ToLowerInvariant())
+        {
+            case "plate-carree":
+            case "platecarree":
+            case "equirectangular":
+                projection = MapProjection.PlateCarree;
+                return true;
+            case "web-mercator":
+            case "webmercator":
+            case "mercator":
+                projection = MapProjection.WebMercator;
+                return true;
+            default:
+                projection = default;
+                return false;
+        }
+    }
+
     static bool TryParseSize(string text, out int width, out int height)
     {
         width = 0;
@@ -221,6 +259,8 @@ public static class Runner
               --to <format>          Force the output format.
               --bbox minX,minY,maxX,maxY   Extent to render (PNG output only).
               --size WIDTH[xHEIGHT]  Image size in pixels (PNG output only).
+              --projection <name>    Projection for PNG output: 'plate-carree' (default) or
+                                     'web-mercator'.
               --list                 List supported formats.
               -h, --help             Show this help.
 
@@ -229,6 +269,7 @@ public static class Runner
               geoconvert roads.shp roads.fgb
               geoconvert data.csv data.geojson --from csv
               geoconvert world.geojson europe.png --bbox -10,35,30,60 --size 1200x900
+              geoconvert world.geojson world.png --projection web-mercator --size 1200
             """);
 
     static void PrintFormats(TextWriter writer) =>

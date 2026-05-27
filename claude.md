@@ -85,7 +85,9 @@ the spatial index (`index_node_size=0`) and is 2D; indexed files are read by ski
 has no area type, so a polygon is written as a track (one segment per ring), a multi polygon flattens
 its rings into one track, and a geometry collection writes each member in turn (so areas read back as
 lines). WKT/WKB carry geometry only (attributes dropped). PNG is write-only and needs an extent
-(defaults to the data bounds).
+(defaults to the data bounds); `RenderOptions.Projection` selects the layout — `PlateCarree` (default,
+linear lon/lat) or `WebMercator` (latitude clamped to ±85.0511°). The CLI exposes this as
+`--projection plate-carree|web-mercator` (with `equirectangular` and `mercator` as accepted aliases).
 
 ### Layer-aware codecs
 

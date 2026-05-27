@@ -60,7 +60,10 @@ public class ModelTests
     [Test]
     public async Task FeatureCollection_bounds_ignores_null_geometry()
     {
-        var collection = new FeatureCollection { new Feature() };
+        var collection = new FeatureCollection
+        {
+            new Feature()
+        };
         await Assert.That(collection.GetBounds().IsEmpty).IsTrue();
     }
 

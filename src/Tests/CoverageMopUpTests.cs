@@ -292,11 +292,20 @@ public class CoverageMopUpTests
     {
         // Layered input that mixes a root-level feature, a category layer ("waypoints"), and a
         // non-category sibling layer — exercises the fallback dispatch inside the category-write path.
-        var waypoints = new FeatureCollection { Name = "waypoints" };
+        var waypoints = new FeatureCollection
+        {
+            Name = "waypoints"
+        };
         waypoints.Add(new Feature(new Point(1, 2)));
-        var stray = new FeatureCollection { Name = "misc" };
+        var stray = new FeatureCollection
+        {
+            Name = "misc"
+        };
         stray.Add(new Feature(new LineString([new(0, 0), new(1, 1)])));
-        var root = new FeatureCollection { new Feature(new Point(9, 9)), waypoints, stray };
+        var root = new FeatureCollection
+        {
+            new Feature(new Point(9, 9)), waypoints, stray
+        };
 
         using var stream = new MemoryStream();
         Gpx.Write(stream, root);

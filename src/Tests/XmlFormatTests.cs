@@ -154,7 +154,10 @@ public class XmlFormatTests
     [Test]
     public async Task Gpx_writes_multipoint_as_waypoints()
     {
-        var source = new FeatureCollection { new Feature(new MultiPoint([new(1, 2), new(3, 4)])) };
+        var source = new FeatureCollection
+        {
+            new Feature(new MultiPoint([new(1, 2), new(3, 4)]))
+        };
         var back = TestSupport.RoundtripStream(source, GeoFormat.Gpx);
         await Assert.That(back.Count).IsEqualTo(2);
         await Assert.That(back.ElementAt(0).Geometry).IsTypeOf<Point>();

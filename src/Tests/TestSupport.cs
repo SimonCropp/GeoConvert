@@ -1,4 +1,5 @@
 // Shared helpers for the coverage-focused tests.
+
 static class TestSupport
 {
     public static FeatureCollection RoundtripStream(FeatureCollection source, GeoFormat format)
@@ -26,7 +27,12 @@ static class TestSupport
     public static string AsLayerJson(FeatureCollection collection)
     {
         var stream = new MemoryStream();
-        using (var writer = new System.Text.Json.Utf8JsonWriter(stream, new() { Indented = true }))
+        using (var writer = new Utf8JsonWriter(
+                   stream,
+                   new()
+                   {
+                       Indented = true
+                   }))
         {
             WriteLayer(writer, collection);
         }
@@ -34,7 +40,7 @@ static class TestSupport
         return Encoding.UTF8.GetString(stream.ToArray());
     }
 
-    static void WriteLayer(System.Text.Json.Utf8JsonWriter writer, FeatureCollection layer)
+    static void WriteLayer(Utf8JsonWriter writer, FeatureCollection layer)
     {
         writer.WriteStartObject();
         if (layer.Name is { } name)
@@ -56,7 +62,7 @@ static class TestSupport
         // Round-trip the layer's direct features through GeoJson so the snapshot reuses that format.
         var flat = new FeatureCollection();
         flat.Features.AddRange(layer.Features);
-        using (var doc = System.Text.Json.JsonDocument.Parse(GeoJson.WriteString(flat)))
+        using (var doc = JsonDocument.Parse(GeoJson.WriteString(flat)))
         {
             writer.WritePropertyName("features");
             doc.RootElement.GetProperty("features").WriteTo(writer);

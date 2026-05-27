@@ -110,7 +110,10 @@ public class TextFormatTests
     [Test]
     public async Task Wkb_round_trips_measure()
     {
-        var source = new FeatureCollection { new Feature(new Point(new(1, 2, 3, 4))) };
+        var source = new FeatureCollection
+        {
+            new Feature(new Point(new(1, 2, 3, 4)))
+        };
         var back = (Point)TestSupport.RoundtripStream(source, GeoFormat.Wkb).Features[0].Geometry!;
         await Assert.That(back.Coordinate.M).IsEqualTo(4d);
     }

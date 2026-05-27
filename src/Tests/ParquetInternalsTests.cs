@@ -40,11 +40,11 @@ public class ParquetInternalsTests
     public async Task Snappy_decompresses_two_and_four_byte_copies()
     {
         // "abcd" literal then a 2-byte-offset copy (tag&3==2) of length 4 at offset 4 → "abcdabcd".
-        byte[] twoByte = [0x08, (0x03 << 2), 0x61, 0x62, 0x63, 0x64, (0x03 << 2) | 0x02, 0x04, 0x00];
+        byte[] twoByte = [0x08, 0x03 << 2, 0x61, 0x62, 0x63, 0x64, (0x03 << 2) | 0x02, 0x04, 0x00];
         await Assert.That(Snappy.Decompress(twoByte)).IsEquivalentTo("abcdabcd"u8.ToArray());
 
         // Same, but a 4-byte-offset copy (tag&3==3).
-        byte[] fourByte = [0x08, (0x03 << 2), 0x61, 0x62, 0x63, 0x64, (0x03 << 2) | 0x03, 0x04, 0x00, 0x00, 0x00];
+        byte[] fourByte = [0x08, 0x03 << 2, 0x61, 0x62, 0x63, 0x64, (0x03 << 2) | 0x03, 0x04, 0x00, 0x00, 0x00];
         await Assert.That(Snappy.Decompress(fourByte)).IsEquivalentTo("abcdabcd"u8.ToArray());
     }
 
@@ -105,7 +105,11 @@ public class ParquetInternalsTests
             CreatedBy = "GeoConvert",
             Schema =
             [
-                new() { Name = "root", NumChildren = 1 },
+                new()
+                {
+                    Name = "root",
+                    NumChildren = 1
+                },
                 new()
                 {
                     Name = "value",

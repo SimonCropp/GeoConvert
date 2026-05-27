@@ -200,7 +200,11 @@ public class GeoParquetTests
             CreatedBy = "test",
             Schema =
             [
-                new() { Name = "schema", NumChildren = 1 },
+                new()
+                {
+                    Name = "schema",
+                    NumChildren = 1
+                },
                 new()
                 {
                     Name = "geometry",
@@ -302,7 +306,11 @@ public class GeoParquetTests
             CreatedBy = "test",
             Schema =
             [
-                new() { Name = "schema", NumChildren = 1 },
+                new()
+                {
+                    Name = "schema",
+                    NumChildren = 1
+                },
                 new()
                 {
                     Name = "geometry",

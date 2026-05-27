@@ -6,7 +6,10 @@ namespace GeoConvert;
 /// </summary>
 public static class GeoJson
 {
-    static readonly JsonWriterOptions writerOptions = new() { Indented = true };
+    static readonly JsonWriterOptions writerOptions = new()
+    {
+        Indented = true
+    };
 
     public static FeatureCollection Read(Stream stream)
     {

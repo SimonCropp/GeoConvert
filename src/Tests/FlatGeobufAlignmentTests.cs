@@ -77,7 +77,10 @@ public class FlatGeobufAlignmentTests
         // interpret the polygon as a hole-in-the-world and draw inside-out fan artifacts. GeoJson.Write
         // already orients the same way; this pins the same invariant for FGB.
         var cwPolygon = new Polygon([[new(0, 0), new(0, 1), new(1, 1), new(1, 0), new(0, 0)]]);
-        var collection = new FeatureCollection { new Feature(cwPolygon) };
+        var collection = new FeatureCollection
+        {
+            new Feature(cwPolygon)
+        };
 
         using var stream = new MemoryStream();
         FlatGeobuf.Write(stream, collection);

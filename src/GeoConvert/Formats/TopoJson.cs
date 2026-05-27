@@ -11,7 +11,10 @@ namespace GeoConvert;
 /// </summary>
 public static class TopoJson
 {
-    static readonly JsonWriterOptions writerOptions = new() { Indented = true };
+    static JsonWriterOptions writerOptions = new()
+    {
+        Indented = true
+    };
 
     public static FeatureCollection Read(Stream stream)
     {

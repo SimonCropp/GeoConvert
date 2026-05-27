@@ -52,7 +52,14 @@ static class Dbf
             // reserved
             position += 14;
 
-            fields.Add(new() { Name = name, Type = type, Length = fieldLength, Decimals = decimals });
+            fields.Add(
+                new()
+                {
+                    Name = name,
+                    Type = type,
+                    Length = fieldLength,
+                    Decimals = decimals
+                });
         }
 
         var rows = new List<object?[]>((int)recordCount);
@@ -190,7 +197,7 @@ static class Dbf
         {
             case 'L':
                 // BuildField always assigns L a length of 1, so we only need to write the one byte.
-                destination[0] = value is bool b ? (b ? (byte)'T' : (byte)'F') : (byte)'?';
+                destination[0] = value is bool b ? b ? (byte)'T' : (byte)'F' : (byte)'?';
                 return;
             case 'N':
                 if (value == null)
@@ -380,21 +387,45 @@ static class Dbf
         // `name` is pre-truncated and disambiguated by BuildFields.
         if (sawValue && isBool)
         {
-            return new() { Name = name, Type = 'L', Length = 1, Decimals = 0 };
+            return new()
+            {
+                Name = name,
+                Type = 'L',
+                Length = 1,
+                Decimals = 0
+            };
         }
 
         if (sawValue && isInteger)
         {
-            return new() { Name = name, Type = 'N', Length = (byte)Math.Clamp(maxLength, 1, 18), Decimals = 0 };
+            return new()
+            {
+                Name = name,
+                Type = 'N',
+                Length = (byte)Math.Clamp(maxLength, 1, 18),
+                Decimals = 0
+            };
         }
 
         if (sawValue && isNumber)
         {
             var decimals = (byte)Math.Min(maxDecimals, 15);
             var length = (byte)Math.Clamp(maxLength, decimals + 2, 19);
-            return new() { Name = name, Type = 'N', Length = length, Decimals = decimals };
+            return new()
+            {
+                Name = name,
+                Type = 'N',
+                Length = length,
+                Decimals = decimals
+            };
         }
 
-        return new() { Name = name, Type = 'C', Length = (byte)Math.Clamp(maxLength, 1, 254), Decimals = 0 };
+        return new()
+        {
+            Name = name,
+            Type = 'C',
+            Length = (byte)Math.Clamp(maxLength, 1, 254),
+            Decimals = 0
+        };
     }
 }
