@@ -12,7 +12,7 @@ static class Png
     // seven tables shift it so eight bytes of input can be folded into the running CRC per iteration.
     static readonly uint[][] crcTables = BuildCrcTables();
 
-    public static void Write(Stream stream, byte[] rgba, int width, int height)
+    public static void Write(Stream stream, byte[] rgba, int width, int height, CompressionLevel compression)
     {
         stream.Write(signature);
 
@@ -31,16 +31,16 @@ static class Png
         header[12] = 0;
         WriteChunk(stream, ihdrType, header);
 
-        var compressed = Compress(rgba, width, height);
+        var compressed = Compress(rgba, width, height, compression);
         WriteChunk(stream, idatType, compressed);
         WriteChunk(stream, iendType, []);
     }
 
-    static byte[] Compress(byte[] rgba, int width, int height)
+    static byte[] Compress(byte[] rgba, int width, int height, CompressionLevel compression)
     {
         var stride = width * 4;
         using var memory = new MemoryStream();
-        using (var zlib = new ZLibStream(memory, CompressionLevel.Optimal, leaveOpen: true))
+        using (var zlib = new ZLibStream(memory, compression, leaveOpen: true))
         {
             // Build one filtered row at a time and write it in a single Write — the old code did one
             // virtual WriteByte for the filter tag plus a separate Write per row.

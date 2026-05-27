@@ -24,18 +24,54 @@ public class GeoParquetTests
     }
 
     [Test]
-    [Arguments(ParquetMetadata.CodecGzip)]
-    [Arguments(ParquetMetadata.CodecUncompressed)]
-    public async Task Roundtrips_with_codec(int codec)
+    [Arguments(ParquetCompression.Snappy)]
+    [Arguments(ParquetCompression.Gzip)]
+    [Arguments(ParquetCompression.Uncompressed)]
+    public async Task Roundtrips_with_codec(ParquetCompression compression)
     {
         using var stream = new MemoryStream();
-        GeoParquet.Write(stream, Sample.Mixed(), codec);
+        GeoParquet.Write(stream, Sample.Mixed(), compression);
         stream.Position = 0;
         var result = GeoParquet.Read(stream);
 
         await Assert.That(result.Count).IsEqualTo(3);
         await Assert.That(result.Features[0].Properties["name"]).IsEqualTo("alpha");
         await Assert.That(((Point)result.Features[0].Geometry!).Coordinate.X).IsEqualTo(1.5);
+    }
+
+    [Test]
+    public async Task Gzip_level_changes_output_size()
+    {
+        var collection = new FeatureCollection();
+        // Big, low-entropy strings compress very differently across levels.
+        for (var i = 0; i < 50; i++)
+        {
+            collection.Add(new Feature(
+                new Point(new(i, i)),
+                new Dictionary<string, object?> { ["name"] = new string('a', 200) }));
+        }
+
+        using var fastest = new MemoryStream();
+        GeoParquet.Write(fastest, collection, ParquetCompression.Gzip, CompressionLevel.Fastest);
+
+        using var smallest = new MemoryStream();
+        GeoParquet.Write(smallest, collection, ParquetCompression.Gzip, CompressionLevel.SmallestSize);
+
+        await Assert.That(smallest.Length).IsLessThan(fastest.Length);
+
+        // Both should still round-trip.
+        smallest.Position = 0;
+        var read = GeoParquet.Read(smallest);
+        await Assert.That(read.Count).IsEqualTo(50);
+    }
+
+    [Test]
+    public async Task Unknown_compression_throws()
+    {
+        using var stream = new MemoryStream();
+        await Assert.That(
+                G.ThrowsGeo(() => GeoParquet.Write(stream, Sample.Mixed(), (ParquetCompression)99)))
+            .IsTrue();
     }
 
     [Test]

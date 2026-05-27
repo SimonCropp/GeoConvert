@@ -42,10 +42,13 @@ public static class Kmz
         return root;
     }
 
-    public static void Write(Stream stream, FeatureCollection collection)
+    public static void Write(
+        Stream stream,
+        FeatureCollection collection,
+        CompressionLevel compression = CompressionLevel.Optimal)
     {
         using var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true);
-        var entry = archive.CreateEntry("doc.kml", CompressionLevel.Optimal);
+        var entry = archive.CreateEntry("doc.kml", compression);
         // A fixed timestamp keeps the archive byte-for-byte reproducible.
         entry.LastWriteTime = new(1980, 1, 1, 0, 0, 0, TimeSpan.Zero);
         using var entryStream = entry.Open();

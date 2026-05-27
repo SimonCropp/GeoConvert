@@ -5,9 +5,10 @@ namespace GeoConvert;
 /// file whose geometry column holds <see cref="Wkb">WKB</see> and whose file metadata carries a
 /// <c>geo</c> key describing it. GeoConvert hand-rolls the Parquet container (no dependencies): a flat
 /// schema, one row group, PLAIN-encoded values with RLE definition levels, compressed per page.
-/// Compression is Snappy by default; GZIP and uncompressed are also written, and Snappy/GZIP/dictionary
-/// pages are read. Zstd-compressed input is rejected. Coordinates are WGS84 (the <c>geo</c> CRS defaults
-/// to OGC:CRS84); Z/M ordinates are preserved through WKB.
+/// Compression is Snappy by default; the writer also accepts GZIP (with a tunable
+/// <see cref="CompressionLevel"/>) and uncompressed via <see cref="ParquetCompression"/>. The reader
+/// additionally accepts Zstd-compressed input on .NET 11+ and dictionary-encoded pages. Coordinates are
+/// WGS84 (the <c>geo</c> CRS defaults to OGC:CRS84); Z/M ordinates are preserved through WKB.
 /// </summary>
 public static class GeoParquet
 {
@@ -313,11 +314,31 @@ public static class GeoParquet
     }
 
     public static void Write(Stream stream, FeatureCollection collection) =>
-        Write(stream, collection, defaultCodec);
+        Write(stream, collection, defaultCodec, CompressionLevel.Optimal);
 
-    // Compression is selectable internally so all three supported codecs are exercisable; the public
-    // API always writes the default (Snappy).
-    internal static void Write(Stream stream, FeatureCollection collection, int codec)
+    /// <summary>
+    /// Writes <paramref name="collection"/> using the chosen <paramref name="compression"/> codec.
+    /// <paramref name="gzipLevel"/> is only consulted when <paramref name="compression"/> is
+    /// <see cref="ParquetCompression.Gzip"/>.
+    /// </summary>
+    public static void Write(
+        Stream stream,
+        FeatureCollection collection,
+        ParquetCompression compression,
+        CompressionLevel gzipLevel = CompressionLevel.Optimal) =>
+        Write(stream, collection, CodecOf(compression), gzipLevel);
+
+    static int CodecOf(ParquetCompression compression) =>
+        compression switch
+        {
+            ParquetCompression.Snappy => ParquetMetadata.CodecSnappy,
+            ParquetCompression.Uncompressed => ParquetMetadata.CodecUncompressed,
+            ParquetCompression.Gzip => ParquetMetadata.CodecGzip,
+            _ => throw new GeoConvertException($"Unsupported parquet compression {compression}."),
+        };
+
+    // Internal so tests can probe each codec branch by its on-wire id without round-tripping the enum.
+    internal static void Write(Stream stream, FeatureCollection collection, int codec, CompressionLevel gzipLevel)
     {
         var propertyColumns = BuildColumns(collection);
         var rowCount = collection.Count;
@@ -334,11 +355,12 @@ public static class GeoParquet
                 ParquetMetadata.TypeByteArray,
                 collection,
                 feature => feature.Geometry is { } geometry ? Wkb.ToBytes(geometry) : null,
-                codec));
+                codec,
+                gzipLevel));
 
             foreach (var (name, type) in propertyColumns)
             {
-                columns.Add(WriteColumn(memory, name, type, collection, PropertySelector(name, type), codec));
+                columns.Add(WriteColumn(memory, name, type, collection, PropertySelector(name, type), codec, gzipLevel));
             }
         }
 
@@ -391,7 +413,8 @@ public static class GeoParquet
         int type,
         FeatureCollection collection,
         Func<Feature, object?> selector,
-        int codec)
+        int codec,
+        CompressionLevel gzipLevel)
     {
         var rowCount = collection.Count;
         var definitions = new int[rowCount];
@@ -441,7 +464,7 @@ public static class GeoParquet
         BinaryPrimitives.WriteInt32LittleEndian(bodyBytes, definitionBytes.Length);
         definitionBytes.CopyTo(bodyBytes, 4);
         plain.CopyTo(bodyBytes, 4 + definitionBytes.Length);
-        var compressed = Compress(bodyBytes, codec);
+        var compressed = Compress(bodyBytes, codec, gzipLevel);
 
         var header = ParquetMetadata.WritePageHeader(new()
         {
@@ -469,18 +492,18 @@ public static class GeoParquet
         };
     }
 
-    static byte[] Compress(byte[] body, int codec) =>
+    static byte[] Compress(byte[] body, int codec, CompressionLevel gzipLevel) =>
         codec switch
         {
             ParquetMetadata.CodecSnappy => Snappy.Compress(body),
-            ParquetMetadata.CodecGzip => GzipCompress(body),
+            ParquetMetadata.CodecGzip => GzipCompress(body, gzipLevel),
             _ => body,
         };
 
-    static byte[] GzipCompress(byte[] body)
+    static byte[] GzipCompress(byte[] body, CompressionLevel level)
     {
         using var output = new MemoryStream();
-        using (var gzip = new GZipStream(output, CompressionLevel.Optimal, leaveOpen: true))
+        using (var gzip = new GZipStream(output, level, leaveOpen: true))
         {
             gzip.Write(body);
         }
