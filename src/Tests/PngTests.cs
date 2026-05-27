@@ -542,6 +542,119 @@ public class PngTests
     }
 
     [Test]
+    public async Task Per_layer_style_overrides_default_colors()
+    {
+        // Two layers stacked. The root holds a green polygon under a default fill; a child layer holds
+        // an offset red polygon. The LayerStyle callback returns the per-layer overrides by name, and
+        // each layer's interior should come out in its own color — confirming the override path on all
+        // four LayerStyle properties is wired through.
+        var root = new FeatureCollection
+        {
+            Name = "background",
+            Features =
+            {
+                new(new Polygon([[new(0, 0), new(10, 0), new(10, 10), new(0, 10), new(0, 0)]])),
+            },
+        };
+        var top = new FeatureCollection
+        {
+            Name = "overlay",
+            Features =
+            {
+                new(new Polygon([[new(2, 2), new(8, 2), new(8, 8), new(2, 8), new(2, 2)]])),
+            },
+        };
+        root.Children.Add(top);
+
+        var options = new RenderOptions
+        {
+            Bounds = new Envelope(0, 0, 10, 10),
+            Width = 64,
+            Height = 64,
+            Padding = 0,
+            // Pinned to PlateCarree so the polygons come out as proper pixel-aligned squares: Auto would
+            // pick Lambert at this bounds size and curve the parallels, which is the wrong layout for a
+            // styling/z-order regression test.
+            Projection = MapProjection.PlateCarree,
+            // Defaults set to colors the layers will overwrite — if the override path failed, the
+            // background polygon's centre would come out in this fill (blue), not green.
+            Fill = new(50, 50, 200),
+            Stroke = new(0, 0, 0),
+            StrokeWidth = 1,
+            PointRadius = 1,
+            LayerStyle = layer => layer.Name switch
+            {
+                "background" => new LayerStyle
+                {
+                    Fill = new(20, 200, 20),
+                    Stroke = new(20, 200, 20),
+                    StrokeWidth = 2,
+                    PointRadius = 2,
+                },
+                "overlay" => new LayerStyle
+                {
+                    Fill = new(220, 30, 30),
+                    Stroke = new(220, 30, 30),
+                    StrokeWidth = 2,
+                    PointRadius = 2,
+                },
+                _ => null,
+            },
+        };
+
+        var png = MapRenderer.RenderPng(root, options);
+        var (width, _, pixels) = Decode(png);
+
+        // Sample a pixel inside the outer polygon but outside the overlay (top-left corner area).
+        var outer = ((width / 16) * width + (width / 16)) * 4;
+        await Assert.That(pixels[outer]).IsEqualTo((byte)20);
+        await Assert.That(pixels[outer + 1]).IsEqualTo((byte)200);
+        await Assert.That(pixels[outer + 2]).IsEqualTo((byte)20);
+
+        // Sample the centre: it sits inside both polygons, but the overlay paints after its parent so
+        // it should win (red, not green).
+        var centre = ((width / 2) * width + (width / 2)) * 4;
+        await Assert.That(pixels[centre]).IsEqualTo((byte)220);
+        await Assert.That(pixels[centre + 1]).IsEqualTo((byte)30);
+        await Assert.That(pixels[centre + 2]).IsEqualTo((byte)30);
+
+        await Verify(new MemoryStream(png), "png");
+    }
+
+    [Test]
+    public async Task Layer_style_null_properties_inherit_defaults()
+    {
+        // A LayerStyle with all properties left null must fall through to the RenderOptions defaults
+        // — confirms the null-coalescing right-side path when the callback returns a non-null style
+        // whose individual overrides are absent.
+        var features = new FeatureCollection
+        {
+            new Feature(new Polygon([[new(0, 0), new(10, 0), new(10, 10), new(0, 10), new(0, 0)]])),
+        };
+        var options = new RenderOptions
+        {
+            Bounds = new Envelope(0, 0, 10, 10),
+            Width = 32,
+            Height = 32,
+            Padding = 0,
+            // Pinned to PlateCarree for the same reason as Per_layer_style_overrides_default_colors:
+            // Auto would pick Lambert here and curve the polygon edges.
+            Projection = MapProjection.PlateCarree,
+            Fill = new(180, 60, 30),
+            LayerStyle = _ => new LayerStyle(),
+        };
+
+        var png = MapRenderer.RenderPng(features, options);
+        var (width, _, pixels) = Decode(png);
+        var centre = ((width / 2) * width + (width / 2)) * 4;
+        await Assert.That(pixels[centre]).IsEqualTo((byte)180);
+        await Assert.That(pixels[centre + 1]).IsEqualTo((byte)60);
+        await Assert.That(pixels[centre + 2]).IsEqualTo((byte)30);
+
+        await Verify(new MemoryStream(png), "png");
+    }
+
+    [Test]
     public async Task Path_overload_leaves_no_file_when_render_throws()
     {
         // Regression: previously the path overload opened the destination file before validation ran,

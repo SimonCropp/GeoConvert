@@ -70,7 +70,10 @@ static class Sample
             }
         };
 
-        var roads = new FeatureCollection { Name = "roads" };
+        var roads = new FeatureCollection
+        {
+            Name = "roads"
+        };
         var highways = new FeatureCollection
         {
             Name = "highways",
@@ -104,15 +107,24 @@ static class Sample
     // the wpt/rte/trk distinction round-trips (without categories, a route reads back as a track).
     public static FeatureCollection GpxLayered()
     {
-        var waypoints = new FeatureCollection { Name = "waypoints" };
+        var waypoints = new FeatureCollection
+        {
+            Name = "waypoints"
+        };
         waypoints.Add(new Feature(new Point(new(1.5, 2.5, 100)), Props(("name", "peak"))));
 
-        var routes = new FeatureCollection { Name = "routes" };
+        var routes = new FeatureCollection
+        {
+            Name = "routes"
+        };
         routes.Add(new Feature(
             new LineString([new(0, 0), new(1, 1), new(2, 2)]),
             Props(("name", "loop"))));
 
-        var tracks = new FeatureCollection { Name = "tracks" };
+        var tracks = new FeatureCollection
+        {
+            Name = "tracks"
+        };
         tracks.Add(new Feature(
             new LineString([new(5, 5), new(6, 6)]),
             Props(("name", "ridge"))));
@@ -127,7 +139,10 @@ static class Sample
     // Two polygon datasets in one collection — the round-trip target for Shapefile directory mode.
     public static FeatureCollection ShapefileBundle()
     {
-        var blocks = new FeatureCollection { Name = "blocks" };
+        var blocks = new FeatureCollection
+        {
+            Name = "blocks"
+        };
         blocks.Add(new Feature(
             new Polygon(
             [
@@ -135,7 +150,10 @@ static class Sample
             ]),
             Props(("name", "blockA"), ("id", 1L))));
 
-        var islands = new FeatureCollection { Name = "islands" };
+        var islands = new FeatureCollection
+        {
+            Name = "islands"
+        };
         islands.Add(new Feature(
             new Polygon(
             [

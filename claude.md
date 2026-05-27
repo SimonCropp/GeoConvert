@@ -85,7 +85,11 @@ the spatial index (`index_node_size=0`) and is 2D; indexed files are read by ski
 has no area type, so a polygon is written as a track (one segment per ring), a multi polygon flattens
 its rings into one track, and a geometry collection writes each member in turn (so areas read back as
 lines). WKT/WKB carry geometry only (attributes dropped). PNG is write-only and needs an extent
-(defaults to the data bounds); `RenderOptions.Projection` selects the layout — `Auto` (default; picks
+(defaults to the data bounds). For layered inputs the renderer walks the tree depth-first
+(parent layer first, then `Children`) so child layers paint *over* their parent under source-over
+blending; per-layer colors come from `RenderOptions.LayerStyle`, a `Func<FeatureCollection,
+LayerStyle?>` whose returned `LayerStyle` overrides any subset of stroke/fill/strokeWidth/pointRadius
+(null properties inherit from `RenderOptions`). `RenderOptions.Projection` selects the layout — `Auto` (default; picks
 `Lambert` when both bounds spans sit under 90° lon / 60° lat, else `PlateCarree`; never picks
 `WebMercator` because that's a layout choice, not a distortion-minimisation one), `PlateCarree`
 (linear lon/lat), `WebMercator` (latitude clamped to ±85.0511°), or `Lambert` (Lambert Conformal Conic

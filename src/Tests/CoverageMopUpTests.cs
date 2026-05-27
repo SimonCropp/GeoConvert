@@ -175,7 +175,10 @@ public class CoverageMopUpTests
     [Test]
     public async Task FeatureCollection_collection_initializer_adds_child_layer()
     {
-        var inner = new FeatureCollection { Name = "inner" };
+        var inner = new FeatureCollection
+        {
+            Name = "inner"
+        };
         inner.Add(new Feature(new Point(3, 4)));
         var root = new FeatureCollection
         {
@@ -277,9 +280,15 @@ public class CoverageMopUpTests
     [Test]
     public async Task TopoJson_writes_unique_keys_for_duplicate_layer_names()
     {
-        var first = new FeatureCollection { Name = "data" };
+        var first = new FeatureCollection
+        {
+            Name = "data"
+        };
         first.Add(new Feature(new Point(1, 2)));
-        var second = new FeatureCollection { Name = "data" };
+        var second = new FeatureCollection
+        {
+            Name = "data"
+        };
         second.Add(new Feature(new Point(3, 4)));
         var root = new FeatureCollection { first, second };
         var topology = TopoJson.WriteString(root);
@@ -331,7 +340,10 @@ public class CoverageMopUpTests
     [Test]
     public async Task Shapefile_directory_write_emits_root_features_as_data_shp()
     {
-        var child = new FeatureCollection { Name = "extras" };
+        var child = new FeatureCollection
+        {
+            Name = "extras"
+        };
         child.Add(new Feature(new Point(5, 5)));
         var root = new FeatureCollection
         {

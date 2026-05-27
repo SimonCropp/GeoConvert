@@ -42,6 +42,16 @@ public sealed class RenderOptions
     public int PointRadius { get; set; } = 4;
 
     /// <summary>
+    /// Per-layer style override. Invoked once for each <see cref="FeatureCollection"/> visited during
+    /// rendering (the root plus every nested layer in <see cref="FeatureCollection.Children"/>). Return
+    /// null — or leave this property null — to use the default colors above; return a
+    /// <see cref="LayerStyle"/> to override any subset of them for that layer's features. Child layers
+    /// paint *after* their parent in pre-order, so they sit on top in source-over blending — pick
+    /// distinct fills/strokes here to tell layers apart in the output.
+    /// </summary>
+    public Func<FeatureCollection, LayerStyle?>? LayerStyle { get; set; }
+
+    /// <summary>
     /// Deflate level used for the PNG <c>IDAT</c> chunk. Defaults to <see cref="CompressionLevel.Optimal"/>;
     /// drop to <see cref="CompressionLevel.Fastest"/> for quicker writes or
     /// <see cref="CompressionLevel.SmallestSize"/> when output size matters more than CPU.
