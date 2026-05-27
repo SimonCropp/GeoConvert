@@ -22,7 +22,7 @@ public sealed class RenderOptions
     public MapProjection Projection { get; set; } = MapProjection.Auto;
 
     /// <summary>Image width in pixels.</summary>
-    public int Width { get; set; } = 1024;
+    public int Width { get; set; } = 2048;
 
     /// <summary>Image height in pixels. When 0, it is derived from <see cref="Width"/> and the aspect ratio.</summary>
     public int Height { get; set; }

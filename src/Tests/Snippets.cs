@@ -139,7 +139,6 @@ static class Snippets
         var options = new RenderOptions
         {
             Bounds = new Envelope(-10, 35, 30, 60),
-            Width = 1200,
             LayerStyle = layer => layer.Name switch
             {
                 "basemap" => new()
@@ -177,7 +176,6 @@ static class Snippets
 
         var options = new RenderOptions
         {
-            Width = 1200,
             LayerStyle = layer => layer.Name switch
             {
                 "basemap" => new()
@@ -243,7 +241,6 @@ static class Snippets
         var options = new RenderOptions
         {
             Bounds = MapRenderer.WebMercatorWorldBounds,
-            Width = 1200,
             Projection = MapProjection.WebMercator,
         };
 
@@ -263,7 +260,6 @@ static class Snippets
         // so this avoids both plate-carrée's high-latitude squish and Web Mercator's pole stretch.
         var options = new RenderOptions
         {
-            Width = 1600,
             Projection = MapProjection.Lambert,
         };
 
@@ -288,10 +284,7 @@ static class Snippets
         // inter-lobe gaps) reads clearly.
         var options = new RenderOptions
         {
-            Bounds = new Envelope(-180, -90, 180, 90),
-            Width = 1600,
             Projection = MapProjection.Goode,
-            Ocean = new(200, 220, 240),
         };
 
         MapRenderer.RenderPng(features, "world.png", options);

@@ -835,7 +835,6 @@ public class PngTests
             new()
             {
                 Bounds = new Envelope(-180, -90, 180, 90),
-                Width = 1200,
                 Projection = MapProjection.Goode,
                 Ocean = new(200, 220, 240),
             });
@@ -870,7 +869,6 @@ public class PngTests
             new()
             {
                 Bounds = MapRenderer.WebMercatorWorldBounds,
-                Width = 1200,
                 Projection = MapProjection.WebMercator,
             });
 

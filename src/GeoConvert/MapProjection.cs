@@ -48,13 +48,17 @@ public enum MapProjection
     Lambert,
 
     /// <summary>
-    /// Goode's Homolosine in its conventional *interrupted* form: pseudocylindrical and equal-area,
-    /// split into two northern and four southern lobes meeting along ocean meridians (-40° in the
-    /// north, -100°/-20°/+80° in the south). Inside each lobe the projection is the classic
-    /// Homolosine — sinusoidal between ±40°44'11.8" and Mollweide outside that band, joined with a
-    /// small vertical offset so the seam reads as smooth. The interruptions absorb the distortion
-    /// that would otherwise pile up at the lobe edges, so the major continents stay intact inside
-    /// a single lobe and read at honest (equal-area) size — Greenland comes out closer to its true
+    /// Goode's Homolosine in its *interrupted* form, with a Greenland cut-out: pseudocylindrical
+    /// and equal-area, split into two northern and four southern lobes meeting along ocean
+    /// meridians (-40° in the north, -100°/-20°/+80° in the south). The northern cut steps east
+    /// to lon=-10° above lat=60° so Greenland (and Iceland) are pulled into the Americas lobe and
+    /// render adjacent to Canada — Greenland is geographically Canada's neighbour, separated by
+    /// the Greenland Sea, so this anchoring reads more naturally than splitting Greenland at the
+    /// conventional -40° meridian. Inside each lobe the projection is the classic Homolosine —
+    /// sinusoidal between ±40°44'11.8" and Mollweide outside that band, joined with a small
+    /// vertical offset so the seam reads as smooth. The interruptions absorb the distortion that
+    /// would otherwise pile up at the lobe edges, so the major continents stay intact inside a
+    /// single lobe and read at honest (equal-area) size — Greenland comes out closer to its true
     /// size relative to Africa, unlike under <see cref="PlateCarree"/> or
     /// <see cref="WebMercator"/>. This is what <see cref="Auto"/> picks for a world map.
     /// <para>

@@ -4,9 +4,7 @@
 [![NuGet Status](https://img.shields.io/nuget/v/GeoConvert.svg?label=GeoConvert)](https://www.nuget.org/packages/GeoConvert/)
 [![NuGet Status](https://img.shields.io/nuget/v/GeoConvert.Cli.svg?label=GeoConvert.Cli)](https://www.nuget.org/packages/GeoConvert.Cli/)
 
-Convert maps between geospatial formats, with **no third-party dependencies** — only the .NET base
-class libraries (`System.Text.Json`, `System.Xml`, `System.IO.Compression`). It can also render a
-bounding box to a PNG image. Ships as a library and a `geoconvert` command line tool.
+Convert maps between geospatial formats, with **no third-party dependencies** — only the .NET base class libraries (`System.Text.Json`, `System.Xml`, `System.IO.Compression`). It can also render a bounding box to a PNG image. Ships as a library and a `geoconvert` command line tool.
 
 
 ## Supported formats
@@ -144,13 +142,12 @@ var features = GeoConverter.Read("countries.geojson");
 var options = new RenderOptions
 {
     Bounds = MapRenderer.WebMercatorWorldBounds,
-    Width = 1200,
     Projection = MapProjection.WebMercator,
 };
 
 MapRenderer.RenderPng(features, "world.png", options);
 ```
-<sup><a href='/src/Tests/Snippets.cs#L236-L252' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderWebMercator' title='Start of snippet'>anchor</a></sup>
+<sup><a href='/src/Tests/Snippets.cs#L234-L249' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderWebMercator' title='Start of snippet'>anchor</a></sup>
 <!-- endSnippet -->
 
 From the command line, pass `--projection`:
@@ -171,20 +168,19 @@ var features = GeoConverter.Read("states.geojson");
 // so this avoids both plate-carrée's high-latitude squish and Web Mercator's pole stretch.
 var options = new RenderOptions
 {
-    Width = 1600,
     Projection = MapProjection.Lambert,
 };
 
 MapRenderer.RenderPng(features, "states.png", options);
 ```
-<sup><a href='/src/Tests/Snippets.cs#L257-L272' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderLambert' title='Start of snippet'>anchor</a></sup>
+<sup><a href='/src/Tests/Snippets.cs#L254-L268' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderLambert' title='Start of snippet'>anchor</a></sup>
 <!-- endSnippet -->
 
 ```
 geoconvert states.geojson states.png --projection lambert --size 1600
 ```
 
-For a world map, `MapProjection.Goode` is what `Auto` picks under the covers — and what the explicit setting selects. It's the conventional *interrupted* form of Goode's Homolosine: the world is split into two northern and four southern lobes that meet along ocean meridians (-40° in the north; -100°, -20° and +80° in the south), and each lobe is the classic Homolosine — sinusoidal between ±40°44'11.8" and Mollweide outside that band. The interruptions absorb the distortion that would otherwise pile up at the lobe edges, so the major continents stay intact inside one lobe and the projection is equal-area: Greenland reads at honest size relative to Africa, unlike under plate carrée or Web Mercator. Polygons that straddle a lobe boundary are clipped with Sutherland-Hodgman before projection so each lobe's contribution closes along the clip meridian, and polylines are split at the boundaries; Antarctica falls inside the four southern lobes and reads as four separate pieces along the bottom of the map, which is the visual signature of the projection. Setting `RenderOptions.Ocean` paints each lobe with that colour before the continents render, so the lobed shape (and the inter-lobe gaps) pops visually.
+For a world map, `MapProjection.Goode` is what `Auto` picks under the covers — and what the explicit setting selects. It's the *interrupted* form of Goode's Homolosine with a Greenland cut-out: the world is split into two northern and four southern lobes that meet along ocean meridians (-40° in the north; -100°, -20° and +80° in the south), and the northern cut steps east to lon=-10° above lat=60° so Greenland (and Iceland) render adjacent to Canada in the Americas lobe rather than being bisected at -40°. Inside each lobe the projection is the classic Homolosine — sinusoidal between ±40°44'11.8" and Mollweide outside that band. The interruptions absorb the distortion that would otherwise pile up at the lobe edges, so the major continents stay intact and the projection is equal-area: Greenland reads at honest size relative to Africa, unlike under plate carrée or Web Mercator. Polygons that straddle a lobe boundary are clipped with Sutherland-Hodgman before projection so each lobe's contribution closes along the clip meridian, and polylines are split at the boundaries; Antarctica falls inside the four southern lobes and reads as four separate pieces along the bottom of the map, which is the visual signature of the projection. Setting `RenderOptions.Ocean` paints each lobe with that colour before the continents render, so the lobed shape (and the inter-lobe gaps) pops visually.
 
 <!-- snippet: RenderGoode -->
 <a id='snippet-RenderGoode'></a>
@@ -201,24 +197,19 @@ var features = GeoConverter.Read("countries.geojson");
 // inter-lobe gaps) reads clearly.
 var options = new RenderOptions
 {
-    Bounds = new Envelope(-180, -90, 180, 90),
-    Width = 1600,
     Projection = MapProjection.Goode,
-    Ocean = new(200, 220, 240),
 };
 
 MapRenderer.RenderPng(features, "world.png", options);
 ```
-<sup><a href='/src/Tests/Snippets.cs#L277-L299' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderGoode' title='Start of snippet'>anchor</a></sup>
+<sup><a href='/src/Tests/Snippets.cs#L273-L292' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderGoode' title='Start of snippet'>anchor</a></sup>
 <!-- endSnippet -->
 
 ```
 geoconvert world.geojson world.png --projection goode --size 1600
 ```
 
-Anything more exotic (UTM, Albers Equal-Area, polar stereographic, …) is out of scope — the input
-model is always WGS84, so reprojection has to happen upstream and the renderer is fed already-projected
-coordinates (it treats X/Y as planar either way).
+Anything more exotic (UTM, Albers Equal-Area, polar stereographic, …) is out of scope — the input model is always WGS84, so reprojection has to happen upstream and the renderer is fed already-projected coordinates (it treats X/Y as planar either way).
 
 
 ### Per-layer styling
@@ -252,7 +243,6 @@ basemap.Children.Add(roads);
 var options = new RenderOptions
 {
     Bounds = new Envelope(-10, 35, 30, 60),
-    Width = 1200,
     LayerStyle = layer => layer.Name switch
     {
         "basemap" => new()
@@ -271,7 +261,7 @@ var options = new RenderOptions
 
 MapRenderer.RenderPng(basemap, "europe.png", options);
 ```
-<sup><a href='/src/Tests/Snippets.cs#L116-L161' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderLayers' title='Start of snippet'>anchor</a></sup>
+<sup><a href='/src/Tests/Snippets.cs#L116-L160' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderLayers' title='Start of snippet'>anchor</a></sup>
 <!-- endSnippet -->
 
 When the layers come from independent sources (typically a basemap file plus an overlay file), pass the collections as a list — they render in order, first under, last on top. Each `FeatureCollection` is a top-level layer for `RenderOptions.LayerStyle`, and the rendered extent defaults to the union of every input's bounds:
@@ -291,7 +281,6 @@ roads.Name = "roads";
 
 var options = new RenderOptions
 {
-    Width = 1200,
     LayerStyle = layer => layer.Name switch
     {
         "basemap" => new()
@@ -310,7 +299,7 @@ var options = new RenderOptions
 
 MapRenderer.RenderPng([basemap, roads], "stacked.png", options);
 ```
-<sup><a href='/src/Tests/Snippets.cs#L166-L199' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderStackedCollections' title='Start of snippet'>anchor</a></sup>
+<sup><a href='/src/Tests/Snippets.cs#L165-L197' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderStackedCollections' title='Start of snippet'>anchor</a></sup>
 <!-- endSnippet -->
 
 
@@ -352,7 +341,7 @@ using (var parquet = File.Create("world.parquet"))
     GeoParquet.Write(parquet, features, ParquetCompression.Gzip, CompressionLevel.SmallestSize);
 }
 ```
-<sup><a href='/src/Tests/Snippets.cs#L206-L231' title='Snippet source file'>snippet source</a> | <a href='#snippet-Compression' title='Start of snippet'>anchor</a></sup>
+<sup><a href='/src/Tests/Snippets.cs#L204-L229' title='Snippet source file'>snippet source</a> | <a href='#snippet-Compression' title='Start of snippet'>anchor</a></sup>
 <!-- endSnippet -->
 
 
@@ -445,8 +434,7 @@ foreach (var feature in root)
 
 ## Benchmarks
 
-[BenchmarkDotNet](https://benchmarkdotnet.org/) benchmarks live in `src/Benchmarks` and must run in
-Release:
+[BenchmarkDotNet](https://benchmarkdotnet.org/) benchmarks live in `src/Benchmarks` and must run inRelease:
 
 ```
 dotnet run -c Release --project src/Benchmarks -- --filter "*"
@@ -458,56 +446,21 @@ dotnet run -c Release --project src/Benchmarks -- --filter "*"
 
 ## Notes and limitations
 
-* **Shapefile** holds a single geometry category per file; writing a collection that mixes points,
-  lines and polygons throws. This is mandated by the format, not a GeoConvert choice — the `.shp`
-  header declares one shape type for the whole file, so a mixed collection has no valid encoding and
-  the consumer must split it into one file per geometry type first. Output is 2D: the format does
-  define Z and M variants, but GeoConvert drops those ordinates rather than emit them. A WGS84 `.prj`
-  is emitted. When `Shapefile.Read`/`Shapefile.Write` is given a directory (or a path ending in a
-  separator) instead of a `.shp`, the directory is treated as a bundled dataset: one child layer per
-  `.shp` on read, one `.shp` per child on write — the natural shape for ESRI/Natural Earth bundles
-  that ship several shapefiles together.
-* **FlatGeobuf** is written without the optional packed R-tree spatial index
-  (`index_node_size = 0`) and is 2D. The index is a query accelerator, not data: it lets a reader
-  fetch features in a bounding box without scanning the whole file, but carries no information the
-  feature records don't. So GeoConvert reads an indexed file by computing the index size and skipping
-  past it — full-file conversion needs every feature anyway — and writes none, leaving output that is
-  still valid FlatGeobuf (GDAL, QGIS and flatgeobuf.org read it fine) for the consumer to re-index on
-  import if it wants spatial queries. Emitting one would mean hand-rolling a Hilbert R-tree to honour
-  the no-dependency rule, which is real complexity for a benefit a conversion tool rarely needs.
-* **GPX** reads waypoints, routes and tracks into child layers named `waypoints`, `routes` and
-  `tracks` — the only way to preserve the wpt/rte/trk distinction across a round trip (geometry type
-  alone doesn't carry it, since both rte and trk are line strings). Writing a flat collection
-  dispatches by geometry type (LineString → trk); writing a layered collection routes each feature
-  back to its original element. GPX has no native area type, so polygons are written as a track with
-  one segment per ring, multi polygons flatten every ring into a single track, and geometry
-  collections write each member geometry in turn. Reading a track with several segments yields a
-  multi line string, so polygons do not survive a round trip as polygons.
-* **KML / KMZ** preserve `<Folder>` hierarchy as nested `FeatureCollection.Children`. A KMZ archive
-  with several `.kml` entries reads as a root with one child per document; on write the whole layered
-  tree is stored as a single `doc.kml` (multi-document packaging is not reconstructed).
-* **TopoJSON** preserves the top-level `objects` dict as child layers (one per entry, keyed by
-  `Name`). The dict is single-level, so grandchildren are flattened into their parent on write.
+* **Shapefile** holds a single geometry category per file; writing a collection that mixes points, lines and polygons throws. This is mandated by the format, not a GeoConvert choice — the `.shp` header declares one shape type for the whole file, so a mixed collection has no valid encoding and the consumer must split it into one file per geometry type first. Output is 2D: the format does define Z and M variants, but GeoConvert drops those ordinates rather than emit them. A WGS84 `.prj` is emitted. When `Shapefile.Read`/`Shapefile.Write` is given a directory (or a path ending in a separator) instead of a `.shp`, the directory is treated as a bundled dataset: one child layer per `.shp` on read, one `.shp` per child on write — the natural shape for ESRI/Natural Earth bundles that ship several shapefiles together.
+* **FlatGeobuf** is written without the optional packed R-tree spatial index (`index_node_size = 0`) and is 2D. The index is a query accelerator, not data: it lets a reader fetch features in a bounding box without scanning the whole file, but carries no information the feature records don't. So GeoConvert reads an indexed file by computing the index size and skipping past it — full-file conversion needs every feature anyway — and writes none, leaving output that is still valid FlatGeobuf (GDAL, QGIS and flatgeobuf.org read it fine) for the consumer to re-index on import if it wants spatial queries. Emitting one would mean hand-rolling a Hilbert R-tree to honour the no-dependency rule, which is real complexity for a benefit a conversion tool rarely needs.
+* **GPX** reads waypoints, routes and tracks into child layers named `waypoints`, `routes` and `tracks` — the only way to preserve the wpt/rte/trk distinction across a round trip (geometry type alone doesn't carry it, since both rte and trk are line strings). Writing a flat collection dispatches by geometry type (LineString → trk); writing a layered collection routes each feature back to its original element. GPX has no native area type, so polygons are written as a track with one segment per ring, multi polygons flatten every ring into a single track, and geometry collections write each member geometry in turn. Reading a track with several segments yields a multi line string, so polygons do not survive a round trip as polygons.
+* **KML / KMZ** preserve `<Folder>` hierarchy as nested `FeatureCollection.Children`. A KMZ archive with several `.kml` entries reads as a root with one child per document; on write the whole layered tree is stored as a single `doc.kml` (multi-document packaging is not reconstructed).
+* **TopoJSON** preserves the top-level `objects` dict as child layers (one per entry, keyed by `Name`). The dict is single-level, so grandchildren are flattened into their parent on write.
 * **WKT** and **WKB** carry geometry only — feature attributes are dropped on write.
-* **GeoParquet** is written as a single row group with PLAIN-encoded pages and a flat schema;
-  geometry is stored as WKB (Z/M preserved) with the CRS defaulting to OGC:CRS84. Page compression
-  defaults to Snappy and can be switched to `Uncompressed` or `Gzip` (with a tunable
-  `CompressionLevel`) via the `ParquetCompression` overload of `GeoParquet.Write`. The whole Parquet
-  container is hand-rolled to honour the no-dependency rule, so the supported surface is a subset: on
-  read it also handles dictionary encoding and data page V2 (as written by GDAL, DuckDB and pyarrow).
-  **Zstd** pages are read on **.NET 11** builds (where Zstd is part of the BCL) and rejected with a
-  clear error on earlier targets; Zstd is not exposed on the writer.
-* **PNG** is a write-only raster export; reading a `.png` throws. It needs an extent — when no
-  `Bounds` is given, the full extent of the data is used.
+* **GeoParquet** is written as a single row group with PLAIN-encoded pages and a flat schema; geometry is stored as WKB (Z/M preserved) with the CRS defaulting to OGC:CRS84. Page compression defaults to Snappy and can be switched to `Uncompressed` or `Gzip` (with a tunable `CompressionLevel`) via the `ParquetCompression` overload of `GeoParquet.Write`. The whole Parquet container is hand-rolled to honour the no-dependency rule, so the supported surface is a subset: on read it also handles dictionary encoding and data page V2 (as written by GDAL, DuckDB and pyarrow). **Zstd** pages are read on **.NET 11** builds (where Zstd is part of the BCL) and rejected with a clear error on earlier targets; Zstd is not exposed on the writer.
+* **PNG** is a write-only raster export; reading a `.png` throws. It needs an extent — when no `Bounds` is given, the full extent of the data is used.
 * Property values are scalars (`string`, `long`, `double`, `bool`); a nested JSON object or array is stored as its raw JSON text in a single string property.
 
 
 ## Sample maps for tests
 
 * `src/Tests/australian_suburbs.geojson` — sourced from https://github.com/anthwri/GeoJson-Data.
-* `src/Tests/world.geojson` — [Natural Earth](https://www.naturalearthdata.com/) 1:110m Admin 0
-  Countries, public domain. Downloaded from
-  https://github.com/nvkelso/natural-earth-vector/blob/master/geojson/ne_110m_admin_0_countries.geojson.
+* `src/Tests/world.geojson` — [Natural Earth](https://www.naturalearthdata.com/) 1:110m Admin 0 Countries, public domain. Downloaded from https://github.com/nvkelso/natural-earth-vector/blob/master/geojson/ne_110m_admin_0_countries.geojson.
 
 
 ## Icon
