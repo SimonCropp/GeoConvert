@@ -295,7 +295,7 @@ public static class FlatGeobuf
         var bounds = collection.GetBounds();
         var envelope = bounds.IsEmpty
             ? 0
-            : builder.CreateDoubleVector(stackalloc double[] { bounds.MinX, bounds.MinY, bounds.MaxX, bounds.MaxY });
+            : builder.CreateDoubleVector([bounds.MinX, bounds.MinY, bounds.MaxX, bounds.MaxY]);
 
         builder.StartTable(14);
         builder.AddOffset(headerEnvelope, envelope);

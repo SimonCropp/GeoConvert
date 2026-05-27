@@ -9,21 +9,33 @@ public static class MapRenderer
 {
     public static byte[] RenderPng(FeatureCollection collection, RenderOptions? options = null)
     {
+        options ??= new();
+        var bounds = Validate(collection, options);
         using var memory = new MemoryStream();
-        RenderPng(collection, memory, options);
+        Render(collection, memory, options, bounds);
         return memory.ToArray();
     }
 
     public static void RenderPng(FeatureCollection collection, string path, RenderOptions? options = null)
     {
+        options ??= new();
+        // Validate before File.Create so a throw leaves the destination untouched instead of stranding
+        // a 0-byte file. Mid-render stream failures (disk full, etc.) can still leave a partial file,
+        // but those are unrecoverable I/O errors where a partial file is the conventional signal.
+        var bounds = Validate(collection, options);
         using var stream = File.Create(path);
-        RenderPng(collection, stream, options);
+        Render(collection, stream, options, bounds);
     }
 
     public static void RenderPng(FeatureCollection collection, Stream stream, RenderOptions? options = null)
     {
         options ??= new();
+        var bounds = Validate(collection, options);
+        Render(collection, stream, options, bounds);
+    }
 
+    static Envelope Validate(FeatureCollection collection, RenderOptions options)
+    {
         var bounds = options.Bounds ?? collection.GetBounds();
         if (bounds.IsEmpty)
         {
@@ -36,6 +48,11 @@ public static class MapRenderer
             throw new GeoConvertException("RenderOptions.Width must be positive.");
         }
 
+        return bounds;
+    }
+
+    static void Render(FeatureCollection collection, Stream stream, RenderOptions options, Envelope bounds)
+    {
         var projection = new Projection(bounds, options);
         var canvas = new Canvas(projection.Width, projection.Height, options.Background);
 

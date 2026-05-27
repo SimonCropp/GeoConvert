@@ -24,10 +24,9 @@ static class Dbf
         var length = (int)memory.Length;
         var data = memory.GetBuffer();
 
-        var position = 0;
         // header: 1 version + 3 date + 4 recordCount + 2 headerLen + 2 recordLen + 20 reserved = 32 bytes
         var recordCount = BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(4));
-        position = 32;
+        var position = 32;
 
         var fields = new List<Field>();
         Span<byte> nameBytes = stackalloc byte[11];
@@ -157,7 +156,7 @@ static class Dbf
             stream.Write(fieldDescriptor);
         }
 
-        Span<byte> terminator = stackalloc byte[1] { 0x0D };
+        Span<byte> terminator = [0x0D];
         stream.Write(terminator);
 
         // One reusable record buffer; format directly into per-field slices, skipping the per-cell
@@ -181,7 +180,7 @@ static class Dbf
             stream.Write(record);
         }
 
-        Span<byte> eof = stackalloc byte[1] { 0x1A };
+        Span<byte> eof = [0x1A];
         stream.Write(eof);
     }
 
