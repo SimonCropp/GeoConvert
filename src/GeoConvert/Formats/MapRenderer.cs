@@ -20,36 +20,53 @@ public static class MapRenderer
     public static Envelope WebMercatorWorldBounds { get; } =
         new(-180, -WebMercatorMaxLatitude, 180, WebMercatorMaxLatitude);
 
-    public static byte[] RenderPng(FeatureCollection features, RenderOptions? options = null)
+    public static byte[] RenderPng(FeatureCollection features, RenderOptions? options = null) =>
+        RenderPng([features], options);
+
+    public static void RenderPng(FeatureCollection features, string path, RenderOptions? options = null) =>
+        RenderPng([features], path, options);
+
+    public static void RenderPng(FeatureCollection features, Stream stream, RenderOptions? options = null) =>
+        RenderPng([features], stream, options);
+
+    /// <summary>
+    /// Renders multiple <see cref="FeatureCollection"/>s as stacked top-level layers, in order — the
+    /// first paints under, the last on top under source-over blending. Each collection is treated as
+    /// its own layer for <see cref="RenderOptions.LayerStyle"/> (and any nested
+    /// <see cref="FeatureCollection.Children"/> still recurse from there). When
+    /// <see cref="RenderOptions.Bounds"/> is null the rendered extent is the union of all input
+    /// collections.
+    /// </summary>
+    public static byte[] RenderPng(IReadOnlyList<FeatureCollection> layers, RenderOptions? options = null)
     {
         options ??= new();
-        var bounds = Validate(features, options);
+        var bounds = Validate(layers, options);
         using var memory = new MemoryStream();
-        Render(features, memory, options, bounds);
+        Render(layers, memory, options, bounds);
         return memory.ToArray();
     }
 
-    public static void RenderPng(FeatureCollection features, string path, RenderOptions? options = null)
+    public static void RenderPng(IReadOnlyList<FeatureCollection> layers, string path, RenderOptions? options = null)
     {
         options ??= new();
         // Validate before File.Create so a throw leaves the destination untouched instead of stranding
         // a 0-byte file. Mid-render stream failures (disk full, etc.) can still leave a partial file,
         // but those are unrecoverable I/O errors where a partial file is the conventional signal.
-        var bounds = Validate(features, options);
+        var bounds = Validate(layers, options);
         using var stream = File.Create(path);
-        Render(features, stream, options, bounds);
+        Render(layers, stream, options, bounds);
     }
 
-    public static void RenderPng(FeatureCollection features, Stream stream, RenderOptions? options = null)
+    public static void RenderPng(IReadOnlyList<FeatureCollection> layers, Stream stream, RenderOptions? options = null)
     {
         options ??= new();
-        var bounds = Validate(features, options);
-        Render(features, stream, options, bounds);
+        var bounds = Validate(layers, options);
+        Render(layers, stream, options, bounds);
     }
 
-    static Envelope Validate(FeatureCollection features, RenderOptions options)
+    static Envelope Validate(IReadOnlyList<FeatureCollection> layers, RenderOptions options)
     {
-        var bounds = options.Bounds ?? features.GetBounds();
+        var bounds = options.Bounds ?? UnionBounds(layers);
         if (bounds.IsEmpty)
         {
             throw new GeoConvertException(
@@ -64,95 +81,134 @@ public static class MapRenderer
         return bounds;
     }
 
-    static void Render(FeatureCollection features, Stream stream, RenderOptions options, Envelope bounds)
+    static Envelope UnionBounds(IReadOnlyList<FeatureCollection> layers)
+    {
+        var bounds = Envelope.Empty;
+        foreach (var layer in layers)
+        {
+            bounds = bounds.ExpandToInclude(layer.GetBounds());
+        }
+
+        return bounds;
+    }
+
+    static void Render(IReadOnlyList<FeatureCollection> layers, Stream stream, RenderOptions options, Envelope bounds)
     {
         var projection = new Projection(bounds, options);
         var canvas = new Canvas(projection.Width, projection.Height, options.Background);
 
-        foreach (var feature in features)
+        foreach (var layer in layers)
         {
-            if (feature.Geometry is { } geometry)
-            {
-                Draw(canvas, geometry, projection, options);
-            }
+            DrawLayer(canvas, layer, projection, options);
         }
 
         Png.Write(stream, canvas.Pixels, canvas.Width, canvas.Height, options.Compression);
     }
 
-    static void Draw(Canvas canvas, Geometry geometry, Projection projection, RenderOptions options)
+    // Pre-order: a layer paints its own features first, then recurses into its children. Source-over
+    // blending means whatever paints last sits on top, so children naturally appear over their parent
+    // — pick layer styles via RenderOptions.LayerStyle to keep them visually distinct.
+    static void DrawLayer(Canvas canvas, FeatureCollection layer, Projection projection, RenderOptions options)
+    {
+        var style = Resolve(options.LayerStyle?.Invoke(layer), options);
+        foreach (var feature in layer.Features)
+        {
+            if (feature.Geometry is { } geometry)
+            {
+                Draw(canvas, geometry, projection, style);
+            }
+        }
+
+        foreach (var child in layer.Children)
+        {
+            DrawLayer(canvas, child, projection, options);
+        }
+    }
+
+    // Collapses the user-facing LayerStyle (any subset of overrides) into the four concrete values the
+    // rasterizer needs, falling back to RenderOptions defaults for each null property independently.
+    static ResolvedStyle Resolve(LayerStyle? overrides, RenderOptions options) =>
+        new(
+            overrides?.Stroke ?? options.Stroke,
+            overrides?.Fill ?? options.Fill,
+            overrides?.StrokeWidth ?? options.StrokeWidth,
+            overrides?.PointRadius ?? options.PointRadius);
+
+    static void Draw(Canvas canvas, Geometry geometry, Projection projection, ResolvedStyle style)
     {
         switch (geometry)
         {
             case Point point:
                 var (px, py) = projection.ToPixel(point.Coordinate);
-                canvas.FillDisc(px, py, options.PointRadius, options.Stroke);
+                canvas.FillDisc(px, py, style.PointRadius, style.Stroke);
                 break;
             case MultiPoint multiPoint:
                 foreach (var position in multiPoint.Positions)
                 {
                     var (x, y) = projection.ToPixel(position);
-                    canvas.FillDisc(x, y, options.PointRadius, options.Stroke);
+                    canvas.FillDisc(x, y, style.PointRadius, style.Stroke);
                 }
 
                 break;
             case LineString line:
-                StrokePath(canvas, line.Positions, projection, options);
+                StrokePath(canvas, line.Positions, projection, style);
                 break;
             case MultiLineString multiLine:
                 foreach (var child in multiLine.LineStrings)
                 {
-                    StrokePath(canvas, child.Positions, projection, options);
+                    StrokePath(canvas, child.Positions, projection, style);
                 }
 
                 break;
             case Polygon polygon:
-                DrawPolygon(canvas, polygon, projection, options);
+                DrawPolygon(canvas, polygon, projection, style);
                 break;
             case MultiPolygon multiPolygon:
                 foreach (var child in multiPolygon.Polygons)
                 {
-                    DrawPolygon(canvas, child, projection, options);
+                    DrawPolygon(canvas, child, projection, style);
                 }
 
                 break;
             case GeometryCollection collection:
                 foreach (var child in collection.Geometries)
                 {
-                    Draw(canvas, child, projection, options);
+                    Draw(canvas, child, projection, style);
                 }
 
                 break;
         }
     }
 
-    static void DrawPolygon(Canvas canvas, Polygon polygon, Projection projection, RenderOptions options)
+    static void DrawPolygon(Canvas canvas, Polygon polygon, Projection projection, ResolvedStyle style)
     {
         var rings = polygon.Rings.Select(projection.ToPixels).ToArray();
-        canvas.FillPolygon(rings, options.Fill);
+        canvas.FillPolygon(rings, style.Fill);
         foreach (var ring in rings)
         {
-            StrokeRing(canvas, ring, options);
+            StrokeRing(canvas, ring, style);
         }
     }
 
-    static void StrokePath(Canvas canvas, IReadOnlyList<Position> positions, Projection projection, RenderOptions options)
+    static void StrokePath(Canvas canvas, IReadOnlyList<Position> positions, Projection projection, ResolvedStyle style)
     {
         for (var i = 0; i + 1 < positions.Count; i++)
         {
             var (x0, y0) = projection.ToPixel(positions[i]);
             var (x1, y1) = projection.ToPixel(positions[i + 1]);
-            canvas.StrokeLine(x0, y0, x1, y1, options.StrokeWidth, options.Stroke);
+            canvas.StrokeLine(x0, y0, x1, y1, style.StrokeWidth, style.Stroke);
         }
     }
 
-    static void StrokeRing(Canvas canvas, (double X, double Y)[] ring, RenderOptions options)
+    static void StrokeRing(Canvas canvas, (double X, double Y)[] ring, ResolvedStyle style)
     {
         for (var i = 0; i + 1 < ring.Length; i++)
         {
-            canvas.StrokeLine(ring[i].X, ring[i].Y, ring[i + 1].X, ring[i + 1].Y, options.StrokeWidth, options.Stroke);
+            canvas.StrokeLine(ring[i].X, ring[i].Y, ring[i + 1].X, ring[i + 1].Y, style.StrokeWidth, style.Stroke);
         }
     }
+
+    readonly record struct ResolvedStyle(Rgba Stroke, Rgba Fill, int StrokeWidth, int PointRadius);
 
     /// <summary>
     /// Maps longitude/latitude into pixel space: first through the chosen <see cref="MapProjection"/>
@@ -317,8 +373,8 @@ public static class MapRenderer
         // PlateCarree is the conventional fallback. The cutoffs are deliberately conservative — a
         // continental view like Africa (latSpan ≈ 73°) routes to PlateCarree, while regional views
         // like the contiguous US (lonSpan ≈ 60°, latSpan ≈ 25°) or Europe still pick Lambert.
-        const double AutoLatitudeSpanLimit = 60;
-        const double AutoLongitudeSpanLimit = 90;
+        const double autoLatitudeSpanLimit = 60;
+        const double autoLongitudeSpanLimit = 90;
 
         static MapProjection Resolve(MapProjection requested, Envelope bounds)
         {
@@ -327,7 +383,7 @@ public static class MapRenderer
                 return requested;
             }
 
-            if (bounds.Width >= AutoLongitudeSpanLimit || bounds.Height >= AutoLatitudeSpanLimit)
+            if (bounds.Width >= autoLongitudeSpanLimit || bounds.Height >= autoLatitudeSpanLimit)
             {
                 return MapProjection.PlateCarree;
             }
@@ -350,22 +406,27 @@ public static class MapRenderer
         // Reference longitude (radians) — the central meridian of the projection.
         readonly double lambda0;
 
-        // Cone constant (sin of the standard parallel for one-parallel LCC; derived from the two
-        // parallels otherwise). Sign follows the hemisphere: positive for northern bounds (cone opens
-        // downward), negative for southern, signalling which pole the cone's apex points away from.
-        readonly double n;
+        // How tightly the cone wraps the globe — the ratio between an angle on the unrolled cone and
+        // the corresponding longitude span (so a 360° trip around the parallel becomes coneConstant·360°
+        // on the flat map). Snyder's Working Manual calls this n; it's sin(φ₁) for a tangent cone, or
+        // derived from both standard parallels for a secant cone. Sign follows the hemisphere: positive
+        // for northern bounds (cone opens downward), negative for southern — signals which pole the
+        // cone's apex points away from.
+        readonly double coneConstant;
 
-        // Scaling constant F = cos(φ₁) · tan(π/4 + φ₁/2)^n / n, holding the projection's overall scale.
-        readonly double F;
+        // Radial scale of the cone — the numerator in ρ = coneScale / tan(π/4 + φ/2)^coneConstant,
+        // controlling how far each parallel sits from the cone's apex. Snyder's Working Manual calls
+        // this F; coneScale = cos(φ₁) · tan(π/4 + φ₁/2)^coneConstant / coneConstant.
+        readonly double coneScale;
 
         // ρ at the reference parallel φ₀ — the "false northing" baseline so the origin maps to y = 0.
         readonly double rho0;
 
-        LambertParameters(double lambda0, double n, double F, double rho0)
+        LambertParameters(double lambda0, double coneConstant, double coneScale, double rho0)
         {
             this.lambda0 = lambda0;
-            this.n = n;
-            this.F = F;
+            this.coneConstant = coneConstant;
+            this.coneScale = coneScale;
             this.rho0 = rho0;
         }
 
@@ -379,32 +440,32 @@ public static class MapRenderer
             var span = maxLat - minLat;
             var phi1 = (minLat + span / 6) * Math.PI / 180;
             var phi2 = (maxLat - span / 6) * Math.PI / 180;
-            var phi0 = ((minLat + maxLat) / 2) * Math.PI / 180;
-            var lambda0 = ((bounds.MinX + bounds.MaxX) / 2) * Math.PI / 180;
+            var phi0 = (minLat + maxLat) / 2 * Math.PI / 180;
+            var lambda0 = (bounds.MinX + bounds.MaxX) / 2 * Math.PI / 180;
 
-            double n;
+            double coneConstant;
             if (Math.Abs(phi1 - phi2) < 1e-10)
             {
                 // Single standard parallel (zero-height latitude span): cone tangent at φ₁.
-                n = Math.Sin(phi1);
+                coneConstant = Math.Sin(phi1);
             }
             else
             {
-                n = Math.Log(Math.Cos(phi1) / Math.Cos(phi2)) /
+                coneConstant = Math.Log(Math.Cos(phi1) / Math.Cos(phi2)) /
                     Math.Log(Math.Tan(Math.PI / 4 + phi2 / 2) / Math.Tan(Math.PI / 4 + phi1 / 2));
             }
 
-            // n → 0 means the cone has unfolded into a cylinder (bounds straddle the equator
+            // coneConstant → 0 means the cone has unfolded into a cylinder (bounds straddle the equator
             // symmetrically, or sit exactly on it); the LCC formulas degenerate and ρ blows up. Signal
             // the caller to fall back to a different projection rather than emit NaN pixels.
-            if (!double.IsFinite(n) || Math.Abs(n) < 1e-6)
+            if (!double.IsFinite(coneConstant) || Math.Abs(coneConstant) < 1e-6)
             {
                 return null;
             }
 
-            var F = Math.Cos(phi1) * Math.Pow(Math.Tan(Math.PI / 4 + phi1 / 2), n) / n;
-            var rho0 = F / Math.Pow(Math.Tan(Math.PI / 4 + phi0 / 2), n);
-            return new(lambda0, n, F, rho0);
+            var coneScale = Math.Cos(phi1) * Math.Pow(Math.Tan(Math.PI / 4 + phi1 / 2), coneConstant) / coneConstant;
+            var rho0 = coneScale / Math.Pow(Math.Tan(Math.PI / 4 + phi0 / 2), coneConstant);
+            return new(lambda0, coneConstant, coneScale, rho0);
         }
 
         public (double X, double Y) Project(double longitude, double latitude)
@@ -414,8 +475,8 @@ public static class MapRenderer
             // against malformed input reaching the rasterizer.
             var phi = Math.Clamp(latitude, -89.999, 89.999) * Math.PI / 180;
             var lambda = longitude * Math.PI / 180;
-            var rho = F / Math.Pow(Math.Tan(Math.PI / 4 + phi / 2), n);
-            var theta = n * (lambda - lambda0);
+            var rho = coneScale / Math.Pow(Math.Tan(Math.PI / 4 + phi / 2), coneConstant);
+            var theta = coneConstant * (lambda - lambda0);
             var x = rho * Math.Sin(theta);
             var y = rho0 - rho * Math.Cos(theta);
             // Convert to degree-equivalent units (matches the WebMercator output unit) so the scale-to-

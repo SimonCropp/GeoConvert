@@ -43,7 +43,10 @@ public static class TopoJson
         var collection = new FeatureCollection();
         foreach (var entry in root.GetProperty("objects").EnumerateObject())
         {
-            var layer = new FeatureCollection { Name = entry.Name };
+            var layer = new FeatureCollection
+            {
+                Name = entry.Name
+            };
             ReadObject(entry.Value, arcs, scale, translate, layer);
             collection.Children.Add(layer);
         }

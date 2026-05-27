@@ -36,9 +36,18 @@ public static class Gpx
     {
         using var reader = Xml.CreateReader(stream);
         var collection = new FeatureCollection();
-        var waypoints = new FeatureCollection { Name = "waypoints" };
-        var routes = new FeatureCollection { Name = "routes" };
-        var tracks = new FeatureCollection { Name = "tracks" };
+        var waypoints = new FeatureCollection
+        {
+            Name = "waypoints"
+        };
+        var routes = new FeatureCollection
+        {
+            Name = "routes"
+        };
+        var tracks = new FeatureCollection
+        {
+            Name = "tracks"
+        };
 
         reader.MoveToContent();
         Xml.ReadChildren(reader, () =>

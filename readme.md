@@ -42,7 +42,7 @@ Convert a file to another format (both formats inferred from their extensions):
 GeoConverter.Convert("cities.geojson", "cities.kml");
 GeoConverter.Convert("roads.shp", "roads.fgb");
 ```
-<sup><a href='/src/Tests/Snippets.cs#L6-L10' title='Snippet source file'>snippet source</a> | <a href='#snippet-Convert' title='Start of snippet'>anchor</a></sup>
+<sup><a href='/src/Tests/Snippets.cs#L6-L12' title='Snippet source file'>snippet source</a> | <a href='#snippet-Convert' title='Start of snippet'>anchor</a></sup>
 <!-- endSnippet -->
 
 Read into the common feature model, then write a different format:
@@ -64,7 +64,7 @@ foreach (var feature in collection)
 // Write it back out as a different format.
 GeoConverter.Write(collection, "roads.fgb");
 ```
-<sup><a href='/src/Tests/Snippets.cs#L15-L29' title='Snippet source file'>snippet source</a> | <a href='#snippet-ReadModifyWrite' title='Start of snippet'>anchor</a></sup>
+<sup><a href='/src/Tests/Snippets.cs#L17-L33' title='Snippet source file'>snippet source</a> | <a href='#snippet-ReadModifyWrite' title='Start of snippet'>anchor</a></sup>
 <!-- endSnippet -->
 
 Build a collection in memory and serialize it:
@@ -76,12 +76,15 @@ var collection = new FeatureCollection
 {
     new Feature(
         new Point(new(151.21, -33.87)),
-        new Dictionary<string, object?> { ["name"] = "Sydney" }),
+        new Dictionary<string, object?>
+        {
+            ["name"] = "Sydney"
+        }),
 };
 
 var geoJson = GeoJson.WriteString(collection);
 ```
-<sup><a href='/src/Tests/Snippets.cs#L34-L43' title='Snippet source file'>snippet source</a> | <a href='#snippet-BuildModel' title='Start of snippet'>anchor</a></sup>
+<sup><a href='/src/Tests/Snippets.cs#L38-L52' title='Snippet source file'>snippet source</a> | <a href='#snippet-BuildModel' title='Start of snippet'>anchor</a></sup>
 <!-- endSnippet -->
 
 
@@ -105,7 +108,7 @@ var options = new RenderOptions
 
 MapRenderer.RenderPng(features, "europe.png", options);
 ```
-<sup><a href='/src/Tests/Snippets.cs#L76-L88' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderToPng' title='Start of snippet'>anchor</a></sup>
+<sup><a href='/src/Tests/Snippets.cs#L97-L111' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderToPng' title='Start of snippet'>anchor</a></sup>
 <!-- endSnippet -->
 
 `RenderOptions` controls the extent (`Bounds`), pixel `Width`/`Height` (height is derived from the
@@ -156,7 +159,7 @@ var options = new RenderOptions
 
 MapRenderer.RenderPng(features, "world.png", options);
 ```
-<sup><a href='/src/Tests/Snippets.cs#L125-L139' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderWebMercator' title='Start of snippet'>anchor</a></sup>
+<sup><a href='/src/Tests/Snippets.cs#L236-L252' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderWebMercator' title='Start of snippet'>anchor</a></sup>
 <!-- endSnippet -->
 
 From the command line, pass `--projection`:
@@ -190,7 +193,7 @@ var options = new RenderOptions
 
 MapRenderer.RenderPng(features, "states.png", options);
 ```
-<sup><a href='/src/Tests/Snippets.cs#L144-L157' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderLambert' title='Start of snippet'>anchor</a></sup>
+<sup><a href='/src/Tests/Snippets.cs#L257-L272' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderLambert' title='Start of snippet'>anchor</a></sup>
 <!-- endSnippet -->
 
 ```
@@ -200,6 +203,106 @@ geoconvert states.geojson states.png --projection lambert --size 1600
 Anything more exotic (UTM, Albers Equal-Area, polar stereographic, …) is out of scope — the input
 model is always WGS84, so reprojection has to happen upstream and the renderer is fed already-projected
 coordinates (it treats X/Y as planar either way).
+
+
+### Per-layer styling
+
+When the input has nested sub-layers (see [layered collections](#layered-collections)) the renderer walks
+the tree depth-first, so a parent layer paints under its children — features added deeper in the tree
+appear on top in source-over blending. `RenderOptions.LayerStyle` is a callback that returns a
+`LayerStyle` for any given layer; any property left null inherits its default from `RenderOptions`, so a
+partial override (only a fill, or only a stroke width) doesn't have to repeat the other knobs.
+
+<!-- snippet: RenderLayers -->
+<a id='snippet-RenderLayers'></a>
+```cs
+// A FeatureCollection with named sub-layers — the renderer walks the tree depth-first, so a
+// parent layer paints under its children. RenderOptions.LayerStyle picks per-layer colors;
+// any property left null falls back to the defaults on RenderOptions.
+var basemap = new FeatureCollection
+{
+    Name = "basemap"
+};
+basemap.Add(
+    new Feature(
+        new Polygon(
+        [
+            [new(-10, 35), new(30, 35), new(30, 60), new(-10, 60), new(-10, 35)],
+        ])));
+
+var roads = new FeatureCollection
+{
+    Name = "roads"
+};
+roads.Add(new Feature(new LineString([new(0, 40), new(20, 55)])));
+basemap.Children.Add(roads);
+
+var options = new RenderOptions
+{
+    Bounds = new Envelope(-10, 35, 30, 60),
+    Width = 1200,
+    LayerStyle = layer => layer.Name switch
+    {
+        "basemap" => new()
+        {
+            Fill = new(230, 230, 230),
+            Stroke = new(180, 180, 180),
+        },
+        "roads" => new()
+        {
+            Stroke = new(200, 60, 60),
+            StrokeWidth = 3,
+        },
+        _ => null,
+    },
+};
+
+MapRenderer.RenderPng(basemap, "europe.png", options);
+```
+<sup><a href='/src/Tests/Snippets.cs#L116-L161' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderLayers' title='Start of snippet'>anchor</a></sup>
+<!-- endSnippet -->
+
+When the layers come from independent sources (typically a basemap file plus an overlay file), pass the
+collections as a list — they render in order, first under, last on top. Each `FeatureCollection` is a
+top-level layer for `RenderOptions.LayerStyle`, and the rendered extent defaults to the union of every
+input's bounds:
+
+<!-- snippet: RenderStackedCollections -->
+<a id='snippet-RenderStackedCollections'></a>
+```cs
+// When the layers come from independent sources (a basemap file plus an overlay file, say),
+// pass them as a list — they render in order, first under, last on top. Each FeatureCollection
+// is a top-level layer for RenderOptions.LayerStyle, so giving each one a Name is enough to
+// style them distinctly. When Bounds is null the rendered extent is the union of every input.
+var basemap = GeoConverter.Read("countries.geojson");
+basemap.Name = "basemap";
+
+var roads = GeoConverter.Read("roads.shp");
+roads.Name = "roads";
+
+var options = new RenderOptions
+{
+    Width = 1200,
+    LayerStyle = layer => layer.Name switch
+    {
+        "basemap" => new()
+        {
+            Fill = new(230, 230, 230),
+            Stroke = new(180, 180, 180),
+        },
+        "roads" => new()
+        {
+            Stroke = new(200, 60, 60),
+            StrokeWidth = 3,
+        },
+        _ => null,
+    },
+};
+
+MapRenderer.RenderPng([basemap, roads], "stacked.png", options);
+```
+<sup><a href='/src/Tests/Snippets.cs#L166-L199' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderStackedCollections' title='Start of snippet'>anchor</a></sup>
+<!-- endSnippet -->
 
 
 ## Compression
@@ -243,7 +346,7 @@ using (var parquet = File.Create("world.parquet"))
     GeoParquet.Write(parquet, features, ParquetCompression.Gzip, CompressionLevel.SmallestSize);
 }
 ```
-<sup><a href='/src/Tests/Snippets.cs#L95-L120' title='Snippet source file'>snippet source</a> | <a href='#snippet-Compression' title='Start of snippet'>anchor</a></sup>
+<sup><a href='/src/Tests/Snippets.cs#L206-L231' title='Snippet source file'>snippet source</a> | <a href='#snippet-Compression' title='Start of snippet'>anchor</a></sup>
 <!-- endSnippet -->
 
 
@@ -310,13 +413,22 @@ write into formats that don't.
 // native layer concept (KML folders, TopoJSON objects, KMZ documents, GPX wpt/rte/trk,
 // Shapefile bundle directories) round-trip this structure; everything else flattens via the
 // recursive enumerator.
-var cities = new FeatureCollection { Name = "cities" };
+var cities = new FeatureCollection
+{
+    Name = "cities"
+};
 cities.Add(new Feature(new Point(new(151.21, -33.87))));
 
-var roads = new FeatureCollection { Name = "roads" };
+var roads = new FeatureCollection
+{
+    Name = "roads"
+};
 roads.Add(new Feature(new LineString([new(151.20, -33.86), new(151.22, -33.88)])));
 
-var root = new FeatureCollection { Name = "sydney" };
+var root = new FeatureCollection
+{
+    Name = "sydney"
+};
 root.Children.Add(cities);
 root.Children.Add(roads);
 
@@ -328,7 +440,7 @@ foreach (var feature in root)
     Console.WriteLine(feature.Geometry);
 }
 ```
-<sup><a href='/src/Tests/Snippets.cs#L49-L71' title='Snippet source file'>snippet source</a> | <a href='#snippet-Layered' title='Start of snippet'>anchor</a></sup>
+<sup><a href='/src/Tests/Snippets.cs#L59-L92' title='Snippet source file'>snippet source</a> | <a href='#snippet-Layered' title='Start of snippet'>anchor</a></sup>
 <!-- endSnippet -->
 
 
