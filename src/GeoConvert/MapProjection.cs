@@ -7,6 +7,15 @@ namespace GeoConvert;
 public enum MapProjection
 {
     /// <summary>
+    /// Pick a projection from the data bounds: a regional extent (latitude span &lt; 60°, longitude
+    /// span &lt; 90°) renders as <see cref="Lambert"/>; anything wider falls back to
+    /// <see cref="PlateCarree"/>. This is the default — set <see cref="RenderOptions.Projection"/> to a
+    /// specific value to override. Auto never picks <see cref="WebMercator"/>: that's a layout choice
+    /// (tile-style), not a distortion-minimisation one, so it stays explicit.
+    /// </summary>
+    Auto,
+
+    /// <summary>
     /// Equirectangular: longitude and latitude are treated as planar X/Y with a uniform scale. Cheap and
     /// faithful for small extents near the equator; high-latitude features look compressed in Y at world
     /// scale.

@@ -170,7 +170,7 @@ public static class MapRenderer
 
         public Projection(Envelope bounds, RenderOptions options)
         {
-            kind = options.Projection;
+            kind = Resolve(options.Projection, bounds);
             // Lambert's per-bounds parameters (standard parallels, reference origin) are derived once
             // from the input envelope; every ProjectPoint call reuses them. If the bounds degenerate to
             // a cone-flattening case (equator-symmetric or zero-height latitude span), the projection
@@ -310,6 +310,32 @@ public static class MapRenderer
             // longitude — the downstream pixel math is scale-invariant either way, but this keeps the
             // aspect ratio of a degree-square patch at the equator equal to 1 in both projections.
             return Math.Log(Math.Tan(Math.PI / 4 + radians / 2)) * 180 / Math.PI;
+        }
+
+        // Threshold for Auto: above either span the LCC cone unfolds badly (the parallels grow too
+        // curved to read as a flat country-scale map) or the bounds approach world coverage where
+        // PlateCarree is the conventional fallback. The cutoffs are deliberately conservative — a
+        // continental view like Africa (latSpan ≈ 73°) routes to PlateCarree, while regional views
+        // like the contiguous US (lonSpan ≈ 60°, latSpan ≈ 25°) or Europe still pick Lambert.
+        const double AutoLatitudeSpanLimit = 60;
+        const double AutoLongitudeSpanLimit = 90;
+
+        static MapProjection Resolve(MapProjection requested, Envelope bounds)
+        {
+            if (requested != MapProjection.Auto)
+            {
+                return requested;
+            }
+
+            if (bounds.Width >= AutoLongitudeSpanLimit || bounds.Height >= AutoLatitudeSpanLimit)
+            {
+                return MapProjection.PlateCarree;
+            }
+
+            // Lambert handles its own degenerate cases (equator-symmetric or zero-span bounds) by
+            // returning null from TryFrom, which the renderer then falls back to PlateCarree — so we
+            // can pick Lambert unconditionally here and let that path handle the edge.
+            return MapProjection.Lambert;
         }
     }
 

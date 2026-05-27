@@ -10,9 +10,10 @@ Options:
   --to <format>          Force the output format.
   --bbox minX,minY,maxX,maxY   Extent to render (PNG output only).
   --size WIDTH[xHEIGHT]  Image size in pixels (PNG output only).
-  --projection <name>    Projection for PNG output: 'plate-carree' (default),
-                         'web-mercator', or 'lambert' (Lambert Conformal Conic,
-                         for country/state-scale maps with low distortion).
+  --projection <name>    Projection for PNG output: 'auto' (default — picks
+                         lambert for regional bounds, plate-carree otherwise),
+                         'plate-carree', 'web-mercator', or 'lambert' (Lambert
+                         Conformal Conic, low distortion at country/state scale).
   --list                 List supported formats.
   -h, --help             Show this help.
 

@@ -87,6 +87,8 @@ public class CliTests
     [Arguments("lambert")]
     [Arguments("lambert-conformal-conic")]
     [Arguments("LCC")]
+    [Arguments("auto")]
+    [Arguments("Automatic")]
     public async Task RendersPngWithProjection(string projection)
     {
         using var directory = new TempDirectory();

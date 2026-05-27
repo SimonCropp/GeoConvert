@@ -175,13 +175,16 @@ public class PngTests
             new Feature(new MultiPoint([new(3, 6), new(7, 3), new(5, 5)])),
         };
 
+        // Pinned to PlateCarree — same rationale as Render_RealMap: Auto would pick Lambert at this
+        // bounds size, but this snapshot is the regression for the linear-lon/lat layout.
         var png = MapRenderer.RenderPng(
             features,
             new()
             {
                 Bounds = new Envelope(-1, -1, 11, 9),
                 Width = 300,
-                Height = 220
+                Height = 220,
+                Projection = MapProjection.PlateCarree,
             });
 
         return Verify(new MemoryStream(png), "png");
@@ -190,12 +193,17 @@ public class PngTests
     [Test]
     public Task Render_RealMap()
     {
+        // Pinned to PlateCarree so this stays the explicit regression for the linear-lon/lat layout
+        // even though Auto would pick Lambert for Australia (lonSpan ≈ 41°, latSpan ≈ 34° — both well
+        // under the AutoLatitudeSpanLimit / AutoLongitudeSpanLimit cutoffs). The Lambert render of the
+        // same dataset is covered by Render_snapshot_lambert.
         var features = GeoConverter.Read(ProjectFiles.australian_suburbs_geojson);
         var png = MapRenderer.RenderPng(
             features,
             new()
             {
-                Width = 3000
+                Width = 3000,
+                Projection = MapProjection.PlateCarree,
             });
 
         return Verify(new MemoryStream(png), "png");
@@ -287,6 +295,81 @@ public class PngTests
         // The point renders as a small disc; locate its centroid column in each image.
         await Assert.That(NonBackgroundCentroidX(platePixels, 600))
             .IsNotEqualTo(NonBackgroundCentroidX(lambertPixels, 600));
+    }
+
+    [Test]
+    public async Task Auto_picks_lambert_for_regional_bounds()
+    {
+        // A US-shaped bbox (lonSpan 60°, latSpan 25°) sits well under the Auto cutoffs (90°/60°), so
+        // Auto must route to Lambert. Comparing pixel-equality against an explicit Lambert render is
+        // the tightest check — if Auto starts picking anything else, this fails immediately.
+        var features = new FeatureCollection
+        {
+            new Feature(new Point(-100, 40)),
+            new Feature(new Point(-80, 30)),
+            new Feature(new Point(-120, 45)),
+        };
+
+        static RenderOptions Build(MapProjection projection) => new()
+        {
+            Bounds = new Envelope(-125, 25, -65, 50),
+            Width = 200,
+            Height = 150,
+            Padding = 0,
+            Projection = projection,
+        };
+
+        var auto = MapRenderer.RenderPng(features, Build(MapProjection.Auto));
+        var lambert = MapRenderer.RenderPng(features, Build(MapProjection.Lambert));
+        await Assert.That(auto).IsEquivalentTo(lambert);
+    }
+
+    [Test]
+    public async Task Auto_picks_plate_carree_when_latitude_span_is_too_large()
+    {
+        // Africa-shaped bbox: latSpan 73° crosses the AutoLatitudeSpanLimit (60°) so the cone would
+        // distort too much; Auto must drop back to PlateCarree.
+        var features = new FeatureCollection
+        {
+            new Feature(new Point(0, 0)),
+        };
+
+        static RenderOptions Build(MapProjection projection) => new()
+        {
+            Bounds = new Envelope(-20, -35, 55, 38),
+            Width = 200,
+            Height = 200,
+            Padding = 0,
+            Projection = projection,
+        };
+
+        var auto = MapRenderer.RenderPng(features, Build(MapProjection.Auto));
+        var plate = MapRenderer.RenderPng(features, Build(MapProjection.PlateCarree));
+        await Assert.That(auto).IsEquivalentTo(plate);
+    }
+
+    [Test]
+    public async Task Auto_picks_plate_carree_when_longitude_span_is_too_large()
+    {
+        // A full-world longitude span (≥ AutoLongitudeSpanLimit = 90°) routes to PlateCarree regardless
+        // of latitude — Lambert can't sensibly draw half the planet.
+        var features = new FeatureCollection
+        {
+            new Feature(new Point(0, 0)),
+        };
+
+        static RenderOptions Build(MapProjection projection) => new()
+        {
+            Bounds = new Envelope(-180, -10, 180, 10),
+            Width = 200,
+            Height = 200,
+            Padding = 0,
+            Projection = projection,
+        };
+
+        var auto = MapRenderer.RenderPng(features, Build(MapProjection.Auto));
+        var plate = MapRenderer.RenderPng(features, Build(MapProjection.PlateCarree));
+        await Assert.That(auto).IsEquivalentTo(plate);
     }
 
     [Test]

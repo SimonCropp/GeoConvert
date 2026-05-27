@@ -13,10 +13,12 @@ public sealed class RenderOptions
 
     /// <summary>
     /// How longitude/latitude is mapped into planar pixel space. Defaults to
-    /// <see cref="MapProjection.PlateCarree"/>; switch to <see cref="MapProjection.WebMercator"/> for
-    /// tiled-map-style layouts.
+    /// <see cref="MapProjection.Auto"/>, which picks <see cref="MapProjection.Lambert"/> for regional
+    /// extents and <see cref="MapProjection.PlateCarree"/> for continental/world extents. Set
+    /// explicitly to opt into a specific layout (e.g. <see cref="MapProjection.WebMercator"/> for
+    /// tiled-map-style output).
     /// </summary>
-    public MapProjection Projection { get; set; } = MapProjection.PlateCarree;
+    public MapProjection Projection { get; set; } = MapProjection.Auto;
 
     /// <summary>Image width in pixels.</summary>
     public int Width { get; set; } = 1024;
