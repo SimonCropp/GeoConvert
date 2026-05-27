@@ -249,6 +249,32 @@ public class CoverageMopUpTests
     }
 
     [Test]
+    public async Task Kmz_compression_level_is_honored()
+    {
+        // The ZIP local file header records the chosen compression method (0 = stored, 8 = deflate),
+        // so writing the same KML at NoCompression vs Optimal must produce different on-disk method
+        // bytes — and the stored entry should be strictly larger than the deflated one.
+        var collection = new FeatureCollection();
+        for (var i = 0; i < 50; i++)
+        {
+            collection.Add(new Feature(new Point(new(i, i))));
+        }
+
+        using var stored = new MemoryStream();
+        Kmz.Write(stored, collection, CompressionLevel.NoCompression);
+
+        using var deflated = new MemoryStream();
+        Kmz.Write(deflated, collection, CompressionLevel.Optimal);
+
+        await Assert.That(stored.Length).IsGreaterThan(deflated.Length);
+
+        // Both must still round-trip.
+        stored.Position = 0;
+        var read = Kmz.Read(stored);
+        await Assert.That(read.Count).IsEqualTo(50);
+    }
+
+    [Test]
     public async Task TopoJson_writes_unique_keys_for_duplicate_layer_names()
     {
         var first = new FeatureCollection { Name = "data" };

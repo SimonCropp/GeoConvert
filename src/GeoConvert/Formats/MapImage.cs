@@ -64,7 +64,7 @@ public static class MapRenderer
             }
         }
 
-        Png.Write(stream, canvas.Pixels, canvas.Width, canvas.Height);
+        Png.Write(stream, canvas.Pixels, canvas.Width, canvas.Height, options.Compression);
     }
 
     static void Draw(Canvas canvas, Geometry geometry, Projection projection, RenderOptions options)

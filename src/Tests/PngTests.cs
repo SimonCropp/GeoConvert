@@ -196,6 +196,31 @@ public class PngTests
     }
 
     [Test]
+    public async Task Compression_level_affects_output_size()
+    {
+        // A large render with a repetitive background gives deflate something meaningful to chew on.
+        var collection = Sample.Polygons();
+        RenderOptions Build(CompressionLevel level) => new()
+        {
+            Width = 512,
+            Height = 512,
+            Compression = level,
+        };
+
+        var none = MapRenderer.RenderPng(collection, Build(CompressionLevel.NoCompression));
+        var smallest = MapRenderer.RenderPng(collection, Build(CompressionLevel.SmallestSize));
+
+        // Skipping compression entirely should be strictly larger than the smallest-size deflate output.
+        await Assert.That(smallest.Length).IsLessThan(none.Length);
+
+        // Both still decode to the same image.
+        var (widthA, heightA, _) = Decode(none);
+        var (widthB, heightB, _) = Decode(smallest);
+        await Assert.That(widthA).IsEqualTo(widthB);
+        await Assert.That(heightA).IsEqualTo(heightB);
+    }
+
+    [Test]
     public async Task Path_overload_leaves_no_file_when_render_throws()
     {
         // Regression: previously the path overload opened the destination file before validation ran,

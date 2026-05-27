@@ -31,4 +31,11 @@ public sealed class RenderOptions
     public int StrokeWidth { get; set; } = 2;
 
     public int PointRadius { get; set; } = 4;
+
+    /// <summary>
+    /// Deflate level used for the PNG <c>IDAT</c> chunk. Defaults to <see cref="CompressionLevel.Optimal"/>;
+    /// drop to <see cref="CompressionLevel.Fastest"/> for quicker writes or
+    /// <see cref="CompressionLevel.SmallestSize"/> when output size matters more than CPU.
+    /// </summary>
+    public CompressionLevel Compression { get; set; } = CompressionLevel.Optimal;
 }
