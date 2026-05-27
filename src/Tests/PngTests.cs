@@ -138,7 +138,7 @@ public class PngTests
             var b = pixels[p + 2];
             // Background is (255,255,255); fully-opaque stroke would write (255,0,0). A blend lands
             // between, with green/blue strictly above 0 but below 255.
-            if (r > 200 && g > 0 && g < 255 && b > 0 && b < 255)
+            if (r > 200 && g is > 0 and < 255 && b is > 0 and < 255)
             {
                 blended++;
             }
@@ -193,6 +193,26 @@ public class PngTests
         }
 
         await Assert.That(threw).IsTrue();
+    }
+
+    [Test]
+    public async Task Path_overload_leaves_no_file_when_render_throws()
+    {
+        // Regression: previously the path overload opened the destination file before validation ran,
+        // so an empty-collection throw left a 0-byte PNG on disk indistinguishable from a real render.
+        using var path = new TempFile();
+        var threw = false;
+        try
+        {
+            MapRenderer.RenderPng(new(), path);
+        }
+        catch (GeoConvertException)
+        {
+            threw = true;
+        }
+
+        await Assert.That(threw).IsTrue();
+        await Assert.That(File.Exists(path)).IsFalse();
     }
 
     static int NonBackgroundCount(byte[] pixels)
