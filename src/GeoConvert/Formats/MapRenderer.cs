@@ -20,36 +20,53 @@ public static class MapRenderer
     public static Envelope WebMercatorWorldBounds { get; } =
         new(-180, -WebMercatorMaxLatitude, 180, WebMercatorMaxLatitude);
 
-    public static byte[] RenderPng(FeatureCollection features, RenderOptions? options = null)
+    public static byte[] RenderPng(FeatureCollection features, RenderOptions? options = null) =>
+        RenderPng([features], options);
+
+    public static void RenderPng(FeatureCollection features, string path, RenderOptions? options = null) =>
+        RenderPng([features], path, options);
+
+    public static void RenderPng(FeatureCollection features, Stream stream, RenderOptions? options = null) =>
+        RenderPng([features], stream, options);
+
+    /// <summary>
+    /// Renders multiple <see cref="FeatureCollection"/>s as stacked top-level layers, in order — the
+    /// first paints under, the last on top under source-over blending. Each collection is treated as
+    /// its own layer for <see cref="RenderOptions.LayerStyle"/> (and any nested
+    /// <see cref="FeatureCollection.Children"/> still recurse from there). When
+    /// <see cref="RenderOptions.Bounds"/> is null the rendered extent is the union of all input
+    /// collections.
+    /// </summary>
+    public static byte[] RenderPng(IReadOnlyList<FeatureCollection> layers, RenderOptions? options = null)
     {
         options ??= new();
-        var bounds = Validate(features, options);
+        var bounds = Validate(layers, options);
         using var memory = new MemoryStream();
-        Render(features, memory, options, bounds);
+        Render(layers, memory, options, bounds);
         return memory.ToArray();
     }
 
-    public static void RenderPng(FeatureCollection features, string path, RenderOptions? options = null)
+    public static void RenderPng(IReadOnlyList<FeatureCollection> layers, string path, RenderOptions? options = null)
     {
         options ??= new();
         // Validate before File.Create so a throw leaves the destination untouched instead of stranding
         // a 0-byte file. Mid-render stream failures (disk full, etc.) can still leave a partial file,
         // but those are unrecoverable I/O errors where a partial file is the conventional signal.
-        var bounds = Validate(features, options);
+        var bounds = Validate(layers, options);
         using var stream = File.Create(path);
-        Render(features, stream, options, bounds);
+        Render(layers, stream, options, bounds);
     }
 
-    public static void RenderPng(FeatureCollection features, Stream stream, RenderOptions? options = null)
+    public static void RenderPng(IReadOnlyList<FeatureCollection> layers, Stream stream, RenderOptions? options = null)
     {
         options ??= new();
-        var bounds = Validate(features, options);
-        Render(features, stream, options, bounds);
+        var bounds = Validate(layers, options);
+        Render(layers, stream, options, bounds);
     }
 
-    static Envelope Validate(FeatureCollection features, RenderOptions options)
+    static Envelope Validate(IReadOnlyList<FeatureCollection> layers, RenderOptions options)
     {
-        var bounds = options.Bounds ?? features.GetBounds();
+        var bounds = options.Bounds ?? UnionBounds(layers);
         if (bounds.IsEmpty)
         {
             throw new GeoConvertException(
@@ -64,12 +81,26 @@ public static class MapRenderer
         return bounds;
     }
 
-    static void Render(FeatureCollection features, Stream stream, RenderOptions options, Envelope bounds)
+    static Envelope UnionBounds(IReadOnlyList<FeatureCollection> layers)
+    {
+        var bounds = Envelope.Empty;
+        foreach (var layer in layers)
+        {
+            bounds = bounds.ExpandToInclude(layer.GetBounds());
+        }
+
+        return bounds;
+    }
+
+    static void Render(IReadOnlyList<FeatureCollection> layers, Stream stream, RenderOptions options, Envelope bounds)
     {
         var projection = new Projection(bounds, options);
         var canvas = new Canvas(projection.Width, projection.Height, options.Background);
 
-        DrawLayer(canvas, features, projection, options);
+        foreach (var layer in layers)
+        {
+            DrawLayer(canvas, layer, projection, options);
+        }
 
         Png.Write(stream, canvas.Pixels, canvas.Width, canvas.Height, options.Compression);
     }
@@ -409,8 +440,8 @@ public static class MapRenderer
             var span = maxLat - minLat;
             var phi1 = (minLat + span / 6) * Math.PI / 180;
             var phi2 = (maxLat - span / 6) * Math.PI / 180;
-            var phi0 = ((minLat + maxLat) / 2) * Math.PI / 180;
-            var lambda0 = ((bounds.MinX + bounds.MaxX) / 2) * Math.PI / 180;
+            var phi0 = (minLat + maxLat) / 2 * Math.PI / 180;
+            var lambda0 = (bounds.MinX + bounds.MaxX) / 2 * Math.PI / 180;
 
             double coneConstant;
             if (Math.Abs(phi1 - phi2) < 1e-10)

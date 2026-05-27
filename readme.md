@@ -159,7 +159,7 @@ var options = new RenderOptions
 
 MapRenderer.RenderPng(features, "world.png", options);
 ```
-<sup><a href='/src/Tests/Snippets.cs#L198-L214' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderWebMercator' title='Start of snippet'>anchor</a></sup>
+<sup><a href='/src/Tests/Snippets.cs#L236-L252' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderWebMercator' title='Start of snippet'>anchor</a></sup>
 <!-- endSnippet -->
 
 From the command line, pass `--projection`:
@@ -193,7 +193,7 @@ var options = new RenderOptions
 
 MapRenderer.RenderPng(features, "states.png", options);
 ```
-<sup><a href='/src/Tests/Snippets.cs#L219-L234' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderLambert' title='Start of snippet'>anchor</a></sup>
+<sup><a href='/src/Tests/Snippets.cs#L257-L272' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderLambert' title='Start of snippet'>anchor</a></sup>
 <!-- endSnippet -->
 
 ```
@@ -262,6 +262,48 @@ MapRenderer.RenderPng(basemap, "europe.png", options);
 <sup><a href='/src/Tests/Snippets.cs#L116-L161' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderLayers' title='Start of snippet'>anchor</a></sup>
 <!-- endSnippet -->
 
+When the layers come from independent sources (typically a basemap file plus an overlay file), pass the
+collections as a list — they render in order, first under, last on top. Each `FeatureCollection` is a
+top-level layer for `RenderOptions.LayerStyle`, and the rendered extent defaults to the union of every
+input's bounds:
+
+<!-- snippet: RenderStackedCollections -->
+<a id='snippet-RenderStackedCollections'></a>
+```cs
+// When the layers come from independent sources (a basemap file plus an overlay file, say),
+// pass them as a list — they render in order, first under, last on top. Each FeatureCollection
+// is a top-level layer for RenderOptions.LayerStyle, so giving each one a Name is enough to
+// style them distinctly. When Bounds is null the rendered extent is the union of every input.
+var basemap = GeoConverter.Read("countries.geojson");
+basemap.Name = "basemap";
+
+var roads = GeoConverter.Read("roads.shp");
+roads.Name = "roads";
+
+var options = new RenderOptions
+{
+    Width = 1200,
+    LayerStyle = layer => layer.Name switch
+    {
+        "basemap" => new()
+        {
+            Fill = new(230, 230, 230),
+            Stroke = new(180, 180, 180),
+        },
+        "roads" => new()
+        {
+            Stroke = new(200, 60, 60),
+            StrokeWidth = 3,
+        },
+        _ => null,
+    },
+};
+
+MapRenderer.RenderPng([basemap, roads], "stacked.png", options);
+```
+<sup><a href='/src/Tests/Snippets.cs#L166-L199' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderStackedCollections' title='Start of snippet'>anchor</a></sup>
+<!-- endSnippet -->
+
 
 ## Compression
 
@@ -304,7 +346,7 @@ using (var parquet = File.Create("world.parquet"))
     GeoParquet.Write(parquet, features, ParquetCompression.Gzip, CompressionLevel.SmallestSize);
 }
 ```
-<sup><a href='/src/Tests/Snippets.cs#L168-L193' title='Snippet source file'>snippet source</a> | <a href='#snippet-Compression' title='Start of snippet'>anchor</a></sup>
+<sup><a href='/src/Tests/Snippets.cs#L206-L231' title='Snippet source file'>snippet source</a> | <a href='#snippet-Compression' title='Start of snippet'>anchor</a></sup>
 <!-- endSnippet -->
 
 

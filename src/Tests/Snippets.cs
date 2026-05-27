@@ -161,6 +161,44 @@ static class Snippets
         #endregion
     }
 
+    public static void RenderStackedCollections()
+    {
+        #region RenderStackedCollections
+
+        // When the layers come from independent sources (a basemap file plus an overlay file, say),
+        // pass them as a list — they render in order, first under, last on top. Each FeatureCollection
+        // is a top-level layer for RenderOptions.LayerStyle, so giving each one a Name is enough to
+        // style them distinctly. When Bounds is null the rendered extent is the union of every input.
+        var basemap = GeoConverter.Read("countries.geojson");
+        basemap.Name = "basemap";
+
+        var roads = GeoConverter.Read("roads.shp");
+        roads.Name = "roads";
+
+        var options = new RenderOptions
+        {
+            Width = 1200,
+            LayerStyle = layer => layer.Name switch
+            {
+                "basemap" => new()
+                {
+                    Fill = new(230, 230, 230),
+                    Stroke = new(180, 180, 180),
+                },
+                "roads" => new()
+                {
+                    Stroke = new(200, 60, 60),
+                    StrokeWidth = 3,
+                },
+                _ => null,
+            },
+        };
+
+        MapRenderer.RenderPng([basemap, roads], "stacked.png", options);
+
+        #endregion
+    }
+
     public static void Compression()
     {
         var features = GeoConverter.Read("countries.geojson");

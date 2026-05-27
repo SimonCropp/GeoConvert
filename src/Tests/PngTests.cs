@@ -65,7 +65,7 @@ public class PngTests
         var threw = false;
         try
         {
-            MapRenderer.RenderPng(new());
+            MapRenderer.RenderPng(new FeatureCollection());
         }
         catch (GeoConvertException)
         {
@@ -655,6 +655,128 @@ public class PngTests
     }
 
     [Test]
+    public async Task Multiple_collections_render_in_order_with_per_collection_style()
+    {
+        // Two independent FeatureCollections passed as a list — first under, second on top. Each
+        // collection is a top-level layer for the LayerStyle callback, so this is the natural way to
+        // stack a basemap under an overlay without having to wedge them into a single tree.
+        var lower = new FeatureCollection
+        {
+            Name = "lower",
+            Features =
+            {
+                new(new Polygon([[new(0, 0), new(10, 0), new(10, 10), new(0, 10), new(0, 0)]])),
+            },
+        };
+        var upper = new FeatureCollection
+        {
+            Name = "upper",
+            Features =
+            {
+                new(new Polygon([[new(2, 2), new(8, 2), new(8, 8), new(2, 8), new(2, 2)]])),
+            },
+        };
+
+        var options = new RenderOptions
+        {
+            Bounds = new Envelope(0, 0, 10, 10),
+            Width = 64,
+            Height = 64,
+            Padding = 0,
+            Projection = MapProjection.PlateCarree,
+            LayerStyle = layer => layer.Name switch
+            {
+                "lower" => new() { Fill = new(20, 200, 20), Stroke = new(20, 200, 20), StrokeWidth = 2 },
+                "upper" => new() { Fill = new(220, 30, 30), Stroke = new(220, 30, 30), StrokeWidth = 2 },
+                _ => null,
+            },
+        };
+
+        var png = MapRenderer.RenderPng([lower, upper], options);
+        var (width, _, pixels) = Decode(png);
+
+        // Outside the upper polygon → lower's green wins.
+        var outer = ((width / 16) * width + (width / 16)) * 4;
+        await Assert.That(pixels[outer]).IsEqualTo((byte)20);
+        await Assert.That(pixels[outer + 1]).IsEqualTo((byte)200);
+        await Assert.That(pixels[outer + 2]).IsEqualTo((byte)20);
+
+        // Inside both → upper (last in the list) wins on top.
+        var centre = ((width / 2) * width + (width / 2)) * 4;
+        await Assert.That(pixels[centre]).IsEqualTo((byte)220);
+        await Assert.That(pixels[centre + 1]).IsEqualTo((byte)30);
+        await Assert.That(pixels[centre + 2]).IsEqualTo((byte)30);
+
+        await Verify(new MemoryStream(png), "png");
+    }
+
+    [Test]
+    public async Task Multiple_collections_default_bounds_to_union()
+    {
+        // No Bounds set: the rendered extent must cover every input collection, not just the first.
+        // Two disjoint single-point features near opposite sides of a shared region — if union bounds
+        // weren't applied, the east point would clip out (only the west collection's bounds would
+        // drive the projection) and the rightmost non-bg column would stay close to 0.
+        var westPoint = new FeatureCollection
+        {
+            Features = { new(new Point(-40, 0)) },
+        };
+        var eastPoint = new FeatureCollection
+        {
+            Features = { new(new Point(40, 0)) },
+        };
+
+        var options = new RenderOptions
+        {
+            Width = 200,
+            Height = 40,
+            Padding = 4,
+            Projection = MapProjection.PlateCarree,
+            PointRadius = 3,
+        };
+
+        var (width, _, pixels) = Decode(MapRenderer.RenderPng([westPoint, eastPoint], options));
+
+        var rightmost = -1;
+        for (var p = 0; p + 4 <= pixels.Length; p += 4)
+        {
+            if (pixels[p] == 255 && pixels[p + 1] == 255 && pixels[p + 2] == 255)
+            {
+                continue;
+            }
+
+            var column = (p / 4) % width;
+            if (column > rightmost)
+            {
+                rightmost = column;
+            }
+        }
+
+        // If only the west collection's bounds drove the projection, the east point would project
+        // off-canvas and the rightmost painted column would sit far left of centre.
+        await Assert.That(rightmost).IsGreaterThan(width / 2);
+    }
+
+    [Test]
+    public async Task Empty_collection_list_throws()
+    {
+        // An empty list of layers is the multi-FC analogue of an empty single FC: nothing to render
+        // and no bounds to fall back on, so the validator must throw rather than emit an empty PNG.
+        FeatureCollection[] empty = [];
+        var threw = false;
+        try
+        {
+            MapRenderer.RenderPng(empty);
+        }
+        catch (GeoConvertException)
+        {
+            threw = true;
+        }
+
+        await Assert.That(threw).IsTrue();
+    }
+
+    [Test]
     public async Task Path_overload_leaves_no_file_when_render_throws()
     {
         // Regression: previously the path overload opened the destination file before validation ran,
@@ -663,7 +785,7 @@ public class PngTests
         var threw = false;
         try
         {
-            MapRenderer.RenderPng(new(), path);
+            MapRenderer.RenderPng(new FeatureCollection(), path);
         }
         catch (GeoConvertException)
         {
