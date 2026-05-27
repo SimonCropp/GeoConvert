@@ -95,6 +95,109 @@ sealed class Canvas
         }
     }
 
+    /// <summary>
+    /// Soft-edged thick-line stroke: every pixel within <c>width/2 + 0.5</c> of the line segment
+    /// gets a fractional alpha based on its perpendicular distance, blended at that coverage.
+    /// Used by <see cref="StrokeFont"/> so labels stay readable at small cap heights (14px etc.)
+    /// where the 1-pixel-wide jagged strokes from <see cref="StrokeLine"/> read as pixelated.
+    /// Bounded geometry rendering still uses the crisp binary <see cref="StrokeLine"/> — sharp
+    /// coastlines and polygon edges read better than antialiased ones at typical map scales.
+    /// </summary>
+    public void StrokeLineAntialiased(double x0, double y0, double x1, double y1, double width, Rgba color)
+    {
+        var radius = Math.Max(width / 2, 0.5);
+        // One extra pixel beyond the geometric radius gives room for the fractional-coverage
+        // ramp at the outer edge of the stroke: below this distance coverage = 1, beyond it
+        // coverage = 0, with a linear fall-off in between.
+        var outer = radius + 0.5;
+        var minX = (int)Math.Floor(Math.Min(x0, x1) - outer);
+        var maxX = (int)Math.Ceiling(Math.Max(x0, x1) + outer);
+        var minY = (int)Math.Floor(Math.Min(y0, y1) - outer);
+        var maxY = (int)Math.Ceiling(Math.Max(y0, y1) + outer);
+
+        var dx = x1 - x0;
+        var dy = y1 - y0;
+        var lengthSq = dx * dx + dy * dy;
+        if (lengthSq == 0)
+        {
+            // Zero-length segment degenerates to a single antialiased disc — the projection math
+            // below would otherwise divide by zero.
+            FillDiscAntialiased(x0, y0, radius, color);
+            return;
+        }
+
+        var outerSq = outer * outer;
+        for (var y = minY; y <= maxY; y++)
+        {
+            for (var x = minX; x <= maxX; x++)
+            {
+                // Closest point on the segment to (x, y): project onto the segment direction and
+                // clamp t into [0, 1] so points past the endpoints fall back to round caps at the
+                // segment ends (the coverage ramp does that work automatically).
+                var t = ((x - x0) * dx + (y - y0) * dy) / lengthSq;
+                if (t < 0)
+                {
+                    t = 0;
+                }
+                else if (t > 1)
+                {
+                    t = 1;
+                }
+
+                var ddx = x - (x0 + t * dx);
+                var ddy = y - (y0 + t * dy);
+                var distSq = ddx * ddx + ddy * ddy;
+                if (distSq >= outerSq)
+                {
+                    continue;
+                }
+
+                var coverage = outer - Math.Sqrt(distSq);
+                if (coverage > 1)
+                {
+                    coverage = 1;
+                }
+
+                Blend(x, y, new(color.R, color.G, color.B, (byte)(color.A * coverage)));
+            }
+        }
+    }
+
+    /// <summary>Antialiased disc — every pixel within <c>radius + 0.5</c> gets fractional
+    /// coverage based on its distance to the centre. Used by
+    /// <see cref="StrokeLineAntialiased"/> for the zero-length segment fast path.</summary>
+    public void FillDiscAntialiased(double cx, double cy, double radius, Rgba color)
+    {
+        var r = Math.Max(radius, 0.5);
+        var outer = r + 0.5;
+        var outerSq = outer * outer;
+        var minX = (int)Math.Floor(cx - outer);
+        var maxX = (int)Math.Ceiling(cx + outer);
+        var minY = (int)Math.Floor(cy - outer);
+        var maxY = (int)Math.Ceiling(cy + outer);
+        for (var y = minY; y <= maxY; y++)
+        {
+            for (var x = minX; x <= maxX; x++)
+            {
+                var dx = x - cx;
+                var dy = y - cy;
+                var distSq = dx * dx + dy * dy;
+                if (distSq >= outerSq)
+                {
+                    continue;
+                }
+
+                var coverage = outer - Math.Sqrt(distSq);
+                if (coverage > 1)
+                {
+                    coverage = 1;
+                }
+
+                Blend(x, y, new(color.R, color.G, color.B, (byte)(color.A * coverage)));
+            }
+        }
+    }
+
     /// <summary>Fills the region bounded by the given rings using the even-odd rule (so holes are excluded).</summary>
     public void FillPolygon((double X, double Y)[][] rings, Rgba color)
     {

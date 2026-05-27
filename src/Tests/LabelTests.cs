@@ -71,19 +71,54 @@ public class LabelTests
     {
         // With halo set, the strokes are first drawn in the halo colour at a wider stroke — so
         // we should see halo-coloured pixels around the (black) text. Render "A" in pure black on
-        // a white canvas with a red halo and count red pixels.
+        // a white canvas with a red halo and look for "red-dominant" pixels: under antialiasing
+        // the fully-red ring around the text gets blended at its edges, so an exact (255,0,0)
+        // match misses everything — what's left is pixels where R clearly dominates G and B.
         var canvas = new Canvas(64, 40, Rgba.White);
         StrokeFont.Render(canvas, "A", 8, 28, 16, Rgba.Black, halo: new(255, 0, 0));
-        var redPixels = 0;
+        var redDominant = 0;
         for (var i = 0; i + 4 <= canvas.Pixels.Length; i += 4)
         {
-            if (canvas.Pixels[i] == 255 && canvas.Pixels[i + 1] == 0 && canvas.Pixels[i + 2] == 0)
+            var r = canvas.Pixels[i];
+            var g = canvas.Pixels[i + 1];
+            var b = canvas.Pixels[i + 2];
+            if (r > g + 30 && r > b + 30)
             {
-                redPixels++;
+                redDominant++;
             }
         }
 
-        await Assert.That(redPixels).IsGreaterThan(0);
+        await Assert.That(redDominant).IsGreaterThan(0);
+    }
+
+    [Test]
+    public async Task Canvas_antialiased_stroke_handles_zero_length_segment()
+    {
+        // Zero-length segment is the degenerate-line case StrokeLineAntialiased delegates to
+        // FillDiscAntialiased — without it the projection math would divide by zero. Confirm by
+        // painting a "line" from a point to itself and checking pixels were laid down (and that
+        // the call doesn't throw).
+        var canvas = new Canvas(32, 32, Rgba.White);
+        canvas.StrokeLineAntialiased(16, 16, 16, 16, width: 4, Rgba.Black);
+        await Assert.That(NonBackgroundCount(canvas.Pixels)).IsGreaterThan(0);
+    }
+
+    [Test]
+    public async Task Canvas_antialiased_disc_paints_soft_edge()
+    {
+        // FillDiscAntialiased painted directly. The very centre pixel sits at distance 0 from
+        // the centre and is well inside the radius, so it gets full coverage (alpha clamps to 1)
+        // — the centre channel value should be the colour as-given. An off-disc pixel stays
+        // background.
+        var canvas = new Canvas(20, 20, Rgba.White);
+        canvas.FillDiscAntialiased(10, 10, radius: 3, new(200, 50, 50));
+
+        // Centre pixel: full coverage (distance 0 from centre, well under the inner-1.0 boundary).
+        var centre = (10 * 20 + 10) * 4;
+        await Assert.That(canvas.Pixels[centre]).IsEqualTo((byte)200);
+
+        // Far corner: untouched white.
+        await Assert.That(canvas.Pixels[0]).IsEqualTo((byte)255);
     }
 
     [Test]
@@ -456,15 +491,22 @@ public class LabelTests
         options.LabelHalo = new(0, 0, 255);
         var pixels = Render(features, options);
 
+        // Antialiasing means exact (255,0,0) / (0,0,255) pixels are rare — look for channel
+        // dominance instead. The red text strokes are inside the blue halo, so there must be
+        // pixels where R clearly outpaces G/B (text) AND pixels where B clearly outpaces R/G
+        // (halo edges where text doesn't cover).
         var hasRed = false;
         var hasBlue = false;
         for (var i = 0; i + 4 <= pixels.Length; i += 4)
         {
-            if (pixels[i] == 255 && pixels[i + 1] == 0 && pixels[i + 2] == 0)
+            var r = pixels[i];
+            var g = pixels[i + 1];
+            var b = pixels[i + 2];
+            if (r > g + 30 && r > b + 30)
             {
                 hasRed = true;
             }
-            else if (pixels[i] == 0 && pixels[i + 1] == 0 && pixels[i + 2] == 255)
+            else if (b > r + 30 && b > g + 30)
             {
                 hasBlue = true;
             }
