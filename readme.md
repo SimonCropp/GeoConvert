@@ -90,8 +90,7 @@ var geoJson = GeoJson.WriteString(collection);
 
 ## Raster export (PNG)
 
-Render a `FeatureCollection` to a PNG, clipped to a bounding box, with a software rasterizer and a
-hand-written PNG encoder (no third-party dependencies):
+Render a `FeatureCollection` to a PNG, clipped to a bounding box, with a software rasterizer and a hand-written PNG encoder (no third-party dependencies):
 
 <!-- snippet: RenderToPng -->
 <a id='snippet-RenderToPng'></a>
@@ -111,9 +110,7 @@ MapRenderer.RenderPng(features, "europe.png", options);
 <sup><a href='/src/Tests/Snippets.cs#L97-L111' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderToPng' title='Start of snippet'>anchor</a></sup>
 <!-- endSnippet -->
 
-`RenderOptions` controls the extent (`Bounds`), pixel `Width`/`Height` (height is derived from the
-aspect ratio when left at 0), `Padding`, and the `Background`/`Stroke`/`Fill` colors. From the command
-line, output a `.png` and pass `--bbox` and `--size`:
+`RenderOptions` controls the extent (`Bounds`), pixel `Width`/`Height` (height is derived from the aspect ratio when left at 0), `Padding`, and the `Background`/`Stroke`/`Fill` colors. From the command line, output a `.png` and pass `--bbox` and `--size`:
 
 ```
 geoconvert world.geojson europe.png --bbox -10,35,30,60 --size 1200x900
@@ -122,12 +119,7 @@ geoconvert world.geojson europe.png --bbox -10,35,30,60 --size 1200x900
 
 ### Projection
 
-When `RenderOptions.Projection` is left at its default `MapProjection.Auto`, the renderer picks one
-from the data bounds: a regional extent (latitude span < 60°, longitude span < 90°) renders as Lambert
-Conformal Conic, a continental extent renders as plate carrée, and a world extent (longitude span ≥
-180° or latitude span ≥ 90°) renders as Goode's Homolosine — equal-area, so high-latitude landmasses
-read at honest size. Auto never picks Web Mercator — that's a deliberate layout choice (tile-style),
-not a distortion-minimisation one, so it stays explicit.
+When `RenderOptions.Projection` is left at its default `MapProjection.Auto`, the renderer picks one from the data bounds: a regional extent (latitude span < 60°, longitude span < 90°) renders as Lambert Conformal Conic, a continental extent renders as plate carrée, and a world extent (longitude span ≥ 180° or latitude span ≥ 90°) renders as Goode's Homolosine — equal-area, so high-latitude landmasses read at honest size. Auto never picks Web Mercator — that's a deliberate layout choice (tile-style), not a distortion-minimisation one, so it stays explicit.
 
 | Region | lon span | lat span | Auto picks |
 | --- | --- | --- | --- |
@@ -139,11 +131,7 @@ not a distortion-minimisation one, so it stays explicit.
 | Asia | 165° | 80° | PlateCarree |
 | World | 360° | 180° | Goode |
 
-To override, set `Projection` directly. `MapProjection.PlateCarree` treats longitude/latitude as planar
-X/Y with a uniform scale — cheap and faithful for small equatorial extents but compresses high-latitude
-features at world scale. `MapProjection.WebMercator` produces the tiled-map layout most callers will
-recognise (longitude stays linear, latitude is projected through `ln(tan(π/4 + φ/2))` and clamped to
-±85.0511° — the cutoff where the projection blows up at the poles):
+To override, set `Projection` directly. `MapProjection.PlateCarree` treats longitude/latitude as planar X/Y with a uniform scale — cheap and faithful for small equatorial extents but compresses high-latitude features at world scale. `MapProjection.WebMercator` produces the tiled-map layout most callers will recognise (longitude stays linear, latitude is projected through `ln(tan(π/4 + φ/2))` and clamped to ±85.0511° — the cutoff where the projection blows up at the poles):
 
 <!-- snippet: RenderWebMercator -->
 <a id='snippet-RenderWebMercator'></a>
@@ -171,14 +159,7 @@ From the command line, pass `--projection`:
 geoconvert world.geojson world.png --projection web-mercator --size 1200
 ```
 
-For a single country, state, or province where neither plate carrée's high-latitude squish nor Web
-Mercator's pole stretch is acceptable, `MapProjection.Lambert` is the right pick — also what `Auto`
-selects under the covers for bounds of this shape. It's spherical Lambert Conformal Conic with two
-standard parallels auto-picked at 1/6 and 5/6 of the data's latitude range (the de facto convention
-for country-scale layouts), conformal, and keeps area distortion low across a region a few hundred to
-a couple thousand kilometres wide. Outside that scale it degenerates (the cone flattens at the equator
-if bounds are vertically symmetric, in which case the renderer falls back to plate carrée), so it
-isn't a world projection — pair it with regional `Bounds`:
+For a single country, state, or province where neither plate carrée's high-latitude squish nor Web Mercator's pole stretch is acceptable, `MapProjection.Lambert` is the right pick — also what `Auto` selects under the covers for bounds of this shape. It's spherical Lambert Conformal Conic with two standard parallels auto-picked at 1/6 and 5/6 of the data's latitude range (the de facto convention for country-scale layouts), conformal, and keeps area distortion low across a region a few hundred to a couple thousand kilometres wide. Outside that scale it degenerates (the cone flattens at the equator if bounds are vertically symmetric, in which case the renderer falls back to plate carrée), so it isn't a world projection — pair it with regional `Bounds`:
 
 <!-- snippet: RenderLambert -->
 <a id='snippet-RenderLambert'></a>
@@ -203,19 +184,7 @@ MapRenderer.RenderPng(features, "states.png", options);
 geoconvert states.geojson states.png --projection lambert --size 1600
 ```
 
-For a world map, `MapProjection.Goode` is what `Auto` picks under the covers — and what the explicit
-setting selects. It's the conventional *interrupted* form of Goode's Homolosine: the world is split
-into two northern and four southern lobes that meet along ocean meridians (-40° in the north;
--100°, -20° and +80° in the south), and each lobe is the classic Homolosine — sinusoidal between
-±40°44'11.8" and Mollweide outside that band. The interruptions absorb the distortion that would
-otherwise pile up at the lobe edges, so the major continents stay intact inside one lobe and the
-projection is equal-area: Greenland reads at honest size relative to Africa, unlike under plate
-carrée or Web Mercator. Polygons that straddle a lobe boundary are clipped with Sutherland-Hodgman
-before projection so each lobe's contribution closes along the clip meridian, and polylines are
-split at the boundaries; Antarctica falls inside the four southern lobes and reads as four separate
-pieces along the bottom of the map, which is the visual signature of the projection. Setting
-`RenderOptions.Ocean` paints each lobe with that colour before the continents render, so the lobed
-shape (and the inter-lobe gaps) pops visually.
+For a world map, `MapProjection.Goode` is what `Auto` picks under the covers — and what the explicit setting selects. It's the conventional *interrupted* form of Goode's Homolosine: the world is split into two northern and four southern lobes that meet along ocean meridians (-40° in the north; -100°, -20° and +80° in the south), and each lobe is the classic Homolosine — sinusoidal between ±40°44'11.8" and Mollweide outside that band. The interruptions absorb the distortion that would otherwise pile up at the lobe edges, so the major continents stay intact inside one lobe and the projection is equal-area: Greenland reads at honest size relative to Africa, unlike under plate carrée or Web Mercator. Polygons that straddle a lobe boundary are clipped with Sutherland-Hodgman before projection so each lobe's contribution closes along the clip meridian, and polylines are split at the boundaries; Antarctica falls inside the four southern lobes and reads as four separate pieces along the bottom of the map, which is the visual signature of the projection. Setting `RenderOptions.Ocean` paints each lobe with that colour before the continents render, so the lobed shape (and the inter-lobe gaps) pops visually.
 
 <!-- snippet: RenderGoode -->
 <a id='snippet-RenderGoode'></a>
@@ -254,11 +223,7 @@ coordinates (it treats X/Y as planar either way).
 
 ### Per-layer styling
 
-When the input has nested sub-layers (see [layered collections](#layered-collections)) the renderer walks
-the tree depth-first, so a parent layer paints under its children — features added deeper in the tree
-appear on top in source-over blending. `RenderOptions.LayerStyle` is a callback that returns a
-`LayerStyle` for any given layer; any property left null inherits its default from `RenderOptions`, so a
-partial override (only a fill, or only a stroke width) doesn't have to repeat the other knobs.
+When the input has nested sub-layers (see [layered collections](#layered-collections)) the renderer walks the tree depth-first, so a parent layer paints under its children — features added deeper in the tree appear on top in source-over blending. `RenderOptions.LayerStyle` is a callback that returns a `LayerStyle` for any given layer; any property left null inherits its default from `RenderOptions`, so a partial override (only a fill, or only a stroke width) doesn't have to repeat the other knobs.
 
 <!-- snippet: RenderLayers -->
 <a id='snippet-RenderLayers'></a>
@@ -309,10 +274,7 @@ MapRenderer.RenderPng(basemap, "europe.png", options);
 <sup><a href='/src/Tests/Snippets.cs#L116-L161' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderLayers' title='Start of snippet'>anchor</a></sup>
 <!-- endSnippet -->
 
-When the layers come from independent sources (typically a basemap file plus an overlay file), pass the
-collections as a list — they render in order, first under, last on top. Each `FeatureCollection` is a
-top-level layer for `RenderOptions.LayerStyle`, and the rendered extent defaults to the union of every
-input's bounds:
+When the layers come from independent sources (typically a basemap file plus an overlay file), pass the collections as a list — they render in order, first under, last on top. Each `FeatureCollection` is a top-level layer for `RenderOptions.LayerStyle`, and the rendered extent defaults to the union of every input's bounds:
 
 <!-- snippet: RenderStackedCollections -->
 <a id='snippet-RenderStackedCollections'></a>
@@ -354,8 +316,7 @@ MapRenderer.RenderPng([basemap, roads], "stacked.png", options);
 
 ## Compression
 
-Three formats compress their output and let the caller pick the speed/ratio trade-off. All three
-default to `CompressionLevel.Optimal`, so existing callers keep their current output:
+Three formats compress their output and let the caller pick the speed/ratio trade-off. All three default to `CompressionLevel.Optimal`, so existing callers keep their current output:
 
 | Format | Knob | Default |
 | --- | --- | --- |
@@ -363,9 +324,7 @@ default to `CompressionLevel.Optimal`, so existing callers keep their current ou
 | KMZ | `Kmz.Write(..., CompressionLevel)` (the `doc.kml` zip entry) | `CompressionLevel.Optimal` |
 | GeoParquet | `GeoParquet.Write(..., ParquetCompression, CompressionLevel)` (codec, plus gzip level when the codec is `Gzip`) | `ParquetCompression.Snappy` |
 
-`ParquetCompression` exposes `Snappy`, `Uncompressed` and `Gzip` on the writer. Zstd is intentionally
-not writable — the BCL only ships a Zstd stream decoder — but the GeoParquet reader still accepts
-Zstd-encoded pages on .NET 11+.
+`ParquetCompression` exposes `Snappy`, `Uncompressed` and `Gzip` on the writer. Zstd is intentionally not writable — the BCL only ships a Zstd stream decoder — but the GeoParquet reader still accepts Zstd-encoded pages on .NET 11+.
 
 <!-- snippet: Compression -->
 <a id='snippet-Compression'></a>
@@ -397,7 +356,7 @@ using (var parquet = File.Create("world.parquet"))
 <!-- endSnippet -->
 
 
-### Exampl generated png
+### Example generated png
 
 All Australian suburbs
 
@@ -428,21 +387,14 @@ Run `geoconvert --list` to see the supported format names, or `geoconvert --help
 
 Everything reads into and writes out of a `FeatureCollection`:
 
-* `FeatureCollection` — a named, possibly nested group of features. Has an optional `Name`, a
-  `Properties` dictionary for layer-level metadata, a list of direct `Features`, and a list of
-  `Children` sub-layers (recursive). It's `IEnumerable<Feature>` over the whole tree, and `Count`
-  matches that enumeration — so `foreach (var feature in collection)` and `collection.Count` always
-  see every feature regardless of how the tree is shaped.
+* `FeatureCollection` — a named, possibly nested group of features. Has an optional `Name`, a `Properties` dictionary for layer-level metadata, a list of direct `Features`, and a list of `Children` sub-layers (recursive). It's `IEnumerable<Feature>` over the whole tree, and `Count` matches that enumeration — so `foreach (var feature in collection)` and `collection.Count` always see every feature regardless of how the tree is shaped.
 * `Feature` — a `Geometry` plus a string-keyed `Properties` dictionary and an optional `Id`.
-* `Geometry` — `Point`, `LineString`, `Polygon`, `MultiPoint`, `MultiLineString`, `MultiPolygon` or
-  `GeometryCollection`, built from `Position` values (X = longitude, Y = latitude, optional Z and M).
+* `Geometry` — `Point`, `LineString`, `Polygon`, `MultiPoint`, `MultiLineString`, `MultiPolygon` or `GeometryCollection`, built from `Position` values (X = longitude, Y = latitude, optional Z and M).
 
 
 ### Layered collections
 
-Some formats have a native concept of named sub-layers (KML folders, TopoJSON objects, etc.); the
-rest are single-layer by spec. Layers are preserved across formats that support them and flattened on
-write into formats that don't.
+Some formats have a native concept of named sub-layers (KML folders, TopoJSON objects, etc.); the rest are single-layer by spec. Layers are preserved across formats that support them and flattened on write into formats that don't.
 
 | Format | Layer mapping |
 | --- | --- |
