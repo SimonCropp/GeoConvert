@@ -34,7 +34,7 @@ public static class Runner
         Envelope? bounds = null;
         var width = 0;
         var height = 0;
-        var projection = MapProjection.PlateCarree;
+        var projection = MapProjection.Auto;
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -86,7 +86,7 @@ public static class Runner
 
                     if (!TryParseProjection(args[++i], out projection))
                     {
-                        error.WriteLine("--projection must be 'plate-carree' or 'web-mercator'.");
+                        error.WriteLine("--projection must be 'auto', 'plate-carree', 'web-mercator', or 'lambert'.");
                         return 2;
                     }
 
@@ -204,6 +204,10 @@ public static class Runner
         // are accepted so users don't have to remember the exact spelling.
         switch (text.ToLowerInvariant())
         {
+            case "auto":
+            case "automatic":
+                projection = MapProjection.Auto;
+                return true;
             case "plate-carree":
             case "platecarree":
             case "equirectangular":
@@ -213,6 +217,12 @@ public static class Runner
             case "webmercator":
             case "mercator":
                 projection = MapProjection.WebMercator;
+                return true;
+            case "lambert":
+            case "lambert-conformal":
+            case "lambert-conformal-conic":
+            case "lcc":
+                projection = MapProjection.Lambert;
                 return true;
             default:
                 projection = default;
@@ -259,8 +269,10 @@ public static class Runner
               --to <format>          Force the output format.
               --bbox minX,minY,maxX,maxY   Extent to render (PNG output only).
               --size WIDTH[xHEIGHT]  Image size in pixels (PNG output only).
-              --projection <name>    Projection for PNG output: 'plate-carree' (default) or
-                                     'web-mercator'.
+              --projection <name>    Projection for PNG output: 'auto' (default — picks
+                                     lambert for regional bounds, plate-carree otherwise),
+                                     'plate-carree', 'web-mercator', or 'lambert' (Lambert
+                                     Conformal Conic, low distortion at country/state scale).
               --list                 List supported formats.
               -h, --help             Show this help.
 
@@ -270,6 +282,7 @@ public static class Runner
               geoconvert data.csv data.geojson --from csv
               geoconvert world.geojson europe.png --bbox -10,35,30,60 --size 1200x900
               geoconvert world.geojson world.png --projection web-mercator --size 1200
+              geoconvert states.geojson states.png --projection lambert --size 1600
             """);
 
     static void PrintFormats(TextWriter writer) =>

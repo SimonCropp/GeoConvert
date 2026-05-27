@@ -119,11 +119,25 @@ geoconvert world.geojson europe.png --bbox -10,35,30,60 --size 1200x900
 
 ### Projection
 
-The default `MapProjection.PlateCarree` treats longitude/latitude as planar X/Y with a uniform scale.
-It's faithful for small extents near the equator but compresses high-latitude features at world scale.
-Switch to `MapProjection.WebMercator` for the tiled-map layout most users expect (longitude stays
-linear, latitude is projected through `ln(tan(π/4 + φ/2))` and clamped to ±85.0511° — the cutoff where
-the projection blows up at the poles):
+When `RenderOptions.Projection` is left at its default `MapProjection.Auto`, the renderer picks one
+from the data bounds: a regional extent (latitude span < 60°, longitude span < 90°) renders as Lambert
+Conformal Conic, anything wider falls back to plate carrée. Auto never picks Web Mercator — that's a
+deliberate layout choice (tile-style), not a distortion-minimisation one, so it stays explicit.
+
+| Region | lon span | lat span | Auto picks |
+| --- | --- | --- | --- |
+| Contiguous USA | 60° | 25° | Lambert |
+| France | 15° | 10° | Lambert |
+| Europe | 40° | 35° | Lambert |
+| Australia | 41° | 34° | Lambert |
+| Africa | 75° | 73° | PlateCarree (latSpan ≥ 60°) |
+| World | 360° | 180° | PlateCarree |
+
+To override, set `Projection` directly. `MapProjection.PlateCarree` treats longitude/latitude as planar
+X/Y with a uniform scale — cheap and faithful for small equatorial extents but compresses high-latitude
+features at world scale. `MapProjection.WebMercator` produces the tiled-map layout most callers will
+recognise (longitude stays linear, latitude is projected through `ln(tan(π/4 + φ/2))` and clamped to
+±85.0511° — the cutoff where the projection blows up at the poles):
 
 <!-- snippet: RenderWebMercator -->
 <a id='snippet-RenderWebMercator'></a>
@@ -151,9 +165,41 @@ From the command line, pass `--projection`:
 geoconvert world.geojson world.png --projection web-mercator --size 1200
 ```
 
-Anything more exotic (UTM, Lambert Conformal, Albers, polar stereographic, …) is out of scope — the
-input model is always WGS84, so reprojection has to happen upstream and the renderer is fed
-already-projected coordinates (it treats X/Y as planar either way).
+For a single country, state, or province where neither plate carrée's high-latitude squish nor Web
+Mercator's pole stretch is acceptable, `MapProjection.Lambert` is the right pick — also what `Auto`
+selects under the covers for bounds of this shape. It's spherical Lambert Conformal Conic with two
+standard parallels auto-picked at 1/6 and 5/6 of the data's latitude range (the de facto convention
+for country-scale layouts), conformal, and keeps area distortion low across a region a few hundred to
+a couple thousand kilometres wide. Outside that scale it degenerates (the cone flattens at the equator
+if bounds are vertically symmetric, in which case the renderer falls back to plate carrée), so it
+isn't a world projection — pair it with regional `Bounds`:
+
+<!-- snippet: RenderLambert -->
+<a id='snippet-RenderLambert'></a>
+```cs
+var features = GeoConverter.Read("states.geojson");
+
+// Lambert Conformal Conic with standard parallels picked from the data bounds — the textbook
+// choice for state/country-scale maps. Conformal and low-distortion across a regional extent,
+// so this avoids both plate-carrée's high-latitude squish and Web Mercator's pole stretch.
+var options = new RenderOptions
+{
+    Width = 1600,
+    Projection = MapProjection.Lambert,
+};
+
+MapRenderer.RenderPng(features, "states.png", options);
+```
+<sup><a href='/src/Tests/Snippets.cs#L144-L157' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderLambert' title='Start of snippet'>anchor</a></sup>
+<!-- endSnippet -->
+
+```
+geoconvert states.geojson states.png --projection lambert --size 1600
+```
+
+Anything more exotic (UTM, Albers Equal-Area, polar stereographic, …) is out of scope — the input
+model is always WGS84, so reprojection has to happen upstream and the renderer is fed already-projected
+coordinates (it treats X/Y as planar either way).
 
 
 ## Compression

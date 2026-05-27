@@ -7,6 +7,15 @@ namespace GeoConvert;
 public enum MapProjection
 {
     /// <summary>
+    /// Pick a projection from the data bounds: a regional extent (latitude span &lt; 60°, longitude
+    /// span &lt; 90°) renders as <see cref="Lambert"/>; anything wider falls back to
+    /// <see cref="PlateCarree"/>. This is the default — set <see cref="RenderOptions.Projection"/> to a
+    /// specific value to override. Auto never picks <see cref="WebMercator"/>: that's a layout choice
+    /// (tile-style), not a distortion-minimisation one, so it stays explicit.
+    /// </summary>
+    Auto,
+
+    /// <summary>
     /// Equirectangular: longitude and latitude are treated as planar X/Y with a uniform scale. Cheap and
     /// faithful for small extents near the equator; high-latitude features look compressed in Y at world
     /// scale.
@@ -23,4 +32,15 @@ public enum MapProjection
     /// a full-world view, pair this with <see cref="MapRenderer.WebMercatorWorldBounds"/>.
     /// </summary>
     WebMercator,
+
+    /// <summary>
+    /// Spherical Lambert Conformal Conic with two standard parallels auto-picked from the data bounds
+    /// (the 1/6 and 5/6 of the latitude range convention used by national mapping agencies for
+    /// country-scale layouts). Conformal — preserves local shape and angles — and keeps area distortion
+    /// low across regions a few hundred to a couple thousand kilometres wide, so this is the right pick
+    /// for a single country, state, or province. Outside that scale the cone unfolds badly: it
+    /// degenerates near the equator if the bounds are vertically symmetric (the cone flattens) and is
+    /// not meant for a world view — use <see cref="WebMercator"/> or <see cref="PlateCarree"/> there.
+    /// </summary>
+    Lambert,
 }

@@ -85,9 +85,14 @@ the spatial index (`index_node_size=0`) and is 2D; indexed files are read by ski
 has no area type, so a polygon is written as a track (one segment per ring), a multi polygon flattens
 its rings into one track, and a geometry collection writes each member in turn (so areas read back as
 lines). WKT/WKB carry geometry only (attributes dropped). PNG is write-only and needs an extent
-(defaults to the data bounds); `RenderOptions.Projection` selects the layout — `PlateCarree` (default,
-linear lon/lat) or `WebMercator` (latitude clamped to ±85.0511°). The CLI exposes this as
-`--projection plate-carree|web-mercator` (with `equirectangular` and `mercator` as accepted aliases).
+(defaults to the data bounds); `RenderOptions.Projection` selects the layout — `Auto` (default; picks
+`Lambert` when both bounds spans sit under 90° lon / 60° lat, else `PlateCarree`; never picks
+`WebMercator` because that's a layout choice, not a distortion-minimisation one), `PlateCarree`
+(linear lon/lat), `WebMercator` (latitude clamped to ±85.0511°), or `Lambert` (Lambert Conformal Conic
+with standard parallels auto-picked at 1/6 and 5/6 of the data's latitude range; degenerates on
+equator-symmetric bounds and silently falls back to `PlateCarree` there). The CLI exposes this as
+`--projection auto|plate-carree|web-mercator|lambert` (with `equirectangular`, `mercator`, `lcc`, and
+`lambert-conformal-conic` as accepted aliases).
 
 ### Layer-aware codecs
 

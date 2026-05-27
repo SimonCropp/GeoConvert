@@ -84,6 +84,11 @@ public class CliTests
     [Arguments("web-mercator")]
     [Arguments("Mercator")]
     [Arguments("WEBMERCATOR")]
+    [Arguments("lambert")]
+    [Arguments("lambert-conformal-conic")]
+    [Arguments("LCC")]
+    [Arguments("auto")]
+    [Arguments("Automatic")]
     public async Task RendersPngWithProjection(string projection)
     {
         using var directory = new TempDirectory();
