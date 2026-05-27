@@ -110,7 +110,11 @@ the cap height in pixels (default 14); stroke weight grows gently with size. Anc
 polygon centroid (shoelace), line arclength midpoint, point itself; multi-* picks the largest
 sub-piece by area/length; `GeometryCollection` recurses to the first child with a usable
 anchor; off-canvas or overlapping labels are dropped silently (no candidate-offset search, no
-rotation). A halo ring traces the strokes (not a solid backdrop) at one pixel wider than the
+rotation). Collision order defaults to "biggest feature first" (polygon area / line length;
+points last), so on overlap the bigger feature's label wins; override with
+`RenderOptions.LabelPriority` (or `LayerStyle.LabelPriority`) for any
+`Func<Feature, double>` — typical patterns are reading a property like `POP_EST` or capturing
+an external `Dictionary<string, double>` lookup in the closure. A halo ring traces the strokes (not a solid backdrop) at one pixel wider than the
 foreground stroke — a semi-transparent white by default — set `LabelHalo = null` to skip. CLI
 exposes `--label <property> --label-size <pixels> --label-color <#hex> --label-halo <#hex|none>`.
 

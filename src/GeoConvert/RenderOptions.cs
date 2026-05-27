@@ -80,6 +80,24 @@ public sealed class RenderOptions
     /// large.</summary>
     public double LabelSize { get; set; } = 14;
 
+    /// <summary>
+    /// Optional priority score for label collision: features with a higher score are placed
+    /// before lower-scored ones in the greedy collision pass, so on overlap the higher-scored
+    /// label wins and the lower-scored one is dropped. Returns null — or leave this property
+    /// null — to use the default rule (polygon area / line length, points last), which orders
+    /// labels by raw geometric size. The two typical reasons to override:
+    /// <list type="bullet">
+    /// <item>A property on each feature already encodes importance — e.g. <c>feature =&gt;
+    /// Convert.ToDouble(feature.Properties["pop_est"] ?? 0)</c> orders by population so big
+    /// cities outrank small towns.</item>
+    /// <item>The importance lives in an external table — capture a <c>Dictionary&lt;string,
+    /// double&gt;</c> in the closure and look up by name, ISO code, etc.</item>
+    /// </list>
+    /// Ties keep file order (stable sort), so two features with the same priority resolve as
+    /// they were given. Values can be any double; only the relative ordering matters.
+    /// </summary>
+    public Func<Feature, double>? LabelPriority { get; set; }
+
     /// <summary>Color of label text.</summary>
     public Rgba LabelColor { get; set; } = new(20, 20, 20);
 

@@ -42,4 +42,9 @@ public sealed class LayerStyle
     /// semi-transparent white, so labels stay readable out of the box. Pass
     /// <see cref="Rgba.Transparent"/> to suppress the halo for a specific layer.</summary>
     public Rgba? LabelHalo { get; set; }
+
+    /// <summary>Per-feature priority for label collision; higher = placed first, lower scores
+    /// drop on overlap. Null inherits <see cref="RenderOptions.LabelPriority"/> (which itself
+    /// defaults to geometric area/length). See the RenderOptions property for typical usage.</summary>
+    public Func<Feature, double>? LabelPriority { get; set; }
 }

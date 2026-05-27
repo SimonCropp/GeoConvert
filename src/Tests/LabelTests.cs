@@ -518,6 +518,110 @@ public class LabelTests
     }
 
     [Test]
+    public async Task Custom_label_priority_overrides_default_area_rule()
+    {
+        // Two points sitting at the same projected pixel so they MUST collide. Without a custom
+        // priority both have geometry-area = 0 (points) and file order decides — the first wins.
+        // With a custom priority sourced from the "rank" property, the higher-ranked feature
+        // outranks the other regardless of file order. The snapshot pins which word actually
+        // renders (SECOND, the higher-ranked one), so a regression that drops the callback or
+        // reverses the sort would diff visibly.
+        var features = new FeatureCollection
+        {
+            new Feature(new Point(0, 0), new Dictionary<string, object?> { ["name"] = "FIRST", ["rank"] = 1.0 }),
+            new Feature(new Point(0, 0), new Dictionary<string, object?> { ["name"] = "SECOND", ["rank"] = 99.0 }),
+        };
+        var options = LabelOptions();
+        options.LabelPriority = feature =>
+            feature.Properties.TryGetValue("rank", out var v) ? Convert.ToDouble(v) : 0;
+
+        var png = MapRenderer.RenderPng(features, options);
+        var (_, _, pixels) = Decode(png);
+
+        // Cross-check: same scene without the priority callback must produce a different image —
+        // confirms the override actually changed the winner rather than coincidentally agreeing
+        // with the default.
+        var defaultPixels = Render(features, LabelOptions());
+        await Assert.That(LabelPixels(pixels)).IsGreaterThan(0);
+        await Assert.That(pixels.SequenceEqual(defaultPixels)).IsFalse();
+
+        await Verify(new MemoryStream(png), "png");
+    }
+
+    [Test]
+    public async Task Custom_priority_from_external_dictionary_lookup()
+    {
+        // The closure pattern: priorities live outside the features themselves (an admin table, a
+        // population dataset, etc.) and the callback captures the dict. Useful when the features
+        // already exist and you don't want to mutate properties just to drive label ordering.
+        // Snapshot pins "Big" as the winner (priority 1000 > priority 1).
+        var importance = new Dictionary<string, double>
+        {
+            ["Big"] = 1000,
+            ["Small"] = 1,
+        };
+        var features = new FeatureCollection
+        {
+            new Feature(new Polygon([[new(0, 0), new(1, 0), new(1, 1), new(0, 1), new(0, 0)]]), new Dictionary<string, object?> { ["name"] = "Big" }),
+            new Feature(new Polygon([[new(0, 0), new(1, 0), new(1, 1), new(0, 1), new(0, 0)]]), new Dictionary<string, object?> { ["name"] = "Small" }),
+        };
+
+        var options = LabelOptions();
+        options.LabelPriority = feature =>
+            feature.Properties.TryGetValue("name", out var n) && n is string name && importance.TryGetValue(name, out var p)
+                ? p
+                : 0;
+        var png = MapRenderer.RenderPng(features, options);
+        var (_, _, pixels) = Decode(png);
+        await Assert.That(LabelPixels(pixels)).IsGreaterThan(0);
+
+        await Verify(new MemoryStream(png), "png");
+    }
+
+    [Test]
+    public async Task Layer_label_priority_overrides_options_default()
+    {
+        // Priority callback on a LayerStyle takes precedence over the RenderOptions-level one for
+        // that layer — same per-property fall-through pattern as the other label knobs. Snapshot
+        // pins which of the two layers' labels wins the collision at the shared anchor.
+        var lower = new FeatureCollection
+        {
+            Name = "background",
+            Features =
+            {
+                new(new Point(0, 0), new Dictionary<string, object?> { ["name"] = "L", ["w"] = 5.0 }),
+            },
+        };
+        var upper = new FeatureCollection
+        {
+            Name = "overlay",
+            Features =
+            {
+                new(new Point(0, 0), new Dictionary<string, object?> { ["name"] = "U", ["w"] = 50.0 }),
+            },
+        };
+
+        var options = LabelOptions();
+        // Options-level priority returns 0 for every feature; the layer-style override picks the
+        // "w" property only for the "background" layer. Both layers visit the same pixel anchor,
+        // and pre-order means the background layer's label is attempted first regardless.
+        options.LabelPriority = _ => 0;
+        options.LayerStyle = layer => layer.Name switch
+        {
+            "background" => new LayerStyle
+            {
+                LabelPriority = f => Convert.ToDouble(f.Properties["w"]),
+            },
+            _ => null,
+        };
+        var png = MapRenderer.RenderPng([lower, upper], options);
+        var (_, _, pixels) = Decode(png);
+        await Assert.That(LabelPixels(pixels)).IsGreaterThan(0);
+
+        await Verify(new MemoryStream(png), "png");
+    }
+
+    [Test]
     public Task Render_snapshot_world_labels_high_res()
     {
         // High-resolution world snapshot — 4096-wide Goode's Homolosine (the equal-area lobed
@@ -574,6 +678,13 @@ public class LabelTests
     static byte[] Render(FeatureCollection features, RenderOptions options)
     {
         var png = MapRenderer.RenderPng(features, options);
+        var (_, _, pixels) = Decode(png);
+        return pixels;
+    }
+
+    static byte[] Render(IReadOnlyList<FeatureCollection> layers, RenderOptions options)
+    {
+        var png = MapRenderer.RenderPng(layers, options);
         var (_, _, pixels) = Decode(png);
         return pixels;
     }

@@ -261,19 +261,17 @@ public static class MapRenderer
         var style = ResolveLabel(options.LayerStyle?.Invoke(layer), options);
         if (style.Label != null)
         {
-            // Process features biggest-first within the layer: a polygon's "label priority" is its
-            // outer-ring area (lon/lat shoelace — strictly that's not the projected area but it's a
-            // reliable enough proxy for relative size within one projection); lines use total
-            // length; points fall to the bottom. Greedy collision then lets the bigger feature
-            // anchor its label first, so a small neighbour can't grab the spot a bigger feature
-            // would have wanted — without the sort, file order decided that, which on Natural
-            // Earth meant Ireland's label was placed before the United Kingdom's and visually
-            // overran into Great Britain.
-            // List.Sort is a stable sort in .NET — features with identical priority keep their
-            // original file order, so the sort doesn't churn label placement for, say, a layer of
-            // uniformly-sized point features.
+            // Process features highest-priority-first within the layer. When the caller provided
+            // a priority callback, it decides — typical pattern is to pull from a feature
+            // property (population, label-rank, etc.) or capture a lookup table in the closure.
+            // Without one, fall back to the default geometric rule: polygon area / line length /
+            // points last, so on overlap the bigger feature anchors its label first. Greedy
+            // collision then drops the loser. List.Sort is a stable sort in .NET, so ties
+            // preserve file order — important so a uniformly-priority layer doesn't get its
+            // labels shuffled in ways the caller didn't ask for.
+            var priorityFn = style.Priority ?? (Func<Feature, double>)(f => LabelPriority(f.Geometry));
             var sorted = new List<Feature>(layer.Features);
-            sorted.Sort((a, b) => LabelPriority(b.Geometry).CompareTo(LabelPriority(a.Geometry)));
+            sorted.Sort((a, b) => priorityFn(b).CompareTo(priorityFn(a)));
             foreach (var feature in sorted)
             {
                 if (feature.Geometry is not { } geometry)
@@ -369,7 +367,8 @@ public static class MapRenderer
             overrides?.Label ?? options.Label,
             overrides?.LabelSize ?? options.LabelSize,
             overrides?.LabelColor ?? options.LabelColor,
-            overrides?.LabelHalo ?? options.LabelHalo);
+            overrides?.LabelHalo ?? options.LabelHalo,
+            overrides?.LabelPriority ?? options.LabelPriority);
 
     // Pixel-space anchor for a label. Polygons use the signed-area-weighted centroid of their
     // outer ring; lines use the arclength midpoint; multi-* picks the largest sub-piece (so a
@@ -560,7 +559,7 @@ public static class MapRenderer
 
     readonly record struct ResolvedStyle(Rgba Stroke, Rgba Fill, int StrokeWidth, int PointRadius);
 
-    readonly record struct ResolvedLabelStyle(Func<Feature, string?>? Label, double Size, Rgba Color, Rgba? Halo);
+    readonly record struct ResolvedLabelStyle(Func<Feature, string?>? Label, double Size, Rgba Color, Rgba? Halo, Func<Feature, double>? Priority);
 
     /// <summary>One projected polygon piece: closed rings to fill (even-odd) plus the open
     /// polylines to stroke. Fill and Strokes diverge for interrupted Goode, where the clipped

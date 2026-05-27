@@ -227,6 +227,33 @@ static class Snippets
             ? new LayerStyle { Label = feature => feature.Properties["text"] as string }
             : null;
 
+        // By default, labels are placed largest-feature-first so when two collide the bigger
+        // polygon's name wins. Override LabelPriority to drive collision order from anything
+        // else — a feature property like population, or an external lookup captured in the
+        // closure. Without this, Natural Earth's "Ireland" would beat "United Kingdom" on file
+        // order; with population priority, UK (67M) outranks Ireland (5M) and gets the spot.
+        options.LabelPriority = feature =>
+            feature.Properties.TryGetValue("POP_EST", out var p) ? Convert.ToDouble(p) : 0;
+
+        // Or look priorities up in a separate table — useful when the data and the importance
+        // ranking live in different files.
+        var populations = new Dictionary<string, double>
+        {
+            ["United Kingdom"] = 67_000_000,
+            ["Ireland"] = 5_000_000,
+        };
+        options.LabelPriority = feature =>
+        {
+            if (feature.Properties.TryGetValue("NAME", out var name) &&
+                name is string n &&
+                populations.TryGetValue(n, out var pop))
+            {
+                return pop;
+            }
+
+            return 0;
+        };
+
         #endregion
     }
 
