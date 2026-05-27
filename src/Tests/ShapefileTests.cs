@@ -3,7 +3,11 @@ public class ShapefileTests
     [Test]
     public async Task Point_shapefile()
     {
-        var source = new FeatureCollection { new Feature(new Point(1, 2)), new Feature(new Point(3, 4)) };
+        var source = new FeatureCollection
+        {
+            new Feature(new Point(1, 2)),
+            new Feature(new Point(3, 4))
+        };
         var back = TestSupport.RoundtripShapefile(source);
         await Assert.That(back.Features[1].Geometry).IsTypeOf<Point>();
     }
@@ -11,7 +15,10 @@ public class ShapefileTests
     [Test]
     public async Task MultiPoint_shapefile()
     {
-        var source = new FeatureCollection { new Feature(new MultiPoint([new(1, 2), new(3, 4)])) };
+        var source = new FeatureCollection
+        {
+            new Feature(new MultiPoint([new(1, 2), new(3, 4)]))
+        };
         var back = TestSupport.RoundtripShapefile(source);
         await Assert.That(back.Features[0].Geometry).IsTypeOf<MultiPoint>();
     }
@@ -82,7 +89,10 @@ public class ShapefileTests
     [Test]
     public async Task Null_and_empty_geometry()
     {
-        var source = new FeatureCollection { new Feature(new Point(1, 2)), new Feature() };
+        var source = new FeatureCollection
+        {
+            new Feature(new Point(1, 2)), new Feature()
+        };
         var back = TestSupport.RoundtripShapefile(source);
         await Assert.That(back.Features[1].Geometry).IsNull();
     }
@@ -90,7 +100,10 @@ public class ShapefileTests
     [Test]
     public async Task All_null_geometry_collection()
     {
-        var source = new FeatureCollection { new Feature(), new Feature() };
+        var source = new FeatureCollection
+        {
+            new Feature(), new Feature()
+        };
         var back = TestSupport.RoundtripShapefile(source);
         await Assert.That(back.Count).IsEqualTo(2);
         await Assert.That(back.Features[0].Geometry).IsNull();

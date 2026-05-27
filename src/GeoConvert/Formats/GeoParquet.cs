@@ -515,7 +515,11 @@ public static class GeoParquet
     {
         var schema = new List<ParquetMetadata.SchemaElement>
         {
-            new() { Name = "schema", NumChildren = propertyColumns.Count + 1 },
+            new()
+            {
+                Name = "schema",
+                NumChildren = propertyColumns.Count + 1
+            },
             new()
             {
                 Name = geometryColumnName,

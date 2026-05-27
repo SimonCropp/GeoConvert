@@ -161,11 +161,11 @@ public static class MapRenderer
     /// </summary>
     sealed class Projection
     {
-        readonly MapProjection kind;
-        readonly Envelope projectedBounds;
-        readonly double scale;
-        readonly double offsetX;
-        readonly double offsetY;
+        MapProjection kind;
+        Envelope projectedBounds;
+        double scale;
+        double offsetX;
+        double offsetY;
 
         public Projection(Envelope bounds, RenderOptions options)
         {
@@ -209,11 +209,16 @@ public static class MapRenderer
             return result;
         }
 
-        Envelope ProjectEnvelope(Envelope bounds) =>
+        Envelope ProjectEnvelope(Envelope bounds)
+        {
             // X is linear in both projections supported here, so projecting the corners suffices.
-            kind == MapProjection.PlateCarree
-                ? bounds
-                : new Envelope(bounds.MinX, ProjectLatitude(bounds.MinY), bounds.MaxX, ProjectLatitude(bounds.MaxY));
+            if (kind == MapProjection.PlateCarree)
+            {
+                return bounds;
+            }
+
+            return new(bounds.MinX, ProjectLatitude(bounds.MinY), bounds.MaxX, ProjectLatitude(bounds.MaxY));
+        }
 
         double ProjectLatitude(double latitude)
         {
@@ -222,7 +227,7 @@ public static class MapRenderer
                 return latitude;
             }
 
-            var clamped = Math.Clamp(latitude, -MapRenderer.WebMercatorMaxLatitude, MapRenderer.WebMercatorMaxLatitude);
+            var clamped = Math.Clamp(latitude, -WebMercatorMaxLatitude, WebMercatorMaxLatitude);
             var radians = clamped * Math.PI / 180;
             // Scale back to degree-equivalent units so the projected envelope reads in the same unit as
             // longitude — the downstream pixel math is scale-invariant either way, but this keeps the

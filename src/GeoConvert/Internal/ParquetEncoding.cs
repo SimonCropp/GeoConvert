@@ -68,7 +68,7 @@ static class ParquetEncoding
         var values = new long[count];
         for (var i = 0; i < count; i++)
         {
-            values[i] = BinaryPrimitives.ReadInt64LittleEndian(data.AsSpan(offset + (i * 8)));
+            values[i] = BinaryPrimitives.ReadInt64LittleEndian(data.AsSpan(offset + i * 8));
         }
 
         return values;
@@ -79,7 +79,7 @@ static class ParquetEncoding
         var values = new long[count];
         for (var i = 0; i < count; i++)
         {
-            values[i] = BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(offset + (i * 4)));
+            values[i] = BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(offset + i * 4));
         }
 
         return values;
@@ -90,7 +90,7 @@ static class ParquetEncoding
         var values = new double[count];
         for (var i = 0; i < count; i++)
         {
-            values[i] = BinaryPrimitives.ReadDoubleLittleEndian(data.AsSpan(offset + (i * 8)));
+            values[i] = BinaryPrimitives.ReadDoubleLittleEndian(data.AsSpan(offset + i * 8));
         }
 
         return values;
@@ -101,7 +101,7 @@ static class ParquetEncoding
         var values = new bool[count];
         for (var i = 0; i < count; i++)
         {
-            values[i] = (data[offset + (i / 8)] & (1 << (i % 8))) != 0;
+            values[i] = (data[offset + i / 8] & (1 << (i % 8))) != 0;
         }
 
         return values;

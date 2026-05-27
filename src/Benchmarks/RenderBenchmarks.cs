@@ -14,5 +14,11 @@ public class RenderBenchmarks
 
     [Benchmark]
     public int RenderPng() =>
-        MapRenderer.RenderPng(data, new() { Width = 1024, Height = 768 }).Length;
+        MapRenderer.RenderPng(
+            data,
+            new()
+            {
+                Width = 1024,
+                Height = 768
+            }).Length;
 }

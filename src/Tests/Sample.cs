@@ -50,7 +50,7 @@ static class Sample
             Name = "world",
             Features =
             {
-                new Feature(
+                new(
                     new Point(new(0, 0)),
                     Props(("name", "origin")))
             },

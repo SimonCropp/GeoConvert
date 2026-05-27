@@ -5,7 +5,11 @@ public class PngTests
     [Test]
     public async Task Renders_the_requested_size()
     {
-        var png = MapRenderer.RenderPng(Sample.Polygons(), new() { Width = 200, Height = 150 });
+        var png = MapRenderer.RenderPng(Sample.Polygons(), new()
+        {
+            Width = 200,
+            Height = 150
+        });
 
         await Assert.That(png[..8]).IsEquivalentTo(signature);
         var (width, height, _) = Decode(png);
@@ -16,7 +20,11 @@ public class PngTests
     [Test]
     public async Task Draws_geometry_over_the_background()
     {
-        var png = MapRenderer.RenderPng(Sample.Polygons(), new() { Width = 200, Height = 150 });
+        var png = MapRenderer.RenderPng(Sample.Polygons(), new()
+        {
+            Width = 200,
+            Height = 150
+        });
 
         var (_, _, pixels) = Decode(png);
         await Assert.That(NonBackgroundCount(pixels)).IsGreaterThan(0);
@@ -81,7 +89,11 @@ public class PngTests
             new Feature(new GeometryCollection([new Point(2, 3)])),
         };
 
-        var png = MapRenderer.RenderPng(collection, new() { Width = 128, Height = 128 });
+        var png = MapRenderer.RenderPng(collection, new()
+        {
+            Width = 128,
+            Height = 128
+        });
         await Assert.That(png[..8]).IsEquivalentTo(signature);
     }
 
@@ -163,7 +175,12 @@ public class PngTests
 
         var png = MapRenderer.RenderPng(
             collection,
-            new() { Bounds = new Envelope(-1, -1, 11, 9), Width = 300, Height = 220 });
+            new()
+            {
+                Bounds = new Envelope(-1, -1, 11, 9),
+                Width = 300,
+                Height = 220
+            });
 
         return Verify(new MemoryStream(png), "png");
     }
@@ -174,7 +191,10 @@ public class PngTests
         var collection = GeoConverter.Read(ProjectFiles.australian_suburbs_geojson);
         var png = MapRenderer.RenderPng(
             collection,
-            new() { Width = 3000 });
+            new()
+            {
+                Width = 3000
+            });
 
         return Verify(new MemoryStream(png), "png");
     }
@@ -184,8 +204,12 @@ public class PngTests
     {
         // Same bounds, derived height: in Web Mercator a 0–80° lat strip projects to roughly 14× the
         // longitudinal width, vs 8× under plate carrée. So Mercator must produce a taller image.
-        var collection = new FeatureCollection { new Feature(new Point(5, 40)) };
-        RenderOptions Build(MapProjection projection) => new()
+        var collection = new FeatureCollection
+        {
+            new Feature(new Point(5, 40))
+        };
+
+        static RenderOptions Build(MapProjection projection) => new()
         {
             Bounds = new Envelope(0, 0, 10, 80),
             Width = 100,
@@ -206,9 +230,16 @@ public class PngTests
         // ln(tan) at lat 90° is +∞. Anything past the ±85.0511° cutoff should clamp to the limit, so two
         // points well past the cutoff (one slightly, one extreme) must render identically. Without the
         // clamp this throws or NaNs through the rasterizer.
-        var near = new FeatureCollection { new Feature(new Point(0, 86)) };
-        var far = new FeatureCollection { new Feature(new Point(0, 89.9)) };
-        RenderOptions Build() => new()
+        var near = new FeatureCollection
+        {
+            new Feature(new Point(0, 86))
+        };
+        var far = new FeatureCollection
+        {
+            new Feature(new Point(0, 89.9))
+        };
+
+        static RenderOptions Build() => new()
         {
             // Bounds stop at exactly the cutoff so neither bound is itself clamped — only the data is.
             Bounds = new Envelope(-10, -85.05112877980659, 10, 85.05112877980659),
@@ -230,7 +261,11 @@ public class PngTests
         var collection = GeoConverter.Read(ProjectFiles.australian_suburbs_geojson);
         var png = MapRenderer.RenderPng(
             collection,
-            new() { Width = 3000, Projection = MapProjection.WebMercator });
+            new()
+            {
+                Width = 3000,
+                Projection = MapProjection.WebMercator
+            });
 
         return Verify(new MemoryStream(png), "png");
     }
@@ -264,14 +299,19 @@ public class PngTests
         await Assert.That(bounds.MaxX).IsEqualTo(180);
 
         // Render a single point so we can compare derived width/height: with Padding=0 they should match.
-        var collection = new FeatureCollection { new Feature(new Point(0, 0)) };
-        var png = MapRenderer.RenderPng(collection, new()
+        var collection = new FeatureCollection
         {
-            Bounds = bounds,
-            Width = 256,
-            Padding = 0,
-            Projection = MapProjection.WebMercator,
-        });
+            new Feature(new Point(0, 0))
+        };
+        var png = MapRenderer.RenderPng(
+            collection,
+            new()
+            {
+                Bounds = bounds,
+                Width = 256,
+                Padding = 0,
+                Projection = MapProjection.WebMercator,
+            });
         var (width, height, _) = Decode(png);
         await Assert.That(height).IsEqualTo(width);
     }
@@ -282,7 +322,10 @@ public class PngTests
         var threw = false;
         try
         {
-            MapRenderer.RenderPng(Sample.Polygons(), new() { Width = 0 });
+            MapRenderer.RenderPng(Sample.Polygons(), new()
+            {
+                Width = 0
+            });
         }
         catch (GeoConvertException)
         {
@@ -297,7 +340,8 @@ public class PngTests
     {
         // A large render with a repetitive background gives deflate something meaningful to chew on.
         var collection = Sample.Polygons();
-        RenderOptions Build(CompressionLevel level) => new()
+
+        static RenderOptions Build(CompressionLevel level) => new()
         {
             Width = 512,
             Height = 512,

@@ -92,7 +92,10 @@ public class InternalTests
             points.Add(new(i * 0.001, i * 0.002));
         }
 
-        var source = new FeatureCollection { new Feature(new LineString(points)) };
+        var source = new FeatureCollection
+        {
+            new Feature(new LineString(points))
+        };
         var result = G.RoundtripStream(source, GeoFormat.FlatGeobuf);
         await Assert.That(((LineString)result.Features[0].Geometry!).Positions.Count).IsEqualTo(5000);
     }

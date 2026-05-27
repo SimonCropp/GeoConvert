@@ -34,7 +34,10 @@ public class BugFixTests
     [Test]
     public async Task GeoJson_empty_point_writes_and_round_trips()
     {
-        var source = new FeatureCollection { new Feature(new Point(new(double.NaN, double.NaN))) };
+        var source = new FeatureCollection
+        {
+            new Feature(new Point(new(double.NaN, double.NaN)))
+        };
         var json = GeoJson.WriteString(source);
         await Assert.That(json).Contains("\"coordinates\": []");
 
@@ -45,7 +48,10 @@ public class BugFixTests
     [Test]
     public async Task TopoJson_empty_point_writes_and_round_trips()
     {
-        var source = new FeatureCollection { new Feature(new Point(new(double.NaN, double.NaN))) };
+        var source = new FeatureCollection
+        {
+            new Feature(new Point(new(double.NaN, double.NaN)))
+        };
         var json = TopoJson.WriteString(source);
         await Assert.That(json).Contains("\"coordinates\": []");
 
@@ -58,14 +64,20 @@ public class BugFixTests
     [Test]
     public async Task GeoJson_rejects_infinite_coordinate()
     {
-        var source = new FeatureCollection { new Feature(new Point(new(double.PositiveInfinity, 1))) };
+        var source = new FeatureCollection
+        {
+            new Feature(new Point(new(double.PositiveInfinity, 1)))
+        };
         await Assert.That(G.ThrowsGeo(() => GeoJson.WriteString(source))).IsTrue();
     }
 
     [Test]
     public async Task TopoJson_rejects_infinite_coordinate()
     {
-        var source = new FeatureCollection { new Feature(new Point(new(double.PositiveInfinity, 1))) };
+        var source = new FeatureCollection
+        {
+            new Feature(new Point(new(double.PositiveInfinity, 1)))
+        };
         await Assert.That(G.ThrowsGeo(() => TopoJson.WriteString(source))).IsTrue();
     }
 
@@ -282,8 +294,22 @@ public class BugFixTests
     public async Task GeoJson_writes_polygons_with_rfc_7946_orientation()
     {
         // Construct with CW exterior + CCW hole (opposite of RFC), confirm the writer re-orients.
-        var cwExterior = new List<Position> { new(0, 0), new(0, 4), new(4, 4), new(4, 0), new(0, 0) };
-        var ccwHole = new List<Position> { new(1, 1), new(1, 2), new(2, 2), new(2, 1), new(1, 1) };
+        var cwExterior = new List<Position>
+        {
+            new(0, 0),
+            new(0, 4),
+            new(4, 4),
+            new(4, 0),
+            new(0, 0)
+        };
+        var ccwHole = new List<Position>
+        {
+            new(1, 1),
+            new(1, 2),
+            new(2, 2),
+            new(2, 1),
+            new(1, 1)
+        };
         var source = new FeatureCollection
         {
             new Feature(new Polygon([cwExterior, ccwHole])),
