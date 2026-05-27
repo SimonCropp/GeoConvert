@@ -11,9 +11,10 @@ Options:
   --bbox minX,minY,maxX,maxY   Extent to render (PNG output only).
   --size WIDTH[xHEIGHT]  Image size in pixels (PNG output only).
   --projection <name>    Projection for PNG output: 'auto' (default — picks
-                         lambert for regional bounds, plate-carree otherwise),
-                         'plate-carree', 'web-mercator', or 'lambert' (Lambert
-                         Conformal Conic, low distortion at country/state scale).
+                         lambert for regional bounds, plate-carree for continental,
+                         goode for world), 'plate-carree', 'web-mercator', 'lambert'
+                         (Lambert Conformal Conic, low distortion at country/state
+                         scale), or 'goode' (Goode's Homolosine, equal-area world map).
   --list                 List supported formats.
   -h, --help             Show this help.
 
@@ -24,3 +25,4 @@ Examples:
   geoconvert world.geojson europe.png --bbox -10,35,30,60 --size 1200x900
   geoconvert world.geojson world.png --projection web-mercator --size 1200
   geoconvert states.geojson states.png --projection lambert --size 1600
+  geoconvert world.geojson world.png --projection goode --size 1600

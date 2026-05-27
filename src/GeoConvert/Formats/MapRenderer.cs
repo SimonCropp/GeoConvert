@@ -97,6 +97,29 @@ public static class MapRenderer
         var projection = new Projection(bounds, options);
         var canvas = new Canvas(projection.Width, projection.Height, options.Background);
 
+        if (options.Ocean is { } ocean)
+        {
+            // Paint the projection envelope first so every feature layer renders on top of it. For
+            // Goode this fills each lobe with the ocean colour, leaving the inter-lobe gaps as the
+            // canvas background — that's what makes the projection's lobed shape pop visually.
+            foreach (var ring in projection.GetWorldEnvelopeRings())
+            {
+                canvas.FillPolygon([ring], ocean);
+            }
+
+            // Outline each lobe with the regular stroke colour so the envelope reads as a clear
+            // border around the world even where the inside is bare ocean. For Goode the equator
+            // edge is intentionally omitted from the stroke (otherwise the north and south lobes'
+            // top/bottom edges would double up into a thick horizontal line bisecting the map).
+            foreach (var chain in projection.GetWorldEnvelopeStrokes())
+            {
+                for (var i = 0; i + 1 < chain.Length; i++)
+                {
+                    canvas.StrokeLine(chain[i].X, chain[i].Y, chain[i + 1].X, chain[i + 1].Y, options.StrokeWidth, options.Stroke);
+                }
+            }
+        }
+
         foreach (var layer in layers)
         {
             DrawLayer(canvas, layer, projection, options);
@@ -182,21 +205,32 @@ public static class MapRenderer
 
     static void DrawPolygon(Canvas canvas, Polygon polygon, Projection projection, ResolvedStyle style)
     {
-        var rings = polygon.Rings.Select(projection.ToPixels).ToArray();
-        canvas.FillPolygon(rings, style.Fill);
-        foreach (var ring in rings)
+        // PreparePolygon yields one batch per output piece — for Goode that's one per lobe with
+        // content. Fill uses the clipped closed rings (so the lobe-boundary closure participates
+        // in even-odd fill), while strokes use the open polyline chains that omit any
+        // clip-boundary edges — otherwise a clipped continent like Antarctica would render with a
+        // dark vertical stroke down each lobe meridian, reading as a thin slice through the shape.
+        foreach (var batch in projection.PreparePolygon(polygon.Rings))
         {
-            StrokeRing(canvas, ring, style);
+            canvas.FillPolygon(batch.Fill, style.Fill);
+            foreach (var chain in batch.Strokes)
+            {
+                StrokeRing(canvas, chain, style);
+            }
         }
     }
 
     static void StrokePath(Canvas canvas, IReadOnlyList<Position> positions, Projection projection, ResolvedStyle style)
     {
-        for (var i = 0; i + 1 < positions.Count; i++)
+        // PrepareLine yields one subpath per lobe the line crosses (just the input line itself for
+        // non-interrupted projections). Each subpath stays in one lobe so consecutive vertices
+        // never straddle the interrupt gap.
+        foreach (var subpath in projection.PrepareLine(positions))
         {
-            var (x0, y0) = projection.ToPixel(positions[i]);
-            var (x1, y1) = projection.ToPixel(positions[i + 1]);
-            canvas.StrokeLine(x0, y0, x1, y1, style.StrokeWidth, style.Stroke);
+            for (var i = 0; i + 1 < subpath.Length; i++)
+            {
+                canvas.StrokeLine(subpath[i].X, subpath[i].Y, subpath[i + 1].X, subpath[i + 1].Y, style.StrokeWidth, style.Stroke);
+            }
         }
     }
 
@@ -210,6 +244,11 @@ public static class MapRenderer
 
     readonly record struct ResolvedStyle(Rgba Stroke, Rgba Fill, int StrokeWidth, int PointRadius);
 
+    /// <summary>One projected polygon piece: closed rings to fill (even-odd) plus the open
+    /// polylines to stroke. Fill and Strokes diverge for interrupted Goode, where the clipped
+    /// fill ring includes synthetic edges along the lobe boundary that the strokes omit.</summary>
+    readonly record struct PolygonBatch((double X, double Y)[][] Fill, (double X, double Y)[][] Strokes);
+
     /// <summary>
     /// Maps longitude/latitude into pixel space: first through the chosen <see cref="MapProjection"/>
     /// (planar coords), then a uniform scale that fits the projected extent into the canvas, centered,
@@ -218,6 +257,7 @@ public static class MapRenderer
     sealed class Projection
     {
         MapProjection kind;
+        Envelope inputBounds;
         Envelope projectedBounds;
         double scale;
         double offsetX;
@@ -226,6 +266,7 @@ public static class MapRenderer
 
         public Projection(Envelope bounds, RenderOptions options)
         {
+            inputBounds = bounds;
             kind = Resolve(options.Projection, bounds);
             // Lambert's per-bounds parameters (standard parallels, reference origin) are derived once
             // from the input envelope; every ProjectPoint call reuses them. If the bounds degenerate to
@@ -263,9 +304,7 @@ public static class MapRenderer
         public (double X, double Y) ToPixel(Position position)
         {
             var (projectedX, projectedY) = ProjectPoint(position.X, position.Y);
-            var x = offsetX + (projectedX - projectedBounds.MinX) * scale;
-            var y = Height - offsetY - (projectedY - projectedBounds.MinY) * scale;
-            return (x, y);
+            return ToPixelFromProjected(projectedX, projectedY);
         }
 
         public (double X, double Y)[] ToPixels(IReadOnlyList<Position> positions)
@@ -277,6 +316,271 @@ public static class MapRenderer
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// One batch per output piece. For non-interrupted projections that's a single batch
+        /// holding every input ring projected as-is; for <see cref="MapProjection.Goode"/> each
+        /// input ring is clipped to each lobe's lon/lat bounds and the non-empty results are
+        /// projected through that lobe's central meridian — one batch per lobe with content.
+        /// <para>
+        /// Each batch separates <see cref="PolygonBatch.Fill"/> (closed rings, for the rasterizer's
+        /// even-odd fill) from <see cref="PolygonBatch.Strokes"/> (open polylines, with clip-edge
+        /// segments removed for Goode so the stroke doesn't paint a visible "slice" along the lobe
+        /// boundary where a continent was cut).
+        /// </para>
+        /// </summary>
+        public IEnumerable<PolygonBatch> PreparePolygon(IReadOnlyList<IReadOnlyList<Position>> rings)
+        {
+            if (kind != MapProjection.Goode)
+            {
+                var pixels = rings.Select(ToPixels).ToArray();
+                // For non-interrupted projections fill and stroke trace the same rings — no
+                // clipping happens, so every edge is "real".
+                yield return new PolygonBatch(pixels, pixels);
+                yield break;
+            }
+
+            foreach (var lobe in GoodeLobes.AllLobes)
+            {
+                var fills = new List<(double X, double Y)[]>(rings.Count);
+                var strokes = new List<(double X, double Y)[]>();
+                foreach (var ring in rings)
+                {
+                    // Clip the ring against *each* sub-rectangle of the lobe and project every
+                    // non-empty piece. Multi-rect lobes (the Greenland cut-out shape) emit
+                    // multiple pieces that share a central meridian, so the pieces meet
+                    // seamlessly in projected space. Internal seams between pieces are not
+                    // stroked because both endpoints share a boundary tag.
+                    foreach (var rect in lobe.Rects)
+                    {
+                        var (vertices, tags) = GoodeLobes.ClipRingWithTags(ring, rect);
+                        if (vertices.Count < 3)
+                        {
+                            // S-H can leave a sub-ring with <3 vertices if the polygon just
+                            // grazes the rect; skip those — FillPolygon would draw a degenerate
+                            // sliver and the stroke chains would emit zero-length edges.
+                            continue;
+                        }
+
+                        var pixelRing = ToPixelsInLobe(vertices, lobe);
+                        fills.Add(pixelRing);
+                        foreach (var chain in GoodeLobes.BuildStrokeChains(pixelRing, tags))
+                        {
+                            strokes.Add(chain);
+                        }
+                    }
+                }
+
+                if (fills.Count > 0)
+                {
+                    yield return new PolygonBatch(fills.ToArray(), strokes.ToArray());
+                }
+            }
+        }
+
+        /// <summary>
+        /// One pixel subpath per lobe the input line crosses. For non-interrupted projections the
+        /// line is yielded as a single projected subpath; for Goode, the line is split at every
+        /// hemisphere and lon-lobe boundary it crosses so each emitted subpath stays inside one
+        /// lobe and the stroke doesn't jump across an interrupt.
+        /// </summary>
+        public IEnumerable<(double X, double Y)[]> PrepareLine(IReadOnlyList<Position> positions)
+        {
+            if (kind != MapProjection.Goode)
+            {
+                yield return ToPixels(positions);
+                yield break;
+            }
+
+            foreach (var subpath in GoodeLobes.SubdividePath(positions))
+            {
+                yield return ToPixelsInLobe(subpath.Positions, subpath.Lobe);
+            }
+        }
+
+        /// <summary>
+        /// The projection's world envelope as one or more closed rings in pixel space — what
+        /// <see cref="RenderOptions.Ocean"/> paints under the features. For
+        /// <see cref="MapProjection.Goode"/> that's six lobes; for the rectangular projections
+        /// it's the input bounds (which for a non-linear projection like Lambert still curves on
+        /// the canvas). Each ring is densely sampled along the input perimeter so non-linear
+        /// projections capture the curvature instead of cutting corners.
+        /// </summary>
+        public IEnumerable<(double X, double Y)[]> GetWorldEnvelopeRings()
+        {
+            if (kind == MapProjection.Goode)
+            {
+                foreach (var lobe in GoodeLobes.AllLobes)
+                {
+                    // Skip lobes the caller's bounds doesn't reach — a north-only render shouldn't
+                    // paint the southern lobes' envelopes.
+                    if (GoodeLobes.IntersectsBounds(lobe, inputBounds))
+                    {
+                        yield return SampleLobePerimeter(lobe, samplesPerEdge: 32, openChain: false);
+                    }
+                }
+
+                yield break;
+            }
+
+            // Non-Goode: the input bounds *is* the world envelope. Sampling matters for projections
+            // whose perimeter curves on the canvas (Lambert, WebMercator); for PlateCarree the four
+            // corners would suffice, but sampling at 16 costs nothing and keeps the code uniform.
+            yield return SampleEnvelopePerimeter(inputBounds, 16, ProjectPoint);
+        }
+
+        /// <summary>
+        /// The projection's world envelope as open polylines suitable for stroking the outer
+        /// border. For Goode each lobe's <c>lat=0</c> edge is omitted, so the equator doesn't
+        /// render as a thick horizontal line bisecting the map — north and south lobes' top/bottom
+        /// edges sit on the same projected y at the equator, and stroking both would double up.
+        /// For other projections the closed ring is wrapped back to its first vertex so the
+        /// stroke loops.
+        /// </summary>
+        public IEnumerable<(double X, double Y)[]> GetWorldEnvelopeStrokes()
+        {
+            if (kind == MapProjection.Goode)
+            {
+                foreach (var lobe in GoodeLobes.AllLobes)
+                {
+                    if (GoodeLobes.IntersectsBounds(lobe, inputBounds))
+                    {
+                        yield return SampleLobePerimeter(lobe, samplesPerEdge: 32, openChain: true);
+                    }
+                }
+
+                yield break;
+            }
+
+            // Non-Goode: the closed envelope, wrapped back to the first vertex so the stroke loops.
+            foreach (var ring in GetWorldEnvelopeRings())
+            {
+                var closed = new (double X, double Y)[ring.Length + 1];
+                Array.Copy(ring, closed, ring.Length);
+                closed[^1] = ring[0];
+                yield return closed;
+            }
+        }
+
+        /// <summary>Walks the lobe's hand-coded perimeter clockwise in lon/lat, densely sampling
+        /// each edge and projecting through the lobe's central meridian. For an open chain (the
+        /// border stroke), the lat=0 equator edge is skipped — north and south lobes share that
+        /// edge, so stroking it would double the equator line.</summary>
+        (double X, double Y)[] SampleLobePerimeter(GoodeLobes.Lobe lobe, int samplesPerEdge, bool openChain)
+        {
+            var perimeter = lobe.Perimeter;
+            var n = perimeter.Count;
+
+            // For an open stroke chain, find the equator edge and start walking AFTER it. This
+            // gives one contiguous chain of (n-1) edges in our lobe layouts (each lobe has
+            // exactly one edge at lat=0). LINQ .First throws if no equator edge is present, which
+            // would mean a malformed perimeter — preferable to silently rendering wrong output.
+            var startEdge = 0;
+            var edgeCount = n;
+            if (openChain)
+            {
+                var equatorEdge = Enumerable.Range(0, n)
+                    .First(i => perimeter[i].Y == 0 && perimeter[(i + 1) % n].Y == 0);
+                startEdge = (equatorEdge + 1) % n;
+                edgeCount = n - 1;
+            }
+
+            var points = new List<(double X, double Y)>(edgeCount * samplesPerEdge + 1);
+            for (var k = 0; k < edgeCount; k++)
+            {
+                var edgeIdx = (startEdge + k) % n;
+                var from = perimeter[edgeIdx];
+                var to = perimeter[(edgeIdx + 1) % n];
+                // Emit samplesPerEdge points per edge (t = 0/N, 1/N, ..., (N-1)/N) — the next
+                // edge's first sample picks up the endpoint. For the final edge of an open chain
+                // we also emit the endpoint so the polyline reaches the lobe's final corner.
+                var lastEdgeOfOpenChain = openChain && k == edgeCount - 1;
+                var max = lastEdgeOfOpenChain ? samplesPerEdge : samplesPerEdge - 1;
+                for (var j = 0; j <= max; j++)
+                {
+                    var t = (double)j / samplesPerEdge;
+                    var lon = from.X + t * (to.X - from.X);
+                    var lat = from.Y + t * (to.Y - from.Y);
+                    var (px, py) = ProjectGoodeInLobe(lon, lat, lobe);
+                    points.Add(ToPixelFromProjected(px, py));
+                }
+            }
+
+            return points.ToArray();
+        }
+
+        (double X, double Y)[] SampleEnvelopePerimeter(Envelope region, int samplesPerEdge, Func<double, double, (double X, double Y)> project) =>
+            SampleEnvelopePerimeter((region.MinX, region.MaxX, region.MinY, region.MaxY), samplesPerEdge, project);
+
+        (double X, double Y)[] SampleEnvelopePerimeter(
+            (double LonMin, double LonMax, double LatMin, double LatMax) region,
+            int samplesPerEdge,
+            Func<double, double, (double X, double Y)> project)
+        {
+            // Walk the lon/lat rectangle clockwise, sampling each of the four edges. Each edge
+            // omits its endpoint vertex (the next edge picks it up) so corners aren't duplicated.
+            // The returned ring is in pixel space and ready for FillPolygon.
+            var ring = new (double X, double Y)[samplesPerEdge * 4];
+            var write = 0;
+            for (var i = 0; i < samplesPerEdge; i++)
+            {
+                var t = (double)i / samplesPerEdge;
+                ring[write++] = SampleEdge(region.LonMin, region.LatMin, region.LonMax, region.LatMin, t, project);
+            }
+
+            for (var i = 0; i < samplesPerEdge; i++)
+            {
+                var t = (double)i / samplesPerEdge;
+                ring[write++] = SampleEdge(region.LonMax, region.LatMin, region.LonMax, region.LatMax, t, project);
+            }
+
+            for (var i = 0; i < samplesPerEdge; i++)
+            {
+                var t = (double)i / samplesPerEdge;
+                ring[write++] = SampleEdge(region.LonMax, region.LatMax, region.LonMin, region.LatMax, t, project);
+            }
+
+            for (var i = 0; i < samplesPerEdge; i++)
+            {
+                var t = (double)i / samplesPerEdge;
+                ring[write++] = SampleEdge(region.LonMin, region.LatMax, region.LonMin, region.LatMin, t, project);
+            }
+
+            return ring;
+        }
+
+        (double X, double Y) SampleEdge(double lonStart, double latStart, double lonEnd, double latEnd, double t, Func<double, double, (double X, double Y)> project)
+        {
+            var lon = lonStart + t * (lonEnd - lonStart);
+            var lat = latStart + t * (latEnd - latStart);
+            var (px, py) = project(lon, lat);
+            return ToPixelFromProjected(px, py);
+        }
+
+        (double X, double Y)[] ToPixelsInLobe(IReadOnlyList<Position> positions, GoodeLobes.Lobe lobe)
+        {
+            // Project each lat/lon through the *specific* lobe (not FindLobe), then reuse the same
+            // scale-and-centre transform as the regular pipeline. Going via the lobe directly is
+            // essential at the clipped boundary, where the vertex sits exactly on the shared
+            // meridian and FindLobe would deterministically pick one neighbour — projecting
+            // through the wrong central meridian would put the boundary edge at the wrong x and
+            // close the lobe in the wrong place.
+            var result = new (double X, double Y)[positions.Count];
+            for (var i = 0; i < positions.Count; i++)
+            {
+                var (px, py) = ProjectGoodeInLobe(positions[i].X, positions[i].Y, lobe);
+                result[i] = ToPixelFromProjected(px, py);
+            }
+
+            return result;
+        }
+
+        (double X, double Y) ToPixelFromProjected(double projectedX, double projectedY)
+        {
+            var x = offsetX + (projectedX - projectedBounds.MinX) * scale;
+            var y = Height - offsetY - (projectedY - projectedBounds.MinY) * scale;
+            return (x, y);
         }
 
         Envelope ProjectEnvelope(Envelope bounds)
@@ -291,9 +595,11 @@ public static class MapRenderer
                         bounds.MaxX,
                         ProjectWebMercatorY(bounds.MaxY));
                 case MapProjection.Lambert:
-                    // Meridians fan out and parallels curve, so the corners alone undershoot the AABB.
-                    // Sampling the perimeter at a handful of points captures the curvature without
-                    // visibly affecting fit (the projection is smooth, so 16 samples per edge is plenty).
+                case MapProjection.Goode:
+                    // Lambert's parallels curve and meridians fan out; Goode's meridians taper toward
+                    // the poles inside the Mollweide caps. Either way the corners alone undershoot the
+                    // AABB, so sample the perimeter — 16 samples per edge captures the curvature without
+                    // visibly affecting fit (both projections are smooth).
                     return SampleEnvelope(bounds, 16);
                 default:
                     // PlateCarree: X and Y are both linear in lon/lat, so the corners are the extreme.
@@ -353,6 +659,8 @@ public static class MapRenderer
                     return (longitude, ProjectWebMercatorY(latitude));
                 case MapProjection.Lambert:
                     return lambert!.Project(longitude, latitude);
+                case MapProjection.Goode:
+                    return ProjectGoode(longitude, latitude);
                 default:
                     return (longitude, latitude);
             }
@@ -368,19 +676,112 @@ public static class MapRenderer
             return Math.Log(Math.Tan(Math.PI / 4 + radians / 2)) * 180 / Math.PI;
         }
 
-        // Threshold for Auto: above either span the LCC cone unfolds badly (the parallels grow too
-        // curved to read as a flat country-scale map) or the bounds approach world coverage where
-        // PlateCarree is the conventional fallback. The cutoffs are deliberately conservative — a
-        // continental view like Africa (latSpan ≈ 73°) routes to PlateCarree, while regional views
-        // like the contiguous US (lonSpan ≈ 60°, latSpan ≈ 25°) or Europe still pick Lambert.
+        // Goode's Homolosine interrupted into 2 northern and 4 southern lobes (the conventional
+        // land-favouring split — meridians of interrupt run through ocean basins so continents fall
+        // inside lobes rather than spanning them). Within each lobe the projection is the classic
+        // Homolosine: sinusoidal between ±transition latitude (40°44'11.8") and Mollweide outside
+        // that band, joined with a small vertical offset to make y continuous at the seam. The
+        // conventional transition latitude makes the x scale continuous too, so the seam reads as
+        // smooth inside each lobe.
+        const double goodeTransitionLatitude = 40.7368 * Math.PI / 180;
+        static readonly double goodeTransitionTheta = SolveMollweideTheta(goodeTransitionLatitude);
+
+        // The Mollweide y at the transition latitude minus the sinusoidal y at the same latitude —
+        // subtract this from northern-hemisphere Mollweide y (add for southern) so the seam reads
+        // smooth instead of jumping.
+        static readonly double goodeYShift = Math.Sqrt(2) * Math.Sin(goodeTransitionTheta) - goodeTransitionLatitude;
+
+        // Mollweide x = (2√2/π) · (λ − λ₀) · cos(θ). The constant is what makes the projection
+        // equal-area on the unit sphere.
+        static readonly double mollweideXFactor = 2 * Math.Sqrt(2) / Math.PI;
+
+        static (double X, double Y) ProjectGoode(double longitude, double latitude) =>
+            ProjectGoodeInLobe(longitude, latitude, GoodeLobes.FindLobe(longitude, latitude));
+
+        static (double X, double Y) ProjectGoodeInLobe(double longitude, double latitude, GoodeLobes.Lobe lobe)
+        {
+            // The lobe's central meridian is the reference longitude for the projection within that
+            // lobe; offset the input lon by it, project through the uninterrupted Homolosine, then
+            // translate the result back so the lobe sits at its true geographic x at the equator
+            // (where x_local = lon - centralMeridian, x_world = lon).
+            var (xLocal, y) = ProjectGoodeUninterrupted(longitude - lobe.CentralMeridian, latitude);
+            return (xLocal + lobe.CentralMeridian, y);
+        }
+
+        static (double X, double Y) ProjectGoodeUninterrupted(double longitude, double latitude)
+        {
+            // Clamp off the pole. Mollweide's auxiliary angle θ converges to ±π/2 at the pole, where
+            // f'(θ) = 4cos²(θ) vanishes and Newton blows up; the clamp keeps the solver in its
+            // well-conditioned interior. The 0.001° shaved off the pole is invisible at any sensible
+            // image size.
+            var phi = Math.Clamp(latitude, -89.999, 89.999) * Math.PI / 180;
+            var lambda = longitude * Math.PI / 180;
+
+            double xRad;
+            double yRad;
+            if (Math.Abs(phi) <= goodeTransitionLatitude)
+            {
+                // Sinusoidal — equal-area on the band around the equator. y is just latitude; x is
+                // longitude scaled by cos(φ), so parallels stay straight and meridians curve in.
+                xRad = lambda * Math.Cos(phi);
+                yRad = phi;
+            }
+            else
+            {
+                // Mollweide caps — equal-area at higher latitudes. The y offset (sign-flipped per
+                // hemisphere) glues the cap onto the sinusoidal band without a vertical jump.
+                var theta = SolveMollweideTheta(phi);
+                xRad = mollweideXFactor * lambda * Math.Cos(theta);
+                var mollweideY = Math.Sqrt(2) * Math.Sin(theta);
+                yRad = phi >= 0 ? mollweideY - goodeYShift : mollweideY + goodeYShift;
+            }
+
+            // Convert back to degree-equivalent units so the projected envelope reads in the same
+            // scale as longitude — matches WebMercator's and Lambert's output units.
+            return (xRad * 180 / Math.PI, yRad * 180 / Math.PI);
+        }
+
+        static double SolveMollweideTheta(double phi)
+        {
+            // Mollweide's auxiliary angle θ from 2θ + sin(2θ) = π sin(φ). Snyder's recommended
+            // initial guess asin(2φ/π) is already inside the basin of attraction, so 8 Newton
+            // iterations reach full double precision well off the pole — the upstream lat clamp
+            // keeps φ off ±π/2 where f'(θ) = 4cos²(θ) collapses. A fixed loop avoids a convergence
+            // branch the coverage gate would otherwise need a dedicated test for.
+            var target = Math.PI * Math.Sin(phi);
+            var theta = Math.Asin(2 * phi / Math.PI);
+            for (var i = 0; i < 8; i++)
+            {
+                var f = 2 * theta + Math.Sin(2 * theta) - target;
+                var derivative = 4 * Math.Cos(theta) * Math.Cos(theta);
+                theta -= f / derivative;
+            }
+
+            return theta;
+        }
+
+        // Thresholds for Auto. Above the world cutoffs the bounds approach full-globe coverage and
+        // Goode's equal-area Homolosine is the honest world projection; between the world and
+        // regional cutoffs the data is continental and the LCC cone unfolds too far (parallels grow
+        // visibly curved), so PlateCarree is the conventional fallback; under the regional cutoffs
+        // Lambert is right. The cutoffs are deliberately conservative — Africa (latSpan ≈ 73°) routes
+        // to PlateCarree, Asia (lonSpan ≈ 165°) stays PlateCarree, while a true world view (lonSpan
+        // 360°) picks Goode.
         const double autoLatitudeSpanLimit = 60;
         const double autoLongitudeSpanLimit = 90;
+        const double autoWorldLatitudeSpan = 90;
+        const double autoWorldLongitudeSpan = 180;
 
         static MapProjection Resolve(MapProjection requested, Envelope bounds)
         {
             if (requested != MapProjection.Auto)
             {
                 return requested;
+            }
+
+            if (bounds.Width >= autoWorldLongitudeSpan || bounds.Height >= autoWorldLatitudeSpan)
+            {
+                return MapProjection.Goode;
             }
 
             if (bounds.Width >= autoLongitudeSpanLimit || bounds.Height >= autoLatitudeSpanLimit)
@@ -483,6 +884,376 @@ public static class MapRenderer
             // fit envelope reads in the same range as longitude. The ratio is preserved, so this only
             // affects how the projected coordinates *look* in the envelope, not the rendered aspect.
             return (x * 180 / Math.PI, y * 180 / Math.PI);
+        }
+    }
+
+    /// <summary>
+    /// Lobe geometry for Goode's *interrupted* Homolosine: the conventional 2-north, 4-south split
+    /// that runs the interrupt meridians through ocean basins so the major continents fall whole
+    /// inside one lobe. Holds the lobe table and the polygon/polyline clipping needed before
+    /// projection (so the rasterizer can fill and stroke each lobe's contribution independently
+    /// without painting across the inter-lobe gaps).
+    /// </summary>
+    static class GoodeLobes
+    {
+        /// <summary>One axis-aligned lon/lat rectangle making up part of a lobe. A lobe with two
+        /// rects represents a non-rectangular logical region (e.g. an L-shape with a tab or a
+        /// notch); the two rects share an edge in lon/lat space, and the renderer projects both
+        /// through the lobe's single central meridian so the pieces meet seamlessly on the
+        /// canvas.</summary>
+        public readonly record struct Rect(double LonMin, double LonMax, double LatMin, double LatMax);
+
+        /// <summary>One logical lobe: a central meridian shared by every sub-rectangle and a
+        /// hand-coded perimeter (clockwise corner list in lon/lat) for the outer envelope. The
+        /// perimeter is the union outline of the rects — for a single-rect lobe it's the rect's
+        /// four corners; for an L-shape it walks the L.</summary>
+        public readonly record struct Lobe(
+            double CentralMeridian,
+            IReadOnlyList<Rect> Rects,
+            IReadOnlyList<Position> Perimeter);
+
+        // Goode's interrupted Homolosine with the conventional ocean-meridian cuts, plus a
+        // *Greenland cut-out* on the north interruption: at lat ≥ 60° the cut steps from lon=-40°
+        // east to lon=-10°, capturing Greenland (lon ≈ -73° to -12°) inside the Americas lobe so
+        // it renders adjacent to Canada — Greenland is geographically Canada's neighbour, separated
+        // from Europe by the Greenland Sea, so this anchoring reads more naturally than the
+        // Eurasian-side variant. Iceland (lon ≈ -22°, lat ≈ 65°) goes with Greenland as a
+        // consequence; the cut at -10° leaves continental Europe intact in the eastern lobe.
+        public static readonly Lobe[] AllLobes =
+        [
+            // North west (Americas + Greenland + Iceland) — tab extends *east* above lat=60 to
+            // pull Greenland into the Americas lobe.
+            new(
+                CentralMeridian: -100,
+                Rects:
+                [
+                    new(LonMin: -180, LonMax: -40, LatMin:  0, LatMax: 60),
+                    new(LonMin: -180, LonMax: -10, LatMin: 60, LatMax: 90),
+                ],
+                Perimeter:
+                [
+                    new(-40, 0), new(-180, 0), new(-180, 90), new(-10, 90), new(-10, 60), new(-40, 60),
+                ]),
+
+            // North east (Eurasia + Africa-N) — main rect for lower lat, retracted rect for upper
+            // lat (cut moved east from -40° to -10° to make room for Greenland in the west lobe).
+            new(
+                CentralMeridian: 30,
+                Rects:
+                [
+                    new(LonMin: -40, LonMax: 180, LatMin:  0, LatMax: 60),
+                    new(LonMin: -10, LonMax: 180, LatMin: 60, LatMax: 90),
+                ],
+                Perimeter:
+                [
+                    new(180, 0), new(-40, 0), new(-40, 60), new(-10, 60), new(-10, 90), new(180, 90),
+                ]),
+
+            // South: four single-rectangle lobes covering S-America, S-Africa, Australia, and the
+            // Pacific. Central meridians chosen at the centre of each landmass.
+            new(
+                CentralMeridian: -160,
+                Rects: [new(LonMin: -180, LonMax: -100, LatMin: -90, LatMax: 0)],
+                Perimeter: [new(-100, 0), new(-180, 0), new(-180, -90), new(-100, -90)]),
+            new(
+                CentralMeridian: -60,
+                Rects: [new(LonMin: -100, LonMax: -20, LatMin: -90, LatMax: 0)],
+                Perimeter: [new(-20, 0), new(-100, 0), new(-100, -90), new(-20, -90)]),
+            new(
+                CentralMeridian: 20,
+                Rects: [new(LonMin: -20, LonMax: 80, LatMin: -90, LatMax: 0)],
+                Perimeter: [new(80, 0), new(-20, 0), new(-20, -90), new(80, -90)]),
+            new(
+                CentralMeridian: 140,
+                Rects: [new(LonMin: 80, LonMax: 180, LatMin: -90, LatMax: 0)],
+                Perimeter: [new(180, 0), new(80, 0), new(80, -90), new(180, -90)]),
+        ];
+
+        /// <summary>The lobe a single point belongs to. Walks every sub-rect of every lobe — a
+        /// point on a shared boundary (e.g. lon=-40° at lat=30°) lands in the first-matched lobe,
+        /// which is fine because both lobes' projections agree along their shared edge.</summary>
+        public static Lobe FindLobe(double longitude, double latitude)
+        {
+            foreach (var lobe in AllLobes)
+            {
+                foreach (var rect in lobe.Rects)
+                {
+                    if (longitude >= rect.LonMin && longitude <= rect.LonMax &&
+                        latitude >= rect.LatMin && latitude <= rect.LatMax)
+                    {
+                        return lobe;
+                    }
+                }
+            }
+
+            // Malformed input fell outside [-180, 180] × [-90, 90]; fall back to the lobe whose
+            // central meridian is closest in lon so the projection still produces a finite point
+            // instead of throwing. The renderer prefers a graceful degraded output over a crash.
+            var best = AllLobes[0];
+            var bestDistance = double.PositiveInfinity;
+            foreach (var lobe in AllLobes)
+            {
+                // Each lobe is entirely in one hemisphere, so the first rect's lat sign identifies
+                // it. Skip lobes on the wrong hemisphere so the fallback picks a sensible neighbour.
+                if (latitude >= 0 != lobe.Rects[0].LatMin >= 0)
+                {
+                    continue;
+                }
+
+                var distance = Math.Abs(longitude - lobe.CentralMeridian);
+                if (distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    best = lobe;
+                }
+            }
+
+            return best;
+        }
+
+        /// <summary>True if any of the lobe's sub-rectangles intersects the input bounds. Used to
+        /// skip lobes that aren't covered by the requested render extent.</summary>
+        public static bool IntersectsBounds(Lobe lobe, Envelope bounds)
+        {
+            foreach (var rect in lobe.Rects)
+            {
+                if (rect.LonMax > bounds.MinX && rect.LonMin < bounds.MaxX &&
+                    rect.LatMax > bounds.MinY && rect.LatMin < bounds.MaxY)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>Sutherland-Hodgman clip of a polygon ring against the lobe's lon/lat AABB.
+        /// Returns the clipped vertices along with a bitmask per vertex indicating which lobe
+        /// boundary planes the vertex was introduced by (0 = original input vertex; non-zero =
+        /// intersection point on one of the four lobe boundaries). The caller uses the tags to
+        /// distinguish *real* polygon edges from clip-edge segments that close the clipped piece
+        /// along the lobe boundary — real edges get stroked, clip edges don't, so a clipped
+        /// continent reads as one shape rather than several with vertical slice marks inside.</summary>
+        public static (List<Position> Vertices, List<int> BoundaryTags) ClipRingWithTags(IReadOnlyList<Position> ring, Rect rect)
+        {
+            // Each pass is one half-plane; intersection vertices it introduces are tagged with the
+            // bit for that boundary. A vertex's tag accumulates across passes only if it gets
+            // re-intersected on a subsequent plane, which for axis-aligned planes only happens at
+            // the lobe corners — and corner-on-corner edges aren't a real concern.
+            var verts = new List<Position>(ring);
+            var tags = new List<int>(new int[ring.Count]);
+            (verts, tags) = ClipHalfPlaneTagged(verts, tags,
+                p => p.X >= rect.LonMin,
+                (a, b) => InterpolateToX(a, b, rect.LonMin),
+                introducedTag: 1);
+            (verts, tags) = ClipHalfPlaneTagged(verts, tags,
+                p => p.X <= rect.LonMax,
+                (a, b) => InterpolateToX(a, b, rect.LonMax),
+                introducedTag: 2);
+            (verts, tags) = ClipHalfPlaneTagged(verts, tags,
+                p => p.Y >= rect.LatMin,
+                (a, b) => InterpolateToY(a, b, rect.LatMin),
+                introducedTag: 4);
+            (verts, tags) = ClipHalfPlaneTagged(verts, tags,
+                p => p.Y <= rect.LatMax,
+                (a, b) => InterpolateToY(a, b, rect.LatMax),
+                introducedTag: 8);
+
+            // Densify clip edges so the polygon's projected fill follows the lobe boundary's
+            // Mollweide curve. The clip edge in lon/lat is a straight line (constant lon or lat)
+            // with only two endpoints; projected through the lobe's central meridian, those two
+            // points become two pixel-space points and the rasterizer draws a *straight* line
+            // between them — but the lobe's actual border curves inward toward the pole. Adding
+            // intermediate vertices along the straight lon/lat line lets each be projected
+            // individually, so the resulting fill edge traces the lobe's curve and there's no
+            // gap between a polygon like Antarctica and the lobe outline.
+            return DensifyClipEdges(verts, tags, samplesPerEdge: 16);
+        }
+
+        static (List<Position>, List<int>) DensifyClipEdges(List<Position> verts, List<int> tags, int samplesPerEdge)
+        {
+            var output = new List<Position>(verts.Count);
+            var outputTags = new List<int>(tags.Count);
+            for (var i = 0; i < verts.Count; i++)
+            {
+                var current = verts[i];
+                var next = verts[(i + 1) % verts.Count];
+                var currentTag = tags[i];
+                var nextTag = tags[(i + 1) % verts.Count];
+                output.Add(current);
+                outputTags.Add(currentTag);
+
+                // Only edges where both endpoints share a boundary tag are clip-introduced edges
+                // worth densifying — original polygon edges already trace the input geometry as
+                // densely as the caller chose.
+                var sharedTag = currentTag & nextTag;
+                if (sharedTag == 0)
+                {
+                    continue;
+                }
+
+                for (var j = 1; j < samplesPerEdge; j++)
+                {
+                    var t = (double)j / samplesPerEdge;
+                    output.Add(new(
+                        current.X + t * (next.X - current.X),
+                        current.Y + t * (next.Y - current.Y)));
+                    outputTags.Add(sharedTag);
+                }
+            }
+
+            return (output, outputTags);
+        }
+
+        /// <summary>Splits a polyline at every lobe boundary it crosses. Each emitted subpath is a
+        /// contiguous run of vertices in one lobe (the boundary intersection is inserted at both
+        /// ends of the split so the strokes reach all the way to the lobe edge before the gap).</summary>
+        public static IEnumerable<(Lobe Lobe, List<Position> Positions)> SubdividePath(IReadOnlyList<Position> positions)
+        {
+            if (positions.Count < 2)
+            {
+                yield break;
+            }
+
+            var currentLobe = FindLobe(positions[0].X, positions[0].Y);
+            var current = new List<Position> { positions[0] };
+            for (var i = 1; i < positions.Count; i++)
+            {
+                var previous = positions[i - 1];
+                var next = positions[i];
+                var nextLobe = FindLobe(next.X, next.Y);
+                if (nextLobe.Equals(currentLobe))
+                {
+                    current.Add(next);
+                    continue;
+                }
+
+                // Crossed a boundary. Insert the boundary point at the end of the current subpath
+                // and at the start of the next, so each subpath's stroke runs all the way to its
+                // lobe edge. We pick one boundary even if both hemisphere and lon change in the
+                // same segment — long segments crossing multiple boundaries are rare in real
+                // geodata, and the visual approximation is invisible at typical densities.
+                var split = InterpolateToBoundary(previous, next, currentLobe, nextLobe);
+                current.Add(split);
+                yield return (currentLobe, current);
+                current = [split, next];
+                currentLobe = nextLobe;
+            }
+
+            yield return (currentLobe, current);
+        }
+
+        static (List<Position>, List<int>) ClipHalfPlaneTagged(
+            IReadOnlyList<Position> ring,
+            IReadOnlyList<int> ringTags,
+            Func<Position, bool> inside,
+            Func<Position, Position, Position> intersect,
+            int introducedTag)
+        {
+            var verts = new List<Position>();
+            var tags = new List<int>();
+            if (ring.Count == 0)
+            {
+                return (verts, tags);
+            }
+
+            for (var i = 0; i < ring.Count; i++)
+            {
+                var current = ring[i];
+                var previous = ring[(i + ring.Count - 1) % ring.Count];
+                var currentInside = inside(current);
+                var previousInside = inside(previous);
+                if (previousInside != currentInside)
+                {
+                    verts.Add(intersect(previous, current));
+                    tags.Add(introducedTag);
+                }
+
+                if (currentInside)
+                {
+                    verts.Add(current);
+                    tags.Add(ringTags[i]);
+                }
+            }
+
+            return (verts, tags);
+        }
+
+        /// <summary>Walks a clipped ring and yields the maximal runs of consecutive non-clip edges
+        /// as open polylines. An edge from vertex i to vertex (i+1)%n counts as a clip edge when
+        /// both endpoints carry an overlapping boundary tag — i.e. both sit on the same lobe-AABB
+        /// plane, the hallmark of an edge that S-H added to close the clipped piece along the
+        /// lobe boundary rather than something tracing the original polygon.</summary>
+        public static IEnumerable<(double X, double Y)[]> BuildStrokeChains((double X, double Y)[] ring, IReadOnlyList<int> tags)
+        {
+            // Callers (PreparePolygon) already filter rings with < 3 vertices, so the loop body
+            // always sees a usable ring.
+            var chain = new List<(double X, double Y)>();
+            for (var i = 0; i < ring.Length; i++)
+            {
+                var next = (i + 1) % ring.Length;
+                var isClipEdge = (tags[i] & tags[next]) != 0;
+                if (chain.Count == 0)
+                {
+                    chain.Add(ring[i]);
+                }
+
+                if (isClipEdge)
+                {
+                    if (chain.Count >= 2)
+                    {
+                        yield return chain.ToArray();
+                    }
+
+                    chain = new List<(double X, double Y)>();
+                }
+                else
+                {
+                    chain.Add(ring[next]);
+                }
+            }
+
+            if (chain.Count >= 2)
+            {
+                yield return chain.ToArray();
+            }
+        }
+
+        static Position InterpolateToBoundary(Position a, Position b, Lobe lobeA, Lobe lobeB)
+        {
+            // Different hemispheres → split at the equator. Use the first rect of each lobe to
+            // identify hemisphere (every rect of one lobe is in the same hemisphere).
+            if (lobeA.Rects[0].LatMin >= 0 != lobeB.Rects[0].LatMin >= 0)
+            {
+                return InterpolateToY(a, b, 0);
+            }
+
+            // Same hemisphere: find a meridian shared between any rect of A and any rect of B that
+            // lies between a.X and b.X — that's the boundary the segment crosses. Throws via
+            // .First() if no match exists, which would indicate a malformed lobe layout; for our
+            // canonical lobes adjacent lobes always share a meridian.
+            var lo = Math.Min(a.X, b.X);
+            var hi = Math.Max(a.X, b.X);
+            var meridian = lobeA.Rects
+                .SelectMany(r => new[] { r.LonMin, r.LonMax })
+                .First(m => m >= lo && m <= hi &&
+                    lobeB.Rects.Any(rb => rb.LonMin == m || rb.LonMax == m));
+            return InterpolateToX(a, b, meridian);
+        }
+
+        static Position InterpolateToX(Position a, Position b, double x)
+        {
+            // Linear lon/lat interpolation along the segment. The segment can be vertical (a.X ==
+            // b.X), but in that case it doesn't cross a vertical boundary, so this overload isn't
+            // called with that input — guarded by the half-plane sign-change check.
+            var t = (x - a.X) / (b.X - a.X);
+            return new(x, a.Y + t * (b.Y - a.Y));
+        }
+
+        static Position InterpolateToY(Position a, Position b, double y)
+        {
+            var t = (y - a.Y) / (b.Y - a.Y);
+            return new(a.X + t * (b.X - a.X), y);
         }
     }
 }

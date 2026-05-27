@@ -86,7 +86,7 @@ public static class Runner
 
                     if (!TryParseProjection(args[++i], out projection))
                     {
-                        error.WriteLine("--projection must be 'auto', 'plate-carree', 'web-mercator', or 'lambert'.");
+                        error.WriteLine("--projection must be 'auto', 'plate-carree', 'web-mercator', 'lambert', or 'goode'.");
                         return 2;
                     }
 
@@ -224,6 +224,12 @@ public static class Runner
             case "lcc":
                 projection = MapProjection.Lambert;
                 return true;
+            case "goode":
+            case "homolosine":
+            case "goode-homolosine":
+            case "goodes-homolosine":
+                projection = MapProjection.Goode;
+                return true;
             default:
                 projection = default;
                 return false;
@@ -270,9 +276,10 @@ public static class Runner
               --bbox minX,minY,maxX,maxY   Extent to render (PNG output only).
               --size WIDTH[xHEIGHT]  Image size in pixels (PNG output only).
               --projection <name>    Projection for PNG output: 'auto' (default — picks
-                                     lambert for regional bounds, plate-carree otherwise),
-                                     'plate-carree', 'web-mercator', or 'lambert' (Lambert
-                                     Conformal Conic, low distortion at country/state scale).
+                                     lambert for regional bounds, plate-carree for continental,
+                                     goode for world), 'plate-carree', 'web-mercator', 'lambert'
+                                     (Lambert Conformal Conic, low distortion at country/state
+                                     scale), or 'goode' (Goode's Homolosine, equal-area world map).
               --list                 List supported formats.
               -h, --help             Show this help.
 
@@ -283,6 +290,7 @@ public static class Runner
               geoconvert world.geojson europe.png --bbox -10,35,30,60 --size 1200x900
               geoconvert world.geojson world.png --projection web-mercator --size 1200
               geoconvert states.geojson states.png --projection lambert --size 1600
+              geoconvert world.geojson world.png --projection goode --size 1600
             """);
 
     static void PrintFormats(TextWriter writer) =>
