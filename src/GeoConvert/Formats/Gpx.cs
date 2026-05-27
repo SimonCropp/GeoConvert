@@ -211,7 +211,7 @@ public static class Gpx
         return value;
     }
 
-    public static void Write(Stream stream, FeatureCollection collection)
+    public static void Write(Stream stream, FeatureCollection features)
     {
         using var writer = Xml.CreateWriter(stream);
         writer.WriteStartDocument();
@@ -221,19 +221,19 @@ public static class Gpx
 
         // GPX's element ordering is wpt → rte → trk; emit category children in that order, and any
         // root-level features or non-category children fall back to type-based dispatch (no category hint).
-        var hasCategoryChild = collection.Children.Any(IsCategoryLayer);
+        var hasCategoryChild = features.Children.Any(IsCategoryLayer);
         if (hasCategoryChild)
         {
-            foreach (var feature in collection.Features)
+            foreach (var feature in features.Features)
             {
                 WriteFeature(writer, feature, category: null);
             }
 
-            WriteCategoryChildren(writer, collection, "waypoints");
-            WriteCategoryChildren(writer, collection, "routes");
-            WriteCategoryChildren(writer, collection, "tracks");
+            WriteCategoryChildren(writer, features, "waypoints");
+            WriteCategoryChildren(writer, features, "routes");
+            WriteCategoryChildren(writer, features, "tracks");
 
-            foreach (var child in collection.Children)
+            foreach (var child in features.Children)
             {
                 if (IsCategoryLayer(child))
                 {
@@ -248,7 +248,7 @@ public static class Gpx
         }
         else
         {
-            foreach (var feature in collection)
+            foreach (var feature in features)
             {
                 WriteFeature(writer, feature, category: null);
             }

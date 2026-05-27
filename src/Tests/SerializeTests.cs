@@ -24,10 +24,10 @@ public class SerializeTests
     public Task Writes_csv() =>
         Verify(Csv.WriteString(Sample.Mixed()));
 
-    static string Text(GeoFormat format, FeatureCollection collection)
+    static string Text(GeoFormat format, FeatureCollection features)
     {
         using var stream = new MemoryStream();
-        GeoConverter.Write(collection, stream, format);
+        GeoConverter.Write(features, stream, format);
         return Encoding.UTF8.GetString(stream.ToArray());
     }
 }

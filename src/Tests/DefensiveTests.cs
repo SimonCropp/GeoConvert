@@ -21,10 +21,10 @@ public class DefensiveTests
         await Assert.That(G.ThrowsGeo(WriteBadShapefile)).IsTrue();
     }
 
-    static void Write(FeatureCollection collection, GeoFormat format)
+    static void Write(FeatureCollection features, GeoFormat format)
     {
         using var stream = new MemoryStream();
-        GeoConverter.Write(collection, stream, format);
+        GeoConverter.Write(features, stream, format);
     }
 
     static void WriteBadShapefile()

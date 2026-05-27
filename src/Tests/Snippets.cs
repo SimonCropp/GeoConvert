@@ -74,7 +74,7 @@ static class Snippets
     public static void RenderToPng()
     {
         #region RenderToPng
-        var collection = GeoConverter.Read("countries.geojson");
+        var features = GeoConverter.Read("countries.geojson");
 
         // Render a specific bounding box (min lon, min lat, max lon, max lat) to a PNG.
         var options = new RenderOptions
@@ -84,19 +84,19 @@ static class Snippets
             Height = 900,
         };
 
-        MapRenderer.RenderPng(collection, "europe.png", options);
+        MapRenderer.RenderPng(features, "europe.png", options);
         #endregion
     }
 
     public static void Compression()
     {
-        var collection = GeoConverter.Read("countries.geojson");
+        var features = GeoConverter.Read("countries.geojson");
 
         #region Compression
 
         // PNG: the deflate level for the IDAT chunk is exposed on RenderOptions.
         MapRenderer.RenderPng(
-            collection,
+            features,
             "world.png",
             new()
             {
@@ -108,13 +108,13 @@ static class Snippets
         // KMZ: the doc.kml zip entry's compression level is an optional Write argument.
         using (var kmz = File.Create("world.kmz"))
         {
-            Kmz.Write(kmz, collection, CompressionLevel.SmallestSize);
+            Kmz.Write(kmz, features, CompressionLevel.SmallestSize);
         }
 
         // GeoParquet: pick the codec (default Snappy); CompressionLevel only applies to Gzip.
         using (var parquet = File.Create("world.parquet"))
         {
-            GeoParquet.Write(parquet, collection, ParquetCompression.Gzip, CompressionLevel.SmallestSize);
+            GeoParquet.Write(parquet, features, ParquetCompression.Gzip, CompressionLevel.SmallestSize);
         }
 
         #endregion
@@ -123,7 +123,7 @@ static class Snippets
     public static void RenderWebMercator()
     {
         #region RenderWebMercator
-        var collection = GeoConverter.Read("countries.geojson");
+        var features = GeoConverter.Read("countries.geojson");
 
         // Web Mercator matches the layout of standard web tile maps. Pair it with
         // MapRenderer.WebMercatorWorldBounds for the canonical 1:1 square world view; latitude is
@@ -135,7 +135,7 @@ static class Snippets
             Projection = MapProjection.WebMercator,
         };
 
-        MapRenderer.RenderPng(collection, "world.png", options);
+        MapRenderer.RenderPng(features, "world.png", options);
         #endregion
     }
 }

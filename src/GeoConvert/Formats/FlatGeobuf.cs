@@ -262,22 +262,22 @@ public static class FlatGeobuf
         return (int)(nodes * nodeItemSize);
     }
 
-    public static void Write(Stream stream, FeatureCollection collection)
+    public static void Write(Stream stream, FeatureCollection features)
     {
-        var columns = BuildColumns(collection);
+        var columns = BuildColumns(features);
         stream.Write(magic);
         // One reusable builder for header + every feature: avoids a fresh 1 KB byte[] (plus its
         // GrowBuffer copies and a final ToArray) per feature for large collections.
         var builder = new FlatBufferBuilder();
-        WriteHeader(builder, stream, collection, columns);
+        WriteHeader(builder, stream, features, columns);
         var propertyBuffer = new MemoryStream();
-        foreach (var feature in collection)
+        foreach (var feature in features)
         {
             WriteFeature(builder, stream, feature, columns, propertyBuffer);
         }
     }
 
-    static void WriteHeader(FlatBufferBuilder builder, Stream stream, FeatureCollection collection, List<Column> columns)
+    static void WriteHeader(FlatBufferBuilder builder, Stream stream, FeatureCollection features, List<Column> columns)
     {
         var columnOffsets = columns.Count == 0 ? [] : new int[columns.Count];
         for (var i = 0; i < columns.Count; i++)
@@ -292,16 +292,16 @@ public static class FlatGeobuf
 
         var columnsVector = columnOffsets.Length > 0 ? builder.CreateOffsetVector(columnOffsets) : 0;
 
-        var bounds = collection.GetBounds();
+        var bounds = features.GetBounds();
         var envelope = bounds.IsEmpty
             ? 0
             : builder.CreateDoubleVector([bounds.MinX, bounds.MinY, bounds.MaxX, bounds.MaxY]);
 
         builder.StartTable(14);
         builder.AddOffset(headerEnvelope, envelope);
-        builder.AddByte(headerGeometryType, CommonGeometryType(collection), 0);
+        builder.AddByte(headerGeometryType, CommonGeometryType(features), 0);
         builder.AddOffset(headerColumns, columnsVector);
-        builder.AddULong(headerFeaturesCount, (ulong)collection.Count, 0);
+        builder.AddULong(headerFeaturesCount, (ulong)features.Count, 0);
         // 0 => no spatial index
         builder.AddUShort(headerIndexNodeSize, 0, 16);
         builder.FinishSizePrefixed(builder.EndTable(), stream);

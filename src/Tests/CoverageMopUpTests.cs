@@ -120,13 +120,13 @@ public class CoverageMopUpTests
     [Test]
     public async Task Png_handles_empty_polygon()
     {
-        var collection = new FeatureCollection
+        var features = new FeatureCollection
         {
             new Feature(new Polygon([])),
             new Feature(new Point(1, 1))
         };
         var png = MapRenderer.RenderPng(
-            collection,
+            features,
             new()
         {
             Bounds = new Envelope(0, 0, 2, 2),
@@ -254,17 +254,17 @@ public class CoverageMopUpTests
         // The ZIP local file header records the chosen compression method (0 = stored, 8 = deflate),
         // so writing the same KML at NoCompression vs Optimal must produce different on-disk method
         // bytes — and the stored entry should be strictly larger than the deflated one.
-        var collection = new FeatureCollection();
+        var features = new FeatureCollection();
         for (var i = 0; i < 50; i++)
         {
-            collection.Add(new Feature(new Point(new(i, i))));
+            features.Add(new Feature(new Point(new(i, i))));
         }
 
         using var stored = new MemoryStream();
-        Kmz.Write(stored, collection, CompressionLevel.NoCompression);
+        Kmz.Write(stored, features, CompressionLevel.NoCompression);
 
         using var deflated = new MemoryStream();
-        Kmz.Write(deflated, collection, CompressionLevel.Optimal);
+        Kmz.Write(deflated, features, CompressionLevel.Optimal);
 
         await Assert.That(stored.Length).IsGreaterThan(deflated.Length);
 

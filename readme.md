@@ -93,7 +93,7 @@ hand-written PNG encoder (no third-party dependencies):
 <!-- snippet: RenderToPng -->
 <a id='snippet-RenderToPng'></a>
 ```cs
-var collection = GeoConverter.Read("countries.geojson");
+var features = GeoConverter.Read("countries.geojson");
 
 // Render a specific bounding box (min lon, min lat, max lon, max lat) to a PNG.
 var options = new RenderOptions
@@ -103,7 +103,7 @@ var options = new RenderOptions
     Height = 900,
 };
 
-MapRenderer.RenderPng(collection, "europe.png", options);
+MapRenderer.RenderPng(features, "europe.png", options);
 ```
 <sup><a href='/src/Tests/Snippets.cs#L76-L88' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderToPng' title='Start of snippet'>anchor</a></sup>
 <!-- endSnippet -->
@@ -128,7 +128,7 @@ the projection blows up at the poles):
 <!-- snippet: RenderWebMercator -->
 <a id='snippet-RenderWebMercator'></a>
 ```cs
-var collection = GeoConverter.Read("countries.geojson");
+var features = GeoConverter.Read("countries.geojson");
 
 // Web Mercator matches the layout of standard web tile maps. Pair it with
 // MapRenderer.WebMercatorWorldBounds for the canonical 1:1 square world view; latitude is
@@ -140,7 +140,7 @@ var options = new RenderOptions
     Projection = MapProjection.WebMercator,
 };
 
-MapRenderer.RenderPng(collection, "world.png", options);
+MapRenderer.RenderPng(features, "world.png", options);
 ```
 <sup><a href='/src/Tests/Snippets.cs#L125-L139' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderWebMercator' title='Start of snippet'>anchor</a></sup>
 <!-- endSnippet -->
@@ -176,7 +176,7 @@ Zstd-encoded pages on .NET 11+.
 ```cs
 // PNG: the deflate level for the IDAT chunk is exposed on RenderOptions.
 MapRenderer.RenderPng(
-    collection,
+    features,
     "world.png",
     new()
     {
@@ -188,13 +188,13 @@ MapRenderer.RenderPng(
 // KMZ: the doc.kml zip entry's compression level is an optional Write argument.
 using (var kmz = File.Create("world.kmz"))
 {
-    Kmz.Write(kmz, collection, CompressionLevel.SmallestSize);
+    Kmz.Write(kmz, features, CompressionLevel.SmallestSize);
 }
 
 // GeoParquet: pick the codec (default Snappy); CompressionLevel only applies to Gzip.
 using (var parquet = File.Create("world.parquet"))
 {
-    GeoParquet.Write(parquet, collection, ParquetCompression.Gzip, CompressionLevel.SmallestSize);
+    GeoParquet.Write(parquet, features, ParquetCompression.Gzip, CompressionLevel.SmallestSize);
 }
 ```
 <sup><a href='/src/Tests/Snippets.cs#L95-L120' title='Snippet source file'>snippet source</a> | <a href='#snippet-Compression' title='Start of snippet'>anchor</a></sup>

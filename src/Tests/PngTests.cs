@@ -78,7 +78,7 @@ public class PngTests
     [Test]
     public async Task Renders_all_geometry_types()
     {
-        var collection = new FeatureCollection
+        var features = new FeatureCollection
         {
             new Feature(new Point(1, 1)),
             new Feature(new MultiPoint([new(2, 2), new(3, 3)])),
@@ -89,7 +89,9 @@ public class PngTests
             new Feature(new GeometryCollection([new Point(2, 3)])),
         };
 
-        var png = MapRenderer.RenderPng(collection, new()
+        var png = MapRenderer.RenderPng(
+            features,
+            new()
         {
             Width = 128,
             Height = 128
@@ -101,7 +103,7 @@ public class PngTests
     public async Task Fills_polygon_with_opaque_color()
     {
         // An opaque fill takes the fast span-fill path; the interior should be exactly the fill color.
-        var collection = new FeatureCollection
+        var features = new FeatureCollection
         {
             new Feature(new Polygon([[new(0, 0), new(10, 0), new(10, 10), new(0, 10), new(0, 0)]])),
         };
@@ -113,7 +115,7 @@ public class PngTests
             Fill = new(200, 50, 50),
         };
 
-        var (width, _, pixels) = Decode(MapRenderer.RenderPng(collection, options));
+        var (width, _, pixels) = Decode(MapRenderer.RenderPng(features, options));
         var center = (32 * width + 32) * 4;
         await Assert.That(pixels[center]).IsEqualTo((byte)200);
         await Assert.That(pixels[center + 1]).IsEqualTo((byte)50);
@@ -125,7 +127,7 @@ public class PngTests
     {
         // Blend's translucent branch is reached when a stroke (per-pixel disc fill) uses a non-opaque
         // colour. Without a test that exercises this, the FillPolygon path keeps it dead.
-        var collection = new FeatureCollection
+        var features = new FeatureCollection
         {
             new Feature(new LineString([new(0, 0), new(10, 10)])),
         };
@@ -139,7 +141,7 @@ public class PngTests
             StrokeWidth = 4,
         };
 
-        var (_, _, pixels) = Decode(MapRenderer.RenderPng(collection, options));
+        var (_, _, pixels) = Decode(MapRenderer.RenderPng(features, options));
         // A blended pixel is neither pure-white background nor pure-red stroke: green/blue should
         // have lifted toward white as alpha=128 was composited over the background.
         var blended = 0;
@@ -162,7 +164,7 @@ public class PngTests
     [Test]
     public Task Render_snapshot()
     {
-        var collection = new FeatureCollection
+        var features = new FeatureCollection
         {
             new Feature(new Polygon(
             [
@@ -174,7 +176,7 @@ public class PngTests
         };
 
         var png = MapRenderer.RenderPng(
-            collection,
+            features,
             new()
             {
                 Bounds = new Envelope(-1, -1, 11, 9),
@@ -188,9 +190,9 @@ public class PngTests
     [Test]
     public Task Render_RealMap()
     {
-        var collection = GeoConverter.Read(ProjectFiles.australian_suburbs_geojson);
+        var features = GeoConverter.Read(ProjectFiles.australian_suburbs_geojson);
         var png = MapRenderer.RenderPng(
-            collection,
+            features,
             new()
             {
                 Width = 3000
@@ -204,7 +206,7 @@ public class PngTests
     {
         // Same bounds, derived height: in Web Mercator a 0–80° lat strip projects to roughly 14× the
         // longitudinal width, vs 8× under plate carrée. So Mercator must produce a taller image.
-        var collection = new FeatureCollection
+        var features = new FeatureCollection
         {
             new Feature(new Point(5, 40))
         };
@@ -217,8 +219,8 @@ public class PngTests
             Projection = projection,
         };
 
-        var (_, plateHeight, _) = Decode(MapRenderer.RenderPng(collection, Build(MapProjection.PlateCarree)));
-        var (_, mercatorHeight, _) = Decode(MapRenderer.RenderPng(collection, Build(MapProjection.WebMercator)));
+        var (_, plateHeight, _) = Decode(MapRenderer.RenderPng(features, Build(MapProjection.PlateCarree)));
+        var (_, mercatorHeight, _) = Decode(MapRenderer.RenderPng(features, Build(MapProjection.WebMercator)));
 
         await Assert.That(plateHeight).IsEqualTo(800);
         await Assert.That(mercatorHeight).IsGreaterThan(plateHeight);
@@ -258,9 +260,9 @@ public class PngTests
     [Test]
     public Task Render_snapshot_web_mercator()
     {
-        var collection = GeoConverter.Read(ProjectFiles.australian_suburbs_geojson);
+        var features = GeoConverter.Read(ProjectFiles.australian_suburbs_geojson);
         var png = MapRenderer.RenderPng(
-            collection,
+            features,
             new()
             {
                 Width = 3000,
@@ -276,9 +278,9 @@ public class PngTests
         // The full-world Mercator view: bounds at the ±180°/±85.0511° cutoff make the projected world a
         // 1:1 square, matching every tiled-map provider's origin. Locking this in as a snapshot so the
         // shape of a "world map" output is regression-checked alongside the dataset-scoped renders.
-        var collection = GeoConverter.Read(ProjectFiles.world_geojson);
+        var features = GeoConverter.Read(ProjectFiles.world_geojson);
         var png = MapRenderer.RenderPng(
-            collection,
+            features,
             new()
             {
                 Bounds = MapRenderer.WebMercatorWorldBounds,
@@ -299,12 +301,12 @@ public class PngTests
         await Assert.That(bounds.MaxX).IsEqualTo(180);
 
         // Render a single point so we can compare derived width/height: with Padding=0 they should match.
-        var collection = new FeatureCollection
+        var features = new FeatureCollection
         {
             new Feature(new Point(0, 0))
         };
         var png = MapRenderer.RenderPng(
-            collection,
+            features,
             new()
             {
                 Bounds = bounds,
@@ -339,7 +341,7 @@ public class PngTests
     public async Task Compression_level_affects_output_size()
     {
         // A large render with a repetitive background gives deflate something meaningful to chew on.
-        var collection = Sample.Polygons();
+        var features = Sample.Polygons();
 
         static RenderOptions Build(CompressionLevel level) => new()
         {
@@ -348,8 +350,8 @@ public class PngTests
             Compression = level,
         };
 
-        var none = MapRenderer.RenderPng(collection, Build(CompressionLevel.NoCompression));
-        var smallest = MapRenderer.RenderPng(collection, Build(CompressionLevel.SmallestSize));
+        var none = MapRenderer.RenderPng(features, Build(CompressionLevel.NoCompression));
+        var smallest = MapRenderer.RenderPng(features, Build(CompressionLevel.SmallestSize));
 
         // Skipping compression entirely should be strictly larger than the smallest-size deflate output.
         await Assert.That(smallest.Length).IsLessThan(none.Length);

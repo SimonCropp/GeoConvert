@@ -313,20 +313,20 @@ public static class GeoParquet
         }
     }
 
-    public static void Write(Stream stream, FeatureCollection collection) =>
-        Write(stream, collection, defaultCodec, CompressionLevel.Optimal);
+    public static void Write(Stream stream, FeatureCollection features) =>
+        Write(stream, features, defaultCodec, CompressionLevel.Optimal);
 
     /// <summary>
-    /// Writes <paramref name="collection"/> using the chosen <paramref name="compression"/> codec.
+    /// Writes <paramref name="features"/> using the chosen <paramref name="compression"/> codec.
     /// <paramref name="gzipLevel"/> is only consulted when <paramref name="compression"/> is
     /// <see cref="ParquetCompression.Gzip"/>.
     /// </summary>
     public static void Write(
         Stream stream,
-        FeatureCollection collection,
+        FeatureCollection features,
         ParquetCompression compression,
         CompressionLevel gzipLevel = CompressionLevel.Optimal) =>
-        Write(stream, collection, CodecOf(compression), gzipLevel);
+        Write(stream, features, CodecOf(compression), gzipLevel);
 
     static int CodecOf(ParquetCompression compression) =>
         compression switch
@@ -338,10 +338,10 @@ public static class GeoParquet
         };
 
     // Internal so tests can probe each codec branch by its on-wire id without round-tripping the enum.
-    internal static void Write(Stream stream, FeatureCollection collection, int codec, CompressionLevel gzipLevel)
+    internal static void Write(Stream stream, FeatureCollection features, int codec, CompressionLevel gzipLevel)
     {
-        var propertyColumns = BuildColumns(collection);
-        var rowCount = collection.Count;
+        var propertyColumns = BuildColumns(features);
+        var rowCount = features.Count;
 
         using var memory = new MemoryStream();
         memory.Write(magic);
@@ -353,14 +353,14 @@ public static class GeoParquet
                 memory,
                 geometryColumnName,
                 ParquetMetadata.TypeByteArray,
-                collection,
+                features,
                 feature => feature.Geometry is { } geometry ? Wkb.ToBytes(geometry) : null,
                 codec,
                 gzipLevel));
 
             foreach (var (name, type) in propertyColumns)
             {
-                columns.Add(WriteColumn(memory, name, type, collection, PropertySelector(name, type), codec, gzipLevel));
+                columns.Add(WriteColumn(memory, name, type, features, PropertySelector(name, type), codec, gzipLevel));
             }
         }
 
@@ -370,7 +370,7 @@ public static class GeoParquet
             NumRows = rowCount,
             CreatedBy = "GeoConvert",
             Schema = BuildSchema(propertyColumns),
-            KeyValueMetadata = [("geo", BuildGeoMetadata(collection))],
+            KeyValueMetadata = [("geo", BuildGeoMetadata(features))],
         };
 
         if (rowCount > 0)
@@ -411,12 +411,12 @@ public static class GeoParquet
         MemoryStream output,
         string name,
         int type,
-        FeatureCollection collection,
+        FeatureCollection features,
         Func<Feature, object?> selector,
         int codec,
         CompressionLevel gzipLevel)
     {
-        var rowCount = collection.Count;
+        var rowCount = features.Count;
         var definitions = new int[rowCount];
         var longs = new List<long>();
         var doubles = new List<double>();
@@ -424,7 +424,7 @@ public static class GeoParquet
         var blobs = new List<byte[]>();
 
         var row = 0;
-        foreach (var feature in collection)
+        foreach (var feature in features)
         {
             var value = selector(feature);
             if (value == null)

@@ -147,7 +147,7 @@ public static class Runner
             var toFormat = to ?? GeoConverter.DetectFormat(outputPath);
             if (toFormat == GeoFormat.Png)
             {
-                var collection = GeoConverter.Read(input, fromFormat);
+                var features = GeoConverter.Read(input, fromFormat);
                 var renderOptions = new RenderOptions
                 {
                     Bounds = bounds,
@@ -159,7 +159,7 @@ public static class Runner
                 }
 
                 renderOptions.Height = height;
-                MapRenderer.RenderPng(collection, outputPath, renderOptions);
+                MapRenderer.RenderPng(features, outputPath, renderOptions);
             }
             else
             {

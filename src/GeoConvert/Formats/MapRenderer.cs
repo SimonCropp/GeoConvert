@@ -20,40 +20,40 @@ public static class MapRenderer
     public static Envelope WebMercatorWorldBounds { get; } =
         new(-180, -WebMercatorMaxLatitude, 180, WebMercatorMaxLatitude);
 
-    public static byte[] RenderPng(FeatureCollection collection, RenderOptions? options = null)
+    public static byte[] RenderPng(FeatureCollection features, RenderOptions? options = null)
     {
         options ??= new();
-        var bounds = Validate(collection, options);
+        var bounds = Validate(features, options);
         using var memory = new MemoryStream();
-        Render(collection, memory, options, bounds);
+        Render(features, memory, options, bounds);
         return memory.ToArray();
     }
 
-    public static void RenderPng(FeatureCollection collection, string path, RenderOptions? options = null)
+    public static void RenderPng(FeatureCollection features, string path, RenderOptions? options = null)
     {
         options ??= new();
         // Validate before File.Create so a throw leaves the destination untouched instead of stranding
         // a 0-byte file. Mid-render stream failures (disk full, etc.) can still leave a partial file,
         // but those are unrecoverable I/O errors where a partial file is the conventional signal.
-        var bounds = Validate(collection, options);
+        var bounds = Validate(features, options);
         using var stream = File.Create(path);
-        Render(collection, stream, options, bounds);
+        Render(features, stream, options, bounds);
     }
 
-    public static void RenderPng(FeatureCollection collection, Stream stream, RenderOptions? options = null)
+    public static void RenderPng(FeatureCollection features, Stream stream, RenderOptions? options = null)
     {
         options ??= new();
-        var bounds = Validate(collection, options);
-        Render(collection, stream, options, bounds);
+        var bounds = Validate(features, options);
+        Render(features, stream, options, bounds);
     }
 
-    static Envelope Validate(FeatureCollection collection, RenderOptions options)
+    static Envelope Validate(FeatureCollection features, RenderOptions options)
     {
-        var bounds = options.Bounds ?? collection.GetBounds();
+        var bounds = options.Bounds ?? features.GetBounds();
         if (bounds.IsEmpty)
         {
             throw new GeoConvertException(
-                "Cannot render PNG: the collection is empty. Provide RenderOptions.Bounds.");
+                "Cannot render PNG: the features is empty. Provide RenderOptions.Bounds.");
         }
 
         if (options.Width <= 0)
@@ -64,12 +64,12 @@ public static class MapRenderer
         return bounds;
     }
 
-    static void Render(FeatureCollection collection, Stream stream, RenderOptions options, Envelope bounds)
+    static void Render(FeatureCollection features, Stream stream, RenderOptions options, Envelope bounds)
     {
         var projection = new Projection(bounds, options);
         var canvas = new Canvas(projection.Width, projection.Height, options.Background);
 
-        foreach (var feature in collection)
+        foreach (var feature in features)
         {
             if (feature.Geometry is { } geometry)
             {

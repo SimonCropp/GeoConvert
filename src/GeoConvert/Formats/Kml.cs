@@ -19,11 +19,11 @@ public static class Kml
         try
         {
             using var reader = Xml.CreateReader(stream);
-            var collection = new FeatureCollection();
+            var features = new FeatureCollection();
             reader.MoveToContent();
             // The first <Document> we encounter populates the root; nested Documents become child layers.
-            ScanContainer(reader, collection, isRoot: true);
-            return collection;
+            ScanContainer(reader, features, isRoot: true);
+            return features;
         }
         catch (GeoConvertException)
         {
@@ -74,9 +74,9 @@ public static class Kml
 
     static FeatureCollection ReadContainer(XmlReader reader)
     {
-        var collection = new FeatureCollection();
-        ScanContainer(reader, collection, isRoot: false);
-        return collection;
+        var features = new FeatureCollection();
+        ScanContainer(reader, features, isRoot: false);
+        return features;
     }
 
     static Feature ReadPlacemark(XmlReader reader)

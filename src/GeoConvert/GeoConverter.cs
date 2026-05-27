@@ -67,58 +67,58 @@ public static class GeoConverter
         };
 
     /// <summary>Writes a file, detecting the format from its extension.</summary>
-    public static void Write(FeatureCollection collection, string path) =>
-        Write(collection, path, DetectFormat(path));
+    public static void Write(FeatureCollection features, string path) =>
+        Write(features, path, DetectFormat(path));
 
-    public static void Write(FeatureCollection collection, string path, GeoFormat format)
+    public static void Write(FeatureCollection features, string path, GeoFormat format)
     {
         if (format == GeoFormat.Shapefile)
         {
-            Shapefile.Write(path, collection);
+            Shapefile.Write(path, features);
             return;
         }
 
         using var stream = File.Create(path);
-        Write(collection, stream, format);
+        Write(features, stream, format);
     }
 
     /// <summary>Writes to a stream. <see cref="GeoFormat.Shapefile"/> is not supported here (use a path).</summary>
-    public static void Write(FeatureCollection collection, Stream stream, GeoFormat format)
+    public static void Write(FeatureCollection features, Stream stream, GeoFormat format)
     {
         switch (format)
         {
             case GeoFormat.GeoJson:
-                GeoJson.Write(stream, collection);
+                GeoJson.Write(stream, features);
                 break;
             case GeoFormat.TopoJson:
-                TopoJson.Write(stream, collection);
+                TopoJson.Write(stream, features);
                 break;
             case GeoFormat.FlatGeobuf:
-                FlatGeobuf.Write(stream, collection);
+                FlatGeobuf.Write(stream, features);
                 break;
             case GeoFormat.Kml:
-                Kml.Write(stream, collection);
+                Kml.Write(stream, features);
                 break;
             case GeoFormat.Kmz:
-                Kmz.Write(stream, collection);
+                Kmz.Write(stream, features);
                 break;
             case GeoFormat.Gpx:
-                Gpx.Write(stream, collection);
+                Gpx.Write(stream, features);
                 break;
             case GeoFormat.Wkt:
-                Wkt.Write(stream, collection);
+                Wkt.Write(stream, features);
                 break;
             case GeoFormat.Wkb:
-                Wkb.Write(stream, collection);
+                Wkb.Write(stream, features);
                 break;
             case GeoFormat.Csv:
-                Csv.Write(stream, collection);
+                Csv.Write(stream, features);
                 break;
             case GeoFormat.GeoParquet:
-                GeoParquet.Write(stream, collection);
+                GeoParquet.Write(stream, features);
                 break;
             case GeoFormat.Png:
-                MapRenderer.RenderPng(collection, stream);
+                MapRenderer.RenderPng(features, stream);
                 break;
             case GeoFormat.Shapefile:
                 throw new GeoConvertException(

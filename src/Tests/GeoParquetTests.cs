@@ -42,20 +42,20 @@ public class GeoParquetTests
     [Test]
     public async Task Gzip_level_changes_output_size()
     {
-        var collection = new FeatureCollection();
+        var features = new FeatureCollection();
         // Big, low-entropy strings compress very differently across levels.
         for (var i = 0; i < 50; i++)
         {
-            collection.Add(new Feature(
+            features.Add(new Feature(
                 new Point(new(i, i)),
                 new Dictionary<string, object?> { ["name"] = new string('a', 200) }));
         }
 
         using var fastest = new MemoryStream();
-        GeoParquet.Write(fastest, collection, ParquetCompression.Gzip, CompressionLevel.Fastest);
+        GeoParquet.Write(fastest, features, ParquetCompression.Gzip, CompressionLevel.Fastest);
 
         using var smallest = new MemoryStream();
-        GeoParquet.Write(smallest, collection, ParquetCompression.Gzip, CompressionLevel.SmallestSize);
+        GeoParquet.Write(smallest, features, ParquetCompression.Gzip, CompressionLevel.SmallestSize);
 
         await Assert.That(smallest.Length).IsLessThan(fastest.Length);
 
@@ -77,7 +77,7 @@ public class GeoParquetTests
     [Test]
     public async Task Roundtrips_null_and_mixed_property_types()
     {
-        var collection = new FeatureCollection
+        var features = new FeatureCollection
         {
             new Feature(
                 new Point(new(0, 0)),
@@ -87,7 +87,7 @@ public class GeoParquetTests
                 new Dictionary<string, object?> { ["absent"] = null, ["n"] = 2.5, ["m"] = "text" }),
         };
 
-        var result = G.RoundtripStream(collection, GeoFormat.GeoParquet);
+        var result = G.RoundtripStream(features, GeoFormat.GeoParquet);
 
         // "n" widened long+double -> double; "m" widened long+string -> string.
         await Assert.That(result.Features[0].Properties["n"]).IsEqualTo(1d);

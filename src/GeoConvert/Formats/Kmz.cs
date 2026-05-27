@@ -44,7 +44,7 @@ public static class Kmz
 
     public static void Write(
         Stream stream,
-        FeatureCollection collection,
+        FeatureCollection features,
         CompressionLevel compression = CompressionLevel.Optimal)
     {
         using var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true);
@@ -52,6 +52,6 @@ public static class Kmz
         // A fixed timestamp keeps the archive byte-for-byte reproducible.
         entry.LastWriteTime = new(1980, 1, 1, 0, 0, 0, TimeSpan.Zero);
         using var entryStream = entry.Open();
-        Kml.Write(entryStream, collection);
+        Kml.Write(entryStream, features);
     }
 }
