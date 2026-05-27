@@ -142,7 +142,7 @@ var options = new RenderOptions
 
 MapRenderer.RenderPng(collection, "world.png", options);
 ```
-<sup><a href='/src/Tests/Snippets.cs#L93-L107' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderWebMercator' title='Start of snippet'>anchor</a></sup>
+<sup><a href='/src/Tests/Snippets.cs#L125-L139' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderWebMercator' title='Start of snippet'>anchor</a></sup>
 <!-- endSnippet -->
 
 From the command line, pass `--projection`:
@@ -154,6 +154,51 @@ geoconvert world.geojson world.png --projection web-mercator --size 1200
 Anything more exotic (UTM, Lambert Conformal, Albers, polar stereographic, …) is out of scope — the
 input model is always WGS84, so reprojection has to happen upstream and the renderer is fed
 already-projected coordinates (it treats X/Y as planar either way).
+
+
+## Compression
+
+Three formats compress their output and let the caller pick the speed/ratio trade-off. All three
+default to `CompressionLevel.Optimal`, so existing callers keep their current output:
+
+| Format | Knob | Default |
+| --- | --- | --- |
+| PNG | `RenderOptions.Compression` (deflate level for the `IDAT` chunk) | `CompressionLevel.Optimal` |
+| KMZ | `Kmz.Write(..., CompressionLevel)` (the `doc.kml` zip entry) | `CompressionLevel.Optimal` |
+| GeoParquet | `GeoParquet.Write(..., ParquetCompression, CompressionLevel)` (codec, plus gzip level when the codec is `Gzip`) | `ParquetCompression.Snappy` |
+
+`ParquetCompression` exposes `Snappy`, `Uncompressed` and `Gzip` on the writer. Zstd is intentionally
+not writable — the BCL only ships a Zstd stream decoder — but the GeoParquet reader still accepts
+Zstd-encoded pages on .NET 11+.
+
+<!-- snippet: Compression -->
+<a id='snippet-Compression'></a>
+```cs
+// PNG: the deflate level for the IDAT chunk is exposed on RenderOptions.
+MapRenderer.RenderPng(
+    collection,
+    "world.png",
+    new()
+    {
+        Bounds = MapRenderer.WebMercatorWorldBounds,
+        Projection = MapProjection.WebMercator,
+        Compression = CompressionLevel.Fastest,
+    });
+
+// KMZ: the doc.kml zip entry's compression level is an optional Write argument.
+using (var kmz = File.Create("world.kmz"))
+{
+    Kmz.Write(kmz, collection, CompressionLevel.SmallestSize);
+}
+
+// GeoParquet: pick the codec (default Snappy); CompressionLevel only applies to Gzip.
+using (var parquet = File.Create("world.parquet"))
+{
+    GeoParquet.Write(parquet, collection, ParquetCompression.Gzip, CompressionLevel.SmallestSize);
+}
+```
+<sup><a href='/src/Tests/Snippets.cs#L95-L120' title='Snippet source file'>snippet source</a> | <a href='#snippet-Compression' title='Start of snippet'>anchor</a></sup>
+<!-- endSnippet -->
 
 
 ### Exampl generated png
@@ -287,12 +332,14 @@ dotnet run -c Release --project src/Benchmarks -- --filter "*"
 * **TopoJSON** preserves the top-level `objects` dict as child layers (one per entry, keyed by
   `Name`). The dict is single-level, so grandchildren are flattened into their parent on write.
 * **WKT** and **WKB** carry geometry only — feature attributes are dropped on write.
-* **GeoParquet** is written as a single row group with PLAIN-encoded, Snappy-compressed pages and a flat
-  schema; geometry is stored as WKB (Z/M preserved) with the CRS defaulting to OGC:CRS84. The whole
-  Parquet container is hand-rolled to honour the no-dependency rule, so the supported surface is a subset:
-  on read it also handles GZIP/uncompressed pages, dictionary encoding and data page V2 (as written by
-  GDAL, DuckDB and pyarrow). **Zstd** pages are read on **.NET 11** builds (where Zstd is part of the
-  BCL) and rejected with a clear error on earlier targets.
+* **GeoParquet** is written as a single row group with PLAIN-encoded pages and a flat schema;
+  geometry is stored as WKB (Z/M preserved) with the CRS defaulting to OGC:CRS84. Page compression
+  defaults to Snappy and can be switched to `Uncompressed` or `Gzip` (with a tunable
+  `CompressionLevel`) via the `ParquetCompression` overload of `GeoParquet.Write`. The whole Parquet
+  container is hand-rolled to honour the no-dependency rule, so the supported surface is a subset: on
+  read it also handles dictionary encoding and data page V2 (as written by GDAL, DuckDB and pyarrow).
+  **Zstd** pages are read on **.NET 11** builds (where Zstd is part of the BCL) and rejected with a
+  clear error on earlier targets; Zstd is not exposed on the writer.
 * **PNG** is a write-only raster export; reading a `.png` throws. It needs an extent — when no
   `Bounds` is given, the full extent of the data is used.
 * Property values are scalars (`string`, `long`, `double`, `bool`); a nested JSON object or array is stored as its raw JSON text in a single string property.

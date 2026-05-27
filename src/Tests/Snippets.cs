@@ -88,6 +88,38 @@ static class Snippets
         #endregion
     }
 
+    public static void Compression()
+    {
+        var collection = GeoConverter.Read("countries.geojson");
+
+        #region Compression
+
+        // PNG: the deflate level for the IDAT chunk is exposed on RenderOptions.
+        MapRenderer.RenderPng(
+            collection,
+            "world.png",
+            new()
+            {
+                Bounds = MapRenderer.WebMercatorWorldBounds,
+                Projection = MapProjection.WebMercator,
+                Compression = CompressionLevel.Fastest,
+            });
+
+        // KMZ: the doc.kml zip entry's compression level is an optional Write argument.
+        using (var kmz = File.Create("world.kmz"))
+        {
+            Kmz.Write(kmz, collection, CompressionLevel.SmallestSize);
+        }
+
+        // GeoParquet: pick the codec (default Snappy); CompressionLevel only applies to Gzip.
+        using (var parquet = File.Create("world.parquet"))
+        {
+            GeoParquet.Write(parquet, collection, ParquetCompression.Gzip, CompressionLevel.SmallestSize);
+        }
+
+        #endregion
+    }
+
     public static void RenderWebMercator()
     {
         #region RenderWebMercator
