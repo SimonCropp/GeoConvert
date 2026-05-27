@@ -14,9 +14,10 @@ public sealed class RenderOptions
     /// <summary>
     /// How longitude/latitude is mapped into planar pixel space. Defaults to
     /// <see cref="MapProjection.Auto"/>, which picks <see cref="MapProjection.Lambert"/> for regional
-    /// extents and <see cref="MapProjection.PlateCarree"/> for continental/world extents. Set
-    /// explicitly to opt into a specific layout (e.g. <see cref="MapProjection.WebMercator"/> for
-    /// tiled-map-style output).
+    /// extents, <see cref="MapProjection.PlateCarree"/> for continental extents, and
+    /// <see cref="MapProjection.Goode"/> (uninterrupted Homolosine) for world extents. Set explicitly
+    /// to opt into a specific layout (e.g. <see cref="MapProjection.WebMercator"/> for tiled-map-style
+    /// output).
     /// </summary>
     public MapProjection Projection { get; set; } = MapProjection.Auto;
 
@@ -30,6 +31,17 @@ public sealed class RenderOptions
     public int Padding { get; set; } = 8;
 
     public Rgba Background { get; set; } = Rgba.White;
+
+    /// <summary>
+    /// Optional fill for the projection's "world envelope" — the area on the canvas the
+    /// projection treats as valid geographic space — painted under all features so anything not
+    /// covered by a land polygon reads as ocean. Most useful with <see cref="MapProjection.Goode"/>,
+    /// where the envelope is six discrete lobes and filling them is what makes the inter-lobe gaps
+    /// visible; with rectangular projections (<see cref="MapProjection.PlateCarree"/>,
+    /// <see cref="MapProjection.WebMercator"/>) the envelope is the whole canvas, so this is
+    /// effectively a second background colour. Leave null to skip the ocean pass.
+    /// </summary>
+    public Rgba? Ocean { get; set; }
 
     /// <summary>Outline color for lines, polygon edges and point markers.</summary>
     public Rgba Stroke { get; set; } = new(30, 30, 30);

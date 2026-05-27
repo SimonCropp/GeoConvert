@@ -124,8 +124,10 @@ geoconvert world.geojson europe.png --bbox -10,35,30,60 --size 1200x900
 
 When `RenderOptions.Projection` is left at its default `MapProjection.Auto`, the renderer picks one
 from the data bounds: a regional extent (latitude span < 60°, longitude span < 90°) renders as Lambert
-Conformal Conic, anything wider falls back to plate carrée. Auto never picks Web Mercator — that's a
-deliberate layout choice (tile-style), not a distortion-minimisation one, so it stays explicit.
+Conformal Conic, a continental extent renders as plate carrée, and a world extent (longitude span ≥
+180° or latitude span ≥ 90°) renders as Goode's Homolosine — equal-area, so high-latitude landmasses
+read at honest size. Auto never picks Web Mercator — that's a deliberate layout choice (tile-style),
+not a distortion-minimisation one, so it stays explicit.
 
 | Region | lon span | lat span | Auto picks |
 | --- | --- | --- | --- |
@@ -134,7 +136,8 @@ deliberate layout choice (tile-style), not a distortion-minimisation one, so it 
 | Europe | 40° | 35° | Lambert |
 | Australia | 41° | 34° | Lambert |
 | Africa | 75° | 73° | PlateCarree (latSpan ≥ 60°) |
-| World | 360° | 180° | PlateCarree |
+| Asia | 165° | 80° | PlateCarree |
+| World | 360° | 180° | Goode |
 
 To override, set `Projection` directly. `MapProjection.PlateCarree` treats longitude/latitude as planar
 X/Y with a uniform scale — cheap and faithful for small equatorial extents but compresses high-latitude
@@ -198,6 +201,50 @@ MapRenderer.RenderPng(features, "states.png", options);
 
 ```
 geoconvert states.geojson states.png --projection lambert --size 1600
+```
+
+For a world map, `MapProjection.Goode` is what `Auto` picks under the covers — and what the explicit
+setting selects. It's the conventional *interrupted* form of Goode's Homolosine: the world is split
+into two northern and four southern lobes that meet along ocean meridians (-40° in the north;
+-100°, -20° and +80° in the south), and each lobe is the classic Homolosine — sinusoidal between
+±40°44'11.8" and Mollweide outside that band. The interruptions absorb the distortion that would
+otherwise pile up at the lobe edges, so the major continents stay intact inside one lobe and the
+projection is equal-area: Greenland reads at honest size relative to Africa, unlike under plate
+carrée or Web Mercator. Polygons that straddle a lobe boundary are clipped with Sutherland-Hodgman
+before projection so each lobe's contribution closes along the clip meridian, and polylines are
+split at the boundaries; Antarctica falls inside the four southern lobes and reads as four separate
+pieces along the bottom of the map, which is the visual signature of the projection. Setting
+`RenderOptions.Ocean` paints each lobe with that colour before the continents render, so the lobed
+shape (and the inter-lobe gaps) pops visually.
+
+<!-- snippet: RenderGoode -->
+<a id='snippet-RenderGoode'></a>
+```cs
+var features = GeoConverter.Read("countries.geojson");
+
+// Goode's Homolosine (interrupted into 2 northern and 4 southern lobes along ocean
+// meridians, the conventional layout): equal-area, so areas at high latitudes don't blow
+// up like they do under Web Mercator or compress like they do under plate carrée, and the
+// lobe interrupts keep distortion low on every continent. This is what MapProjection.Auto
+// picks for a world map, so the explicit Projection assignment is only needed when you
+// want the specific extent — leaving it off and letting Auto pick produces the same result.
+// Ocean fills each lobe under the continents so the projection's lobed shape (and the
+// inter-lobe gaps) reads clearly.
+var options = new RenderOptions
+{
+    Bounds = new Envelope(-180, -90, 180, 90),
+    Width = 1600,
+    Projection = MapProjection.Goode,
+    Ocean = new(200, 220, 240),
+};
+
+MapRenderer.RenderPng(features, "world.png", options);
+```
+<sup><a href='/src/Tests/Snippets.cs#L277-L299' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderGoode' title='Start of snippet'>anchor</a></sup>
+<!-- endSnippet -->
+
+```
+geoconvert world.geojson world.png --projection goode --size 1600
 ```
 
 Anything more exotic (UTM, Albers Equal-Area, polar stereographic, …) is out of scope — the input

@@ -87,6 +87,10 @@ public class CliTests
     [Arguments("lambert")]
     [Arguments("lambert-conformal-conic")]
     [Arguments("LCC")]
+    [Arguments("goode")]
+    [Arguments("Homolosine")]
+    [Arguments("goode-homolosine")]
+    [Arguments("goodes-homolosine")]
     [Arguments("auto")]
     [Arguments("Automatic")]
     public async Task RendersPngWithProjection(string projection)

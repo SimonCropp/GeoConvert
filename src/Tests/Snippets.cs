@@ -271,4 +271,31 @@ static class Snippets
 
         #endregion
     }
+
+    public static void RenderGoode()
+    {
+        #region RenderGoode
+
+        var features = GeoConverter.Read("countries.geojson");
+
+        // Goode's Homolosine (interrupted into 2 northern and 4 southern lobes along ocean
+        // meridians, the conventional layout): equal-area, so areas at high latitudes don't blow
+        // up like they do under Web Mercator or compress like they do under plate carrée, and the
+        // lobe interrupts keep distortion low on every continent. This is what MapProjection.Auto
+        // picks for a world map, so the explicit Projection assignment is only needed when you
+        // want the specific extent — leaving it off and letting Auto pick produces the same result.
+        // Ocean fills each lobe under the continents so the projection's lobed shape (and the
+        // inter-lobe gaps) reads clearly.
+        var options = new RenderOptions
+        {
+            Bounds = new Envelope(-180, -90, 180, 90),
+            Width = 1600,
+            Projection = MapProjection.Goode,
+            Ocean = new(200, 220, 240),
+        };
+
+        MapRenderer.RenderPng(features, "world.png", options);
+
+        #endregion
+    }
 }

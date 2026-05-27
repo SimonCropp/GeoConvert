@@ -7,11 +7,14 @@ namespace GeoConvert;
 public enum MapProjection
 {
     /// <summary>
-    /// Pick a projection from the data bounds: a regional extent (latitude span &lt; 60°, longitude
-    /// span &lt; 90°) renders as <see cref="Lambert"/>; anything wider falls back to
-    /// <see cref="PlateCarree"/>. This is the default — set <see cref="RenderOptions.Projection"/> to a
-    /// specific value to override. Auto never picks <see cref="WebMercator"/>: that's a layout choice
-    /// (tile-style), not a distortion-minimisation one, so it stays explicit.
+    /// Pick a projection from the data bounds: world-scale extents (longitude span &gt;= 180° or
+    /// latitude span &gt;= 90°) render as <see cref="Goode"/>, continental extents (latitude span &lt;
+    /// 90°, longitude span &lt; 180°, but at least one over the regional thresholds) render as
+    /// <see cref="PlateCarree"/>, and regional extents (latitude span &lt; 60°, longitude span &lt;
+    /// 90°) render as <see cref="Lambert"/>. This is the default — set
+    /// <see cref="RenderOptions.Projection"/> to a specific value to override. Auto never picks
+    /// <see cref="WebMercator"/>: that's a layout choice (tile-style), not a distortion-minimisation
+    /// one, so it stays explicit.
     /// </summary>
     Auto,
 
@@ -43,4 +46,24 @@ public enum MapProjection
     /// not meant for a world view — use <see cref="WebMercator"/> or <see cref="PlateCarree"/> there.
     /// </summary>
     Lambert,
+
+    /// <summary>
+    /// Goode's Homolosine in its conventional *interrupted* form: pseudocylindrical and equal-area,
+    /// split into two northern and four southern lobes meeting along ocean meridians (-40° in the
+    /// north, -100°/-20°/+80° in the south). Inside each lobe the projection is the classic
+    /// Homolosine — sinusoidal between ±40°44'11.8" and Mollweide outside that band, joined with a
+    /// small vertical offset so the seam reads as smooth. The interruptions absorb the distortion
+    /// that would otherwise pile up at the lobe edges, so the major continents stay intact inside
+    /// a single lobe and read at honest (equal-area) size — Greenland comes out closer to its true
+    /// size relative to Africa, unlike under <see cref="PlateCarree"/> or
+    /// <see cref="WebMercator"/>. This is what <see cref="Auto"/> picks for a world map.
+    /// <para>
+    /// Polygons that straddle a lobe boundary are clipped with Sutherland-Hodgman before
+    /// projection so each lobe's contribution closes along the clip meridian; polylines are split
+    /// at the boundaries so strokes don't jump across the inter-lobe gap. Antarctica falls inside
+    /// the four southern lobes and reads as four separate pieces along the bottom of the map,
+    /// which is the visual signature of the projection.
+    /// </para>
+    /// </summary>
+    Goode,
 }

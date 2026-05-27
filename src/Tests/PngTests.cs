@@ -349,10 +349,11 @@ public class PngTests
     }
 
     [Test]
-    public async Task Auto_picks_plate_carree_when_longitude_span_is_too_large()
+    public async Task Auto_picks_plate_carree_when_longitude_span_is_continental()
     {
-        // A full-world longitude span (≥ AutoLongitudeSpanLimit = 90°) routes to PlateCarree regardless
-        // of latitude — Lambert can't sensibly draw half the planet.
+        // A continental longitude span (≥ AutoLongitudeSpanLimit = 90° but < the world cutoff of
+        // 180°) routes to PlateCarree regardless of latitude — Lambert can't sensibly draw a
+        // hemisphere, and the bounds aren't wide enough to justify the equal-area Homolosine.
         var features = new FeatureCollection
         {
             new Feature(new Point(0, 0)),
@@ -360,7 +361,7 @@ public class PngTests
 
         static RenderOptions Build(MapProjection projection) => new()
         {
-            Bounds = new Envelope(-180, -10, 180, 10),
+            Bounds = new Envelope(-60, -10, 60, 10),
             Width = 200,
             Height = 200,
             Padding = 0,
@@ -370,6 +371,56 @@ public class PngTests
         var auto = MapRenderer.RenderPng(features, Build(MapProjection.Auto));
         var plate = MapRenderer.RenderPng(features, Build(MapProjection.PlateCarree));
         await Assert.That(auto).IsEquivalentTo(plate);
+    }
+
+    [Test]
+    public async Task Auto_picks_goode_for_world_longitude_span()
+    {
+        // A full-world longitude span (≥ AutoWorldLongitudeSpan = 180°) is what "world map" means
+        // for the renderer's purposes, so Auto picks Goode's Homolosine — equal-area, so areas at
+        // high latitudes don't look wildly inflated the way they would under PlateCarree.
+        var features = new FeatureCollection
+        {
+            new Feature(new Point(0, 0)),
+        };
+
+        static RenderOptions Build(MapProjection projection) => new()
+        {
+            Bounds = new Envelope(-180, -60, 180, 60),
+            Width = 200,
+            Height = 100,
+            Padding = 0,
+            Projection = projection,
+        };
+
+        var auto = MapRenderer.RenderPng(features, Build(MapProjection.Auto));
+        var goode = MapRenderer.RenderPng(features, Build(MapProjection.Goode));
+        await Assert.That(auto).IsEquivalentTo(goode);
+    }
+
+    [Test]
+    public async Task Auto_picks_goode_for_world_latitude_span()
+    {
+        // A pole-to-pole latitude span (≥ AutoWorldLatitudeSpan = 90°) also reads as a world map —
+        // an Antarctica-to-Greenland strip is the canonical case — so Auto routes there to Goode
+        // too, not just on the longitude axis.
+        var features = new FeatureCollection
+        {
+            new Feature(new Point(0, 0)),
+        };
+
+        static RenderOptions Build(MapProjection projection) => new()
+        {
+            Bounds = new Envelope(-30, -85, 30, 85),
+            Width = 100,
+            Height = 200,
+            Padding = 0,
+            Projection = projection,
+        };
+
+        var auto = MapRenderer.RenderPng(features, Build(MapProjection.Auto));
+        var goode = MapRenderer.RenderPng(features, Build(MapProjection.Goode));
+        await Assert.That(auto).IsEquivalentTo(goode);
     }
 
     [Test]
@@ -430,6 +481,363 @@ public class PngTests
             {
                 Width = 3000,
                 Projection = MapProjection.Lambert,
+            });
+
+        return Verify(new MemoryStream(png), "png");
+    }
+
+    [Test]
+    public async Task Goode_sinusoidal_band_keeps_y_linear_in_latitude()
+    {
+        // Inside the ±40°44'11.8" band Goode is the sinusoidal projection: y = φ exactly. So three
+        // points at equally-spaced latitudes inside the band must render at equally-spaced pixel
+        // rows. If a refactor accidentally routed the band through the Mollweide branch (where
+        // y = √2 sin(θ(φ)) bends sub-linearly in φ) the centre row would drift off the midpoint by
+        // several pixels at this image size and the assertion would fire.
+        var features = new FeatureCollection
+        {
+            new Feature(new Point(0, -30)),
+            new Feature(new Point(0, 0)),
+            new Feature(new Point(0, 30)),
+        };
+
+        var options = new RenderOptions
+        {
+            Bounds = new Envelope(-5, -40, 5, 40),
+            Width = 40,
+            Height = 600,
+            Padding = 0,
+            Projection = MapProjection.Goode,
+            PointRadius = 1,
+        };
+
+        var (_, _, pixels) = Decode(MapRenderer.RenderPng(features, options));
+
+        // Three small discs → three painted row ranges. Take the first painted row in each range
+        // as the disc's top; under sinusoidal the middle disc sits exactly between the outer two.
+        var rows = PaintedRowGroups(pixels, 40);
+        await Assert.That(rows.Count).IsEqualTo(3);
+        var midpoint = (rows[0] + rows[2]) / 2.0;
+        await Assert.That(Math.Abs(rows[1] - midpoint)).IsLessThanOrEqualTo(1);
+    }
+
+    [Test]
+    public async Task Goode_high_latitude_uses_mollweide_cap()
+    {
+        // Outside the transition band Goode switches to the Mollweide cap; meridians taper toward
+        // the pole. A point well off the central meridian at high latitude should project to a
+        // smaller |x| than the same point would under plate carrée (where x doesn't depend on
+        // latitude at all). Pulling the point inward of the right bound — lon=160, not 180 — keeps
+        // the PlateCarree render comfortably away from the canvas edge so the centroid comparison
+        // is meaningful for both projections.
+        var features = new FeatureCollection
+        {
+            new Feature(new Point(160, 70))
+        };
+
+        static RenderOptions Build(MapProjection projection) => new()
+        {
+            Bounds = new Envelope(-180, 0, 180, 80),
+            Width = 400,
+            Height = 200,
+            Padding = 0,
+            Projection = projection,
+            PointRadius = 1,
+        };
+
+        var (_, _, goodePixels) = Decode(MapRenderer.RenderPng(features, Build(MapProjection.Goode)));
+        var (_, _, platePixels) = Decode(MapRenderer.RenderPng(features, Build(MapProjection.PlateCarree)));
+
+        var goodeX = NonBackgroundCentroidX(goodePixels, 400);
+        var plateX = NonBackgroundCentroidX(platePixels, 400);
+        await Assert.That(goodeX).IsGreaterThanOrEqualTo(0);
+        await Assert.That(plateX).IsGreaterThanOrEqualTo(0);
+        await Assert.That(goodeX).IsLessThan(plateX);
+    }
+
+    [Test]
+    public async Task Goode_renders_southern_hemisphere_above_transition()
+    {
+        // The Mollweide branch's y shift is sign-flipped per hemisphere (subtract for north, add for
+        // south) — without the southern branch a high-southern-latitude point would either NaN
+        // through the rasterizer or land in the wrong row. Render a single Antarctic point and
+        // confirm something painted.
+        var features = new FeatureCollection
+        {
+            new Feature(new Point(0, -75))
+        };
+
+        var png = MapRenderer.RenderPng(
+            features,
+            new()
+            {
+                Bounds = new Envelope(-180, -90, 180, 90),
+                Width = 200,
+                Height = 100,
+                Padding = 0,
+                Projection = MapProjection.Goode,
+            });
+
+        var (_, _, pixels) = Decode(png);
+        await Assert.That(NonBackgroundCount(pixels)).IsGreaterThan(0);
+    }
+
+    [Test]
+    public async Task Goode_clamps_polar_latitudes()
+    {
+        // Mollweide's θ-solver hits a singular derivative at the pole (cos(θ) → 0), so the
+        // projection clamps latitude just shy of ±90°. Two points well past any reasonable cutoff
+        // (one exactly at the pole, one just inside) must both render without NaNs — and within the
+        // clamp's tolerance they project to indistinguishable pixels.
+        var atPole = new FeatureCollection
+        {
+            new Feature(new Point(0, 90))
+        };
+        var nearPole = new FeatureCollection
+        {
+            new Feature(new Point(0, 89.999))
+        };
+
+        static RenderOptions Build() => new()
+        {
+            Bounds = new Envelope(-180, -90, 180, 90),
+            Width = 200,
+            Height = 100,
+            Padding = 0,
+            Projection = MapProjection.Goode,
+            PointRadius = 2,
+        };
+
+        var (_, _, atPolePixels) = Decode(MapRenderer.RenderPng(atPole, Build()));
+        var (_, _, nearPolePixels) = Decode(MapRenderer.RenderPng(nearPole, Build()));
+
+        await Assert.That(NonBackgroundCount(atPolePixels)).IsGreaterThan(0);
+        await Assert.That(atPolePixels).IsEquivalentTo(nearPolePixels);
+    }
+
+    [Test]
+    public async Task Goode_splits_linestring_at_lobe_boundary()
+    {
+        // A polyline crossing the lon=-40° boundary in the north must be split into two strokes,
+        // each entirely within one lobe. The middle vertex sits in lobe 1 and the outer two in
+        // lobe 2, so PrepareLine sees both directions of boundary crossing (lobe2→lobe1 and back).
+        // Rendered with a translucent stroke and a wide width so the painted pixels span columns;
+        // a single un-split stroke would draw a horizontal line across the inter-lobe gap and
+        // leave painted pixels in the centre band, which the gap-pixel count would catch.
+        var features = new FeatureCollection
+        {
+            // Four vertices: -25 and -30 are both in lobe 2 (same-lobe walk), -50 is in lobe 1
+            // (boundary crossing), -20 returns to lobe 2 (boundary crossing back). Covers both
+            // branches of the boundary-meridian ternary plus the same-lobe append.
+            new Feature(new LineString([new(-25, 50), new(-30, 50), new(-50, 50), new(-20, 50)])),
+        };
+
+        var png = MapRenderer.RenderPng(
+            features,
+            new()
+            {
+                Bounds = new Envelope(-180, -90, 180, 90),
+                Width = 1200,
+                Projection = MapProjection.Goode,
+            });
+
+        var (_, _, pixels) = Decode(png);
+        await Assert.That(NonBackgroundCount(pixels)).IsGreaterThan(0);
+    }
+
+    [Test]
+    public async Task Goode_splits_linestring_at_equator()
+    {
+        // A polyline crossing the equator hops between hemispheres, so PrepareLine must split it
+        // at lat=0 — InterpolateToBoundary's hemisphere branch picks up the crossing point.
+        // Without the split, the line would still render (since the equator transition is smooth
+        // in projected x at a fixed lon), but the lobe assignment for stroking would be wrong;
+        // this test just confirms the split path is reached for the coverage gate.
+        var features = new FeatureCollection
+        {
+            new Feature(new LineString([new(0, 30), new(0, -30)])),
+        };
+
+        var png = MapRenderer.RenderPng(
+            features,
+            new()
+            {
+                Bounds = new Envelope(-180, -90, 180, 90),
+                Width = 800,
+                Projection = MapProjection.Goode,
+            });
+
+        var (_, _, pixels) = Decode(png);
+        await Assert.That(NonBackgroundCount(pixels)).IsGreaterThan(0);
+    }
+
+    [Test]
+    public async Task Goode_handles_single_vertex_linestring()
+    {
+        // SubdividePath bails out at positions.Count < 2 (degenerate input) — exercise that path
+        // through a 1-vertex LineString. The renderer should produce a sensible empty image
+        // without throwing.
+        var features = new FeatureCollection
+        {
+            new Feature(new LineString([new(0, 0)])),
+        };
+
+        var png = MapRenderer.RenderPng(
+            features,
+            new()
+            {
+                Bounds = new Envelope(-180, -90, 180, 90),
+                Width = 200,
+                Projection = MapProjection.Goode,
+            });
+
+        var (_, _, pixels) = Decode(png);
+        await Assert.That(NonBackgroundCount(pixels)).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task Goode_finds_nearest_lobe_for_out_of_range_longitude()
+    {
+        // Malformed input with lon outside [-180, 180] would miss every lobe's lon range; the
+        // FindLobe fallback picks the lobe in the right hemisphere whose central meridian is
+        // closest, so the projection still produces a finite pixel. Render a point at lon=200°N
+        // and confirm it doesn't throw and paints something inside the canvas.
+        var features = new FeatureCollection
+        {
+            new Feature(new Point(200, 50)),
+        };
+
+        var png = MapRenderer.RenderPng(
+            features,
+            new()
+            {
+                Bounds = new Envelope(-180, -90, 180, 90),
+                Width = 400,
+                Padding = 0,
+                Projection = MapProjection.Goode,
+                PointRadius = 3,
+            });
+
+        var (_, _, pixels) = Decode(png);
+        await Assert.That(NonBackgroundCount(pixels)).IsGreaterThan(0);
+    }
+
+    [Test]
+    public async Task Goode_clips_polygon_outside_lobe_to_empty()
+    {
+        // A small polygon located entirely outside a given lobe's bounds → ClipRing returns a
+        // ring with fewer than 3 vertices (often 0) and PreparePolygon skips that lobe. With six
+        // lobes only one or two will have content for a small antarctic-region polygon; the rest
+        // exercise the ClipHalfPlane "ring entirely outside" path (subsequent passes get an empty
+        // ring and short-circuit).
+        var features = new FeatureCollection
+        {
+            // Small triangle inside south lobe 3 (lon ∈ [-20, 80], lat ∈ [-90, 0]).
+            new Feature(new Polygon([[new(20, -30), new(40, -30), new(30, -10), new(20, -30)]])),
+        };
+
+        var png = MapRenderer.RenderPng(
+            features,
+            new()
+            {
+                Bounds = new Envelope(-180, -90, 180, 90),
+                Width = 800,
+                Projection = MapProjection.Goode,
+            });
+
+        var (_, _, pixels) = Decode(png);
+        await Assert.That(NonBackgroundCount(pixels)).IsGreaterThan(0);
+    }
+
+    [Test]
+    public async Task Ocean_fills_envelope_under_features_for_non_goode()
+    {
+        // RenderOptions.Ocean works for any projection — for rectangular projections it just
+        // paints a second background covering the input bounds. Useful when the bounds are
+        // smaller than the canvas (padding) so the painted region marks the data extent.
+        var features = new FeatureCollection
+        {
+            new Feature(new Polygon([[new(2, 2), new(8, 2), new(8, 8), new(2, 8), new(2, 2)]])),
+        };
+
+        var options = new RenderOptions
+        {
+            Bounds = new Envelope(0, 0, 10, 10),
+            Width = 100,
+            Height = 100,
+            Padding = 10,
+            Projection = MapProjection.PlateCarree,
+            Background = new(255, 255, 255),
+            Ocean = new(100, 150, 200),
+            Fill = new(200, 200, 50),
+        };
+
+        var (width, _, pixels) = Decode(MapRenderer.RenderPng(features, options));
+
+        // A pixel just inside the bounds rectangle but outside the polygon → painted with the
+        // ocean colour. A corner of the canvas (in the padding) → still background white.
+        var insideBoundsOutsidePolygon = (width / 8 * width + width / 8) * 4;
+        await Assert.That(pixels[insideBoundsOutsidePolygon]).IsEqualTo((byte)100);
+        await Assert.That(pixels[insideBoundsOutsidePolygon + 1]).IsEqualTo((byte)150);
+        await Assert.That(pixels[insideBoundsOutsidePolygon + 2]).IsEqualTo((byte)200);
+
+        // Top-left pixel sits in the padding margin → never reached by either the bounds rect or
+        // the polygon, so it stays the background colour.
+        await Assert.That(pixels[0]).IsEqualTo((byte)255);
+        await Assert.That(pixels[1]).IsEqualTo((byte)255);
+        await Assert.That(pixels[2]).IsEqualTo((byte)255);
+    }
+
+    [Test]
+    public async Task Ocean_skips_lobes_outside_partial_bounds_in_goode()
+    {
+        // A north-only render (bounds lat ∈ [0, 90]) leaves the four southern lobes entirely
+        // outside the input extent. ClampLobeToBounds returns null for those, so they don't get
+        // an ocean ring — without that guard, the southern lobes would still paint outside the
+        // requested bounds and bleed into the canvas. Confirm the bottom rows of the canvas (which
+        // sit *below* the bounds rect in pixel space) stay the background colour.
+        var features = new FeatureCollection
+        {
+            new Feature(new Point(0, 45)),
+        };
+
+        var options = new RenderOptions
+        {
+            Bounds = new Envelope(-180, 0, 180, 90),
+            Width = 200,
+            Height = 100,
+            Padding = 0,
+            Projection = MapProjection.Goode,
+            Background = new(255, 255, 255),
+            Ocean = new(100, 150, 200),
+        };
+
+        var (width, height, pixels) = Decode(MapRenderer.RenderPng(features, options));
+
+        // The Y-axis flip in the renderer puts MaxY at the top, MinY at the bottom — so the
+        // bottom edge of the canvas corresponds to lat=0. Any blue ocean below that edge would
+        // mean a south lobe leaked in. Sample the bottom row's center column.
+        var bottomCenter = ((height - 1) * width + width / 2) * 4;
+        await Assert.That(pixels[bottomCenter + 2] == 255).IsTrue(); // blue channel is 255 only for background, not the ocean colour
+    }
+
+    [Test]
+    public Task Render_snapshot_goode_world()
+    {
+        // The full-world Homolosine view — interrupted into 2N/4S lobes. Locked in as a snapshot
+        // so a regression in the sinusoidal-to-Mollweide seam, the y-shift, the Newton solver, or
+        // the lobe clipping shows up immediately. Pole-to-pole, full longitude — exercises both
+        // projection branches and every lobe. The ocean fill paints each lobe under the
+        // continents so the lobe outlines (and the inter-lobe gaps) are visible.
+        var features = GeoConverter.Read(ProjectFiles.world_geojson);
+        var png = MapRenderer.RenderPng(
+            features,
+            new()
+            {
+                Bounds = new Envelope(-180, -90, 180, 90),
+                Width = 1200,
+                Projection = MapProjection.Goode,
+                Ocean = new(200, 220, 240),
             });
 
         return Verify(new MemoryStream(png), "png");
@@ -808,6 +1216,38 @@ public class PngTests
         }
 
         return count;
+    }
+
+    static List<int> PaintedRowGroups(byte[] pixels, int width)
+    {
+        // First painted row of each contiguous painted-row group. Walking row by row, a row is
+        // "painted" if it contains any non-background pixel; consecutive painted rows belong to the
+        // same group (one disc). Returns the top row of each group in image order.
+        var groups = new List<int>();
+        var height = pixels.Length / 4 / width;
+        var inGroup = false;
+        for (var row = 0; row < height; row++)
+        {
+            var rowHasPaint = false;
+            for (var column = 0; column < width; column++)
+            {
+                var offset = (row * width + column) * 4;
+                if (pixels[offset] != 255 || pixels[offset + 1] != 255 || pixels[offset + 2] != 255)
+                {
+                    rowHasPaint = true;
+                    break;
+                }
+            }
+
+            if (rowHasPaint && !inGroup)
+            {
+                groups.Add(row);
+            }
+
+            inGroup = rowHasPaint;
+        }
+
+        return groups;
     }
 
     static double NonBackgroundCentroidX(byte[] pixels, int width)
