@@ -93,9 +93,12 @@ static class Snippets
         #region RenderWebMercator
         var collection = GeoConverter.Read("countries.geojson");
 
-        // Web Mercator matches the layout of standard web tile maps. Latitude is clamped to ±85.0511°.
+        // Web Mercator matches the layout of standard web tile maps. Pair it with
+        // MapRenderer.WebMercatorWorldBounds for the canonical 1:1 square world view; latitude is
+        // clamped to ±85.0511° (the cutoff every tile provider uses).
         var options = new RenderOptions
         {
+            Bounds = MapRenderer.WebMercatorWorldBounds,
             Width = 1200,
             Projection = MapProjection.WebMercator,
         };

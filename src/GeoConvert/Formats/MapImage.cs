@@ -7,6 +7,19 @@ namespace GeoConvert;
 /// </summary>
 public static class MapRenderer
 {
+    // Standard Web Mercator latitude cutoff: ln(tan) blows up at ±90°, and ±85.0511° is where the
+    // projected square world meets its longitudinal width — the convention every tile provider uses.
+    internal const double WebMercatorMaxLatitude = 85.05112877980659;
+
+    /// <summary>
+    /// The conventional <see cref="RenderOptions.Bounds"/> for a Web Mercator world map: longitude spans
+    /// the full ±180° and latitude is the ±85.0511° cutoff that makes the projected world a 1:1 square,
+    /// matching the layout used by every tiled-map provider. Pass this when rendering a global view
+    /// under <see cref="MapProjection.WebMercator"/>; for any subregion just supply real data bounds.
+    /// </summary>
+    public static Envelope WebMercatorWorldBounds { get; } =
+        new(-180, -WebMercatorMaxLatitude, 180, WebMercatorMaxLatitude);
+
     public static byte[] RenderPng(FeatureCollection collection, RenderOptions? options = null)
     {
         options ??= new();
@@ -148,10 +161,6 @@ public static class MapRenderer
     /// </summary>
     sealed class Projection
     {
-        // Standard Web Mercator latitude cutoff: ln(tan) blows up at ±90°, and ±85.0511° is where the
-        // projected square world meets its longitudinal width — the convention every tile provider uses.
-        const double WebMercatorMaxLatitude = 85.05112877980659;
-
         readonly MapProjection kind;
         readonly Envelope projectedBounds;
         readonly double scale;
@@ -213,7 +222,7 @@ public static class MapRenderer
                 return latitude;
             }
 
-            var clamped = Math.Clamp(latitude, -WebMercatorMaxLatitude, WebMercatorMaxLatitude);
+            var clamped = Math.Clamp(latitude, -MapRenderer.WebMercatorMaxLatitude, MapRenderer.WebMercatorMaxLatitude);
             var radians = clamped * Math.PI / 180;
             // Scale back to degree-equivalent units so the projected envelope reads in the same unit as
             // longitude — the downstream pixel math is scale-invariant either way, but this keeps the

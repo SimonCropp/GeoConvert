@@ -236,6 +236,47 @@ public class PngTests
     }
 
     [Test]
+    public Task Render_snapshot_web_mercator_world()
+    {
+        // The full-world Mercator view: bounds at the ±180°/±85.0511° cutoff make the projected world a
+        // 1:1 square, matching every tiled-map provider's origin. Locking this in as a snapshot so the
+        // shape of a "world map" output is regression-checked alongside the dataset-scoped renders.
+        var collection = GeoConverter.Read(ProjectFiles.world_geojson);
+        var png = MapRenderer.RenderPng(
+            collection,
+            new()
+            {
+                Bounds = MapRenderer.WebMercatorWorldBounds,
+                Width = 1200,
+                Projection = MapProjection.WebMercator,
+            });
+
+        return Verify(new MemoryStream(png), "png");
+    }
+
+    [Test]
+    public async Task WebMercatorWorldBounds_is_square_when_projected()
+    {
+        // Sanity-check the published constant: under Web Mercator the longitude range (360°) and the
+        // projected latitude range must come out equal — that's the point of the ±85.0511° cutoff.
+        var bounds = MapRenderer.WebMercatorWorldBounds;
+        await Assert.That(bounds.MinX).IsEqualTo(-180);
+        await Assert.That(bounds.MaxX).IsEqualTo(180);
+
+        // Render a single point so we can compare derived width/height: with Padding=0 they should match.
+        var collection = new FeatureCollection { new Feature(new Point(0, 0)) };
+        var png = MapRenderer.RenderPng(collection, new()
+        {
+            Bounds = bounds,
+            Width = 256,
+            Padding = 0,
+            Projection = MapProjection.WebMercator,
+        });
+        var (width, height, _) = Decode(png);
+        await Assert.That(height).IsEqualTo(width);
+    }
+
+    [Test]
     public async Task Rejects_non_positive_width()
     {
         var threw = false;

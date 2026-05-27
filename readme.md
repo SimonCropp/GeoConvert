@@ -130,16 +130,19 @@ the projection blows up at the poles):
 ```cs
 var collection = GeoConverter.Read("countries.geojson");
 
-// Web Mercator matches the layout of standard web tile maps. Latitude is clamped to ±85.0511°.
+// Web Mercator matches the layout of standard web tile maps. Pair it with
+// MapRenderer.WebMercatorWorldBounds for the canonical 1:1 square world view; latitude is
+// clamped to ±85.0511° (the cutoff every tile provider uses).
 var options = new RenderOptions
 {
+    Bounds = MapRenderer.WebMercatorWorldBounds,
     Width = 1200,
     Projection = MapProjection.WebMercator,
 };
 
 MapRenderer.RenderPng(collection, "world.png", options);
 ```
-<sup><a href='/src/Tests/Snippets.cs#L93-L104' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderWebMercator' title='Start of snippet'>anchor</a></sup>
+<sup><a href='/src/Tests/Snippets.cs#L93-L107' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderWebMercator' title='Start of snippet'>anchor</a></sup>
 <!-- endSnippet -->
 
 From the command line, pass `--projection`:
@@ -293,6 +296,14 @@ dotnet run -c Release --project src/Benchmarks -- --filter "*"
 * **PNG** is a write-only raster export; reading a `.png` throws. It needs an extent — when no
   `Bounds` is given, the full extent of the data is used.
 * Property values are scalars (`string`, `long`, `double`, `bool`); a nested JSON object or array is stored as its raw JSON text in a single string property.
+
+
+## Sample maps for tests
+
+* `src/Tests/australian_suburbs.geojson` — sourced from https://github.com/anthwri/GeoJson-Data.
+* `src/Tests/world.geojson` — [Natural Earth](https://www.naturalearthdata.com/) 1:110m Admin 0
+  Countries, public domain. Downloaded from
+  https://github.com/nvkelso/natural-earth-vector/blob/master/geojson/ne_110m_admin_0_countries.geojson.
 
 
 ## Icon
