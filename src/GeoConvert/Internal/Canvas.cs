@@ -138,9 +138,59 @@ sealed class Canvas
         }
 
         var outerSq = outer * outer;
+
+        // SIMD path: same approach as FillDisc — vectorise the per-pixel coverage compute
+        // (t-projection through sqrt) across 4 x-pixels at a time, then call Blend per-lane.
+        // All vector ops mirror the scalar evaluation order so the per-lane alpha matches
+        // (byte)(color.A * coverage) bit-for-bit.
+        var simd = Avx.IsSupported && Sse41.IsSupported;
+        var x0Vec = simd ? Vector256.Create(x0) : default;
+        var y0Vec = simd ? Vector256.Create(y0) : default;
+        var dxVec = simd ? Vector256.Create(dx) : default;
+        var dyVec = simd ? Vector256.Create(dy) : default;
+        var lengthSqVec = simd ? Vector256.Create(lengthSq) : default;
+        var outerVec = simd ? Vector256.Create(outer) : default;
+        var oneVec = simd ? Vector256.Create(1.0) : default;
+        var colorAVec = simd ? Vector256.Create((double)color.A) : default;
+        var laneOffsetsVec = simd ? Vector256.Create(0.0, 1.0, 2.0, 3.0) : default;
+
         for (var y = minY; y <= maxY; y++)
         {
-            for (var x = minX; x <= maxX; x++)
+            var x = minX;
+            if (simd)
+            {
+                // (y - y0) * dy is row-constant — precompute scalar and broadcast so the per-lane
+                // arithmetic does the same multiply-then-add sequence as scalar (different lane
+                // ordering would still match bit-for-bit, but matching the scalar evaluation order
+                // keeps the snapshot proof trivial).
+                var yMinusY0TimesDyVec = Vector256.Create((y - y0) * dy);
+                var yVec = Vector256.Create((double)y);
+                for (; x + 4 <= maxX; x += 4)
+                {
+                    var xVec = Vector256.Create((double)x) + laneOffsetsVec;
+                    // t = ((x - x0) * dx + (y - y0) * dy) / lengthSq, clamped to [0, 1].
+                    var tVec = ((xVec - x0Vec) * dxVec + yMinusY0TimesDyVec) / lengthSqVec;
+                    tVec = Vector256.Max(Vector256<double>.Zero, Vector256.Min(oneVec, tVec));
+                    // ddx = x - (x0 + t * dx); ddy = y - (y0 + t * dy)
+                    var ddxVec = xVec - (x0Vec + tVec * dxVec);
+                    var ddyVec = yVec - (y0Vec + tVec * dyVec);
+                    var distSqVec = ddxVec * ddxVec + ddyVec * ddyVec;
+                    var coverageVec = Vector256.Max(
+                        Vector256<double>.Zero,
+                        Vector256.Min(oneVec, outerVec - Vector256.Sqrt(distSqVec)));
+                    var alphaVec = Vector256.Floor(colorAVec * coverageVec);
+                    for (var k = 0; k < 4; k++)
+                    {
+                        var alpha = (byte)alphaVec.GetElement(k);
+                        if (alpha != 0)
+                        {
+                            Blend(x + k, y, new(color.R, color.G, color.B, alpha));
+                        }
+                    }
+                }
+            }
+
+            for (; x <= maxX; x++)
             {
                 // Closest point on the segment to (x, y): project onto the segment direction and
                 // clamp t into [0, 1] so points past the endpoints fall back to round caps at the
@@ -186,13 +236,63 @@ sealed class Canvas
         var maxX = (int)Math.Ceiling(cx + outer);
         var minY = (int)Math.Floor(cy - outer);
         var maxY = (int)Math.Ceiling(cy + outer);
+
+        var simd = Avx.IsSupported && Sse41.IsSupported;
+        var cxVec = simd ? Vector256.Create(cx) : default;
+        var outerVec = simd ? Vector256.Create(outer) : default;
+        var oneVec = simd ? Vector256.Create(1.0) : default;
+        var colorAVec = simd ? Vector256.Create((double)color.A) : default;
+
         for (var y = minY; y <= maxY; y++)
         {
-            for (var x = minX; x <= maxX; x++)
+            var dy = y - cy;
+            var dySq = dy * dy;
+            // Whole-row skip when the row sits outside the disc's y span — every x on this row
+            // would test distSq >= outerSq and continue, so we'd just be doing 2·outer wasted
+            // sqrt+blend tests. Matches scalar output bit-for-bit; no Blend calls happen either way.
+            if (dySq >= outerSq)
+            {
+                continue;
+            }
+
+            var x = minX;
+            if (simd)
+            {
+                // Process 4 x-pixels per iter; coverage compute (including the sqrt) goes through
+                // Vector256.Sqrt which on x86 maps to `vsqrtpd` — same IEEE-754 rounding as scalar
+                // Math.Sqrt, so per-lane alpha matches scalar (byte)(color.A * coverage) exactly.
+                // Stop early enough that the scalar tail gets at least one pixel — keeps the body
+                // reachable for 100% line coverage.
+                var dySqVec = Vector256.Create(dySq);
+                for (; x + 4 <= maxX; x += 4)
+                {
+                    var xVec = Vector256.Create((double)x, x + 1, x + 2, x + 3);
+                    var dxVec = xVec - cxVec;
+                    var distSqVec = dxVec * dxVec + dySqVec;
+                    // coverage = clamp(outer - sqrt(distSq), 0, 1). The Max(0, ...) is what
+                    // replaces scalar's `if (distSq >= outerSq) continue` — for those lanes
+                    // sqrt(distSq) >= outer so coverage clamps to 0, producing alpha=0 and a
+                    // no-op blend in the lane loop below.
+                    var sqrtVec = Vector256.Sqrt(distSqVec);
+                    var coverageVec = Vector256.Max(
+                        Vector256<double>.Zero,
+                        Vector256.Min(oneVec, outerVec - sqrtVec));
+                    var alphaVec = Vector256.Floor(colorAVec * coverageVec);
+                    for (var k = 0; k < 4; k++)
+                    {
+                        var alpha = (byte)alphaVec.GetElement(k);
+                        if (alpha != 0)
+                        {
+                            Blend(x + k, y, new(color.R, color.G, color.B, alpha));
+                        }
+                    }
+                }
+            }
+
+            for (; x <= maxX; x++)
             {
                 var dx = x - cx;
-                var dy = y - cy;
-                var distSq = dx * dx + dy * dy;
+                var distSq = dx * dx + dySq;
                 if (distSq >= outerSq)
                 {
                     continue;

@@ -114,3 +114,24 @@ public class RenderBigPolygonBenchmarks
     public int Full_NoCompression() =>
         MapRenderer.RenderPng(data, options).Length;
 }
+
+// Stroke-heavy fixture: many long zig-zag polylines with no polygon fills, so StrokeLine
+// dominates the rasterizer time. Used to measure the FillDisc/StrokeLine SIMD change cleanly —
+// the polygon-heavy RenderPhaseBenchmarks swamps stroke work under translucent-fill blend.
+[MemoryDiagnoser]
+public class RenderLineBenchmarks
+{
+    FeatureCollection data = null!;
+    RenderOptions options = null!;
+
+    [GlobalSetup]
+    public void Setup()
+    {
+        data = SampleData.LongLines(50);
+        options = new() { Width = 1024, Height = 768, Compression = CompressionLevel.NoCompression };
+    }
+
+    [Benchmark]
+    public int Full_NoCompression() =>
+        MapRenderer.RenderPng(data, options).Length;
+}

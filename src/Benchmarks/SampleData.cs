@@ -64,6 +64,28 @@ static class SampleData
         return collection;
     }
 
+    /// <summary>
+    /// A grid of long polylines — exercises Canvas.StrokeLine across many long anti-aliased
+    /// edges with no polygon-fill work to dilute the measurement. Each polyline has 8 segments
+    /// arranged in a zig-zag, so individual StrokeLine calls cover a meaningful pixel span.
+    /// </summary>
+    public static FeatureCollection LongLines(int count)
+    {
+        var collection = new FeatureCollection();
+        for (var i = 0; i < count; i++)
+        {
+            var positions = new List<Position>();
+            var y = i * 0.2;
+            for (var j = 0; j < 8; j++)
+            {
+                positions.Add(new(j * 1.25, y + (j % 2 == 0 ? 0 : 0.1)));
+            }
+            collection.Add(new Feature(new LineString(positions)));
+        }
+
+        return collection;
+    }
+
     /// <summary>Points carrying many attribute columns — stresses the .dbf field-inference path.</summary>
     public static FeatureCollection WidePoints(int count, int columns)
     {
