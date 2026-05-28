@@ -72,7 +72,10 @@ Hub-and-spoke around one in-memory model:
 - **Hand-rolled internals** (`src/GeoConvert/Internal/`) exist because of the no-dependency rule:
   `FlatBufferBuilder`/`FlatBufferTable` (FlatGeobuf's FlatBuffers wire format), `Dbf` (dBASE attribute
   table), `WktParser`, `CsvParser`, `Png` (encoder, uses BCL `ZLibStream` + a hand-written CRC32),
-  `Canvas` (software rasterizer with even-odd polygon fill), `Ring` (orientation), `Scalars`/`JsonValue`
+  `Canvas` (software rasterizer with even-odd polygon fill and antialiased thick-line strokes / disc
+  fills via fractional-coverage blending; polygon fill edges are binary — sharp boundaries where
+  filled features meet untextured background still show stair-stepping, but in typical configs the
+  polygon's stroke covers its fill edge), `Ring` (orientation), `Scalars`/`JsonValue`
   (property type inference). Prefer extending these over taking a dependency.
 
 Format codec conventions: a writer must **not** close a caller-provided `Stream` (wrap with
@@ -100,7 +103,23 @@ from `RenderOptions`). `RenderOptions.Projection` selects the layout — `Auto` 
 with standard parallels auto-picked at 1/6 and 5/6 of the data's latitude range; degenerates on
 equator-symmetric bounds and silently falls back to `PlateCarree` there). The CLI exposes this as
 `--projection auto|plate-carree|web-mercator|lambert` (with `equirectangular`, `mercator`, `lcc`, and
-`lambert-conformal-conic` as accepted aliases).
+`lambert-conformal-conic` as accepted aliases). PNG also supports optional feature labels: set
+`RenderOptions.Label` (or `LayerStyle.Label` per layer) to a `Func<Feature, string?>` and the
+renderer adds a label pass on top of geometry using a hand-rolled single-stroke vector font in
+the Hershey idiom (`Internal/StrokeFont.cs`, printable ASCII only — anything else renders as
+`?`; scales continuously via `Canvas.StrokeLine` rather than nearest-neighbour upscaling, so
+no visible pixel blocks) and a greedy collision placer (`Internal/Labeller.cs`). `LabelSize` is
+the cap height in pixels (default 14); stroke weight grows gently with size. Anchors are
+polygon centroid (shoelace), line arclength midpoint, point itself; multi-* picks the largest
+sub-piece by area/length; `GeometryCollection` recurses to the first child with a usable
+anchor; off-canvas or overlapping labels are dropped silently (no candidate-offset search, no
+rotation). Collision order defaults to "biggest feature first" (polygon area / line length;
+points last), so on overlap the bigger feature's label wins; override with
+`RenderOptions.LabelPriority` (or `LayerStyle.LabelPriority`) for any
+`Func<Feature, double>` — typical patterns are reading a property like `POP_EST` or capturing
+an external `Dictionary<string, double>` lookup in the closure. A halo ring traces the strokes (not a solid backdrop) at one pixel wider than the
+foreground stroke — a semi-transparent white by default — set `LabelHalo = null` to skip. CLI
+exposes `--label <property> --label-size <pixels> --label-color <#hex> --label-halo <#hex|none>`.
 
 ### Layer-aware codecs
 

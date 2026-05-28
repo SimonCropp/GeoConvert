@@ -19,4 +19,32 @@ public sealed class LayerStyle
 
     /// <summary>Point marker radius in pixels for features in this layer. Null inherits <see cref="RenderOptions.PointRadius"/>.</summary>
     public int? PointRadius { get; set; }
+
+    /// <summary>
+    /// Resolves the label text for a feature in this layer (e.g. <c>feature =>
+    /// feature.Properties["name"] as string</c>). Return null — or leave this property null — to
+    /// skip labelling features in this layer; when null, <see cref="RenderOptions.Label"/> is used
+    /// instead. The label is anchored at the geometry's centroid for polygons, the arclength
+    /// midpoint for lines, and the point itself for points; off-canvas anchors and overlaps with
+    /// already-placed labels are silently dropped.
+    /// </summary>
+    public Func<Feature, string?>? Label { get; set; }
+
+    /// <summary>Cap height of label text in pixels (the stroke font scales continuously). Null
+    /// inherits <see cref="RenderOptions.LabelSize"/>.</summary>
+    public double? LabelSize { get; set; }
+
+    /// <summary>Color of the label text itself. Null inherits <see cref="RenderOptions.LabelColor"/>.</summary>
+    public Rgba? LabelColor { get; set; }
+
+    /// <summary>Color of the one-pixel halo painted under label text for legibility over busy
+    /// fills. Null inherits <see cref="RenderOptions.LabelHalo"/> — which itself defaults to a
+    /// semi-transparent white, so labels stay readable out of the box. Pass
+    /// <see cref="Rgba.Transparent"/> to suppress the halo for a specific layer.</summary>
+    public Rgba? LabelHalo { get; set; }
+
+    /// <summary>Per-feature priority for label collision; higher = placed first, lower scores
+    /// drop on overlap. Null inherits <see cref="RenderOptions.LabelPriority"/> (which itself
+    /// defaults to geometric area/length). See the RenderOptions property for typical usage.</summary>
+    public Func<Feature, double>? LabelPriority { get; set; }
 }
