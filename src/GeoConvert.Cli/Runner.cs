@@ -414,9 +414,10 @@ public static class Runner
                                      scale), or 'goode' (Goode's Homolosine, equal-area world map).
               --label <property>     PNG only: render each feature's property value as a text label
                                      (single-stroke vector font; printable ASCII plus Latin
-                                     diacritics, ligatures like ß/æ/ø render as '?'). Anchored at
-                                     polygon centroid / line midpoint / point. Off-canvas and
-                                     overlapping labels are dropped silently.
+                                     diacritics, ligatures like ß/æ/ø render as '?'). Polygon/line
+                                     labels centre on the centroid / midpoint; point labels walk an
+                                     8-position ring (Imhof) around the dot, preferring upper-right.
+                                     Off-canvas and overlapping labels are dropped silently.
               --label-size <pixels>  Cap height of label text in pixels. Default 14.
               --label-color <#hex>   Label text color, '#RRGGBB' or '#RRGGBBAA'. Default near-black.
               --label-halo <#hex|none>  Halo color painted under label text. Default semi-transparent

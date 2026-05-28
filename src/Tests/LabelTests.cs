@@ -280,6 +280,166 @@ public class LabelTests
     }
 
     [Test]
+    public async Task Labeller_point_offset_places_NE_of_anchor()
+    {
+        // With a positive pointOffset the label sits at the NE corner of the candidate ring:
+        // leftX = anchorX + offset, baselineY = anchorY - offset. So every painted pixel must lie
+        // strictly to the upper-right of the anchor — confirms the first Imhof candidate is the
+        // one chosen when nothing's competing for it.
+        var canvas = new Canvas(200, 200, Rgba.White);
+        var labeller = new Labeller(canvas);
+        const double anchorX = 100;
+        const double anchorY = 100;
+        var placed = labeller.TryPlace("HI", anchorX, anchorY, 14, Rgba.Black, halo: null, pointOffset: 6);
+
+        await Assert.That(placed).IsTrue();
+
+        // Scan the canvas: any non-white pixel must be NE of the anchor (x > anchorX, y < anchorY).
+        // The "y < anchorY" check uses the baseline being above the anchor — descenders would
+        // push some ink below the baseline, but "HI" has none.
+        var anyInk = false;
+        for (var y = 0; y < canvas.Height; y++)
+        {
+            for (var x = 0; x < canvas.Width; x++)
+            {
+                var index = (y * canvas.Width + x) * 4;
+                if (canvas.Pixels[index] != 255 || canvas.Pixels[index + 1] != 255 || canvas.Pixels[index + 2] != 255)
+                {
+                    anyInk = true;
+                    await Assert.That(x).IsGreaterThanOrEqualTo((int)anchorX);
+                    await Assert.That(y).IsLessThan((int)anchorY);
+                }
+            }
+        }
+
+        await Assert.That(anyInk).IsTrue();
+    }
+
+    [Test]
+    public async Task Labeller_point_offset_falls_back_through_candidates_on_collision()
+    {
+        // First label takes NE. Second label at the same anchor must collide on NE and fall
+        // through to NW — leftX ends up to the LEFT of the anchor, distinguishable from a "first
+        // candidate" failure (which would have just dropped). PlacedCount confirms both fitted.
+        var canvas = new Canvas(400, 200, Rgba.White);
+        var labeller = new Labeller(canvas);
+        const double anchorX = 200;
+        const double anchorY = 100;
+        var first = labeller.TryPlace("AAA", anchorX, anchorY, 14, Rgba.Black, halo: null, pointOffset: 6);
+        var second = labeller.TryPlace("BBB", anchorX, anchorY, 14, Rgba.Black, halo: null, pointOffset: 6);
+
+        await Assert.That(first).IsTrue();
+        await Assert.That(second).IsTrue();
+        await Assert.That(labeller.PlacedCount).IsEqualTo(2);
+
+        // The first label sits to the right of the anchor; the second must have landed to the
+        // left (NW) — find any ink to the LEFT of the anchor to confirm the fall-through ran.
+        var foundLeftOfAnchor = false;
+        for (var y = 0; y < canvas.Height && !foundLeftOfAnchor; y++)
+        {
+            for (var x = 0; x < (int)anchorX; x++)
+            {
+                var index = (y * canvas.Width + x) * 4;
+                if (canvas.Pixels[index] != 255 || canvas.Pixels[index + 1] != 255 || canvas.Pixels[index + 2] != 255)
+                {
+                    foundLeftOfAnchor = true;
+                    break;
+                }
+            }
+        }
+
+        await Assert.That(foundLeftOfAnchor).IsTrue();
+    }
+
+    [Test]
+    public async Task Labeller_point_offset_drops_when_all_candidates_collide()
+    {
+        // Block every Imhof slot around (200, 200) by placing five centred labels stacked
+        // vertically through the anchor — covers the inkTop-rise for NE/N/NW (via the row above)
+        // and the inkBottom-drop for SE/S/SW (via the row below), with enough horizontal extent
+        // to swallow the E/W boxes too. With every candidate colliding, the YY placement must
+        // return false and never paint.
+        var canvas = new Canvas(400, 400, Rgba.White);
+        var labeller = new Labeller(canvas);
+        for (var y = 160; y <= 240; y += 20)
+        {
+            labeller.TryPlace("BLOCK_BLOCK_BLOCK", 200, y, 14, Rgba.Black, halo: null);
+        }
+        var initialPlacedCount = labeller.PlacedCount;
+
+        var placed = labeller.TryPlace("YY", 200, 200, 14, Rgba.Black, halo: null, pointOffset: 6);
+        await Assert.That(placed).IsFalse();
+        // PlacedCount unchanged — confirms no candidate snuck a YY through.
+        await Assert.That(labeller.PlacedCount).IsEqualTo(initialPlacedCount);
+    }
+
+    [Test]
+    public async Task Labeller_zero_pointOffset_keeps_centred_placement()
+    {
+        // Default pointOffset is 0 — the centred placement path for polygon-centroid / line-
+        // midpoint anchors. The label must straddle the anchor on both axes: some ink to the
+        // left AND some to the right, some above AND some below the baseline-centred row. NE
+        // placement would put ALL ink on one side; this test would fail there.
+        var canvas = new Canvas(200, 100, Rgba.White);
+        var labeller = new Labeller(canvas);
+        var placed = labeller.TryPlace("CENTRED", 100, 50, 14, Rgba.Black, halo: null);
+        await Assert.That(placed).IsTrue();
+
+        var leftOfAnchor = false;
+        var rightOfAnchor = false;
+        for (var y = 0; y < canvas.Height; y++)
+        {
+            for (var x = 0; x < canvas.Width; x++)
+            {
+                var index = (y * canvas.Width + x) * 4;
+                if (canvas.Pixels[index] == 255 && canvas.Pixels[index + 1] == 255 && canvas.Pixels[index + 2] == 255)
+                {
+                    continue;
+                }
+
+                if (x < 100)
+                {
+                    leftOfAnchor = true;
+                }
+                else if (x > 100)
+                {
+                    rightOfAnchor = true;
+                }
+            }
+        }
+
+        await Assert.That(leftOfAnchor).IsTrue();
+        await Assert.That(rightOfAnchor).IsTrue();
+    }
+
+    [Test]
+    public async Task Labeller_point_offset_drops_off_canvas_candidates()
+    {
+        // Anchor pinned hard against the right edge of the canvas: the NE/SE/E candidates all
+        // push the label past the right edge. The walker should keep going and find a working
+        // slot on the left side (NW or W). Confirms the off-canvas rejection participates in the
+        // candidate walk rather than abandoning at the first failure.
+        var canvas = new Canvas(200, 100, Rgba.White);
+        var labeller = new Labeller(canvas);
+        var placed = labeller.TryPlace("LONGLABEL", 195, 50, 14, Rgba.Black, halo: null, pointOffset: 6);
+        await Assert.That(placed).IsTrue();
+        await Assert.That(labeller.PlacedCount).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task Labeller_point_offset_drops_when_canvas_too_small_in_all_directions()
+    {
+        // Canvas barely larger than one label's width: every Imhof candidate clips somewhere off
+        // the edge. The fallback walk runs all eight slots and returns false. Covers the "all
+        // candidates failed" return-false path.
+        var canvas = new Canvas(40, 40, Rgba.White);
+        var labeller = new Labeller(canvas);
+        var placed = labeller.TryPlace("VERYLONGLABELHERE", 20, 20, 14, Rgba.Black, halo: null, pointOffset: 6);
+        await Assert.That(placed).IsFalse();
+        await Assert.That(labeller.PlacedCount).IsEqualTo(0);
+    }
+
+    [Test]
     public async Task Renders_label_on_point()
     {
         var features = new FeatureCollection
@@ -703,12 +863,12 @@ public class LabelTests
     [Test]
     public async Task Custom_label_priority_overrides_default_area_rule()
     {
-        // Two points sitting at the same projected pixel so they MUST collide. Without a custom
-        // priority both have geometry-area = 0 (points) and file order decides — the first wins.
-        // With a custom priority sourced from the "rank" property, the higher-ranked feature
-        // outranks the other regardless of file order. The snapshot pins which word actually
-        // renders (SECOND, the higher-ranked one), so a regression that drops the callback or
-        // reverses the sort would diff visibly.
+        // Two points sitting at the same projected pixel. Both want the NE slot of the Imhof
+        // candidate ring; the higher-priority one wins it and the other gets bumped to NW. Without
+        // a custom priority both have geometry-area = 0 (points) and file order decides — FIRST
+        // takes NE, SECOND lands NW. With a custom priority sourced from the "rank" property,
+        // SECOND outranks FIRST and the slots flip. The snapshot pins which word lands where, so
+        // a regression that drops the callback or reverses the sort diffs visibly.
         var features = new FeatureCollection
         {
             new Feature(new Point(0, 0), new Dictionary<string, object?> { ["name"] = "FIRST", ["rank"] = 1.0 }),
@@ -765,8 +925,10 @@ public class LabelTests
     public async Task Layer_label_priority_overrides_options_default()
     {
         // Priority callback on a LayerStyle takes precedence over the RenderOptions-level one for
-        // that layer — same per-property fall-through pattern as the other label knobs. Snapshot
-        // pins which of the two layers' labels wins the collision at the shared anchor.
+        // that layer — same per-property fall-through pattern as the other label knobs. Pre-order
+        // layer traversal means the background layer's "L" lands its preferred NE slot first;
+        // "U" (overlay) collides at NE and gets bumped to NW. Snapshot pins which letter lands
+        // where so a regression that drops the per-layer priority callback diffs visibly.
         var lower = new FeatureCollection
         {
             Name = "background",

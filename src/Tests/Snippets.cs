@@ -201,13 +201,14 @@ static class Snippets
     {
         #region RenderLabels
 
-        // Label every feature with its "name" property. The renderer anchors each label at the
-        // geometry's centre (polygon centroid, line arclength midpoint, point itself),
-        // collision-checks against already-placed labels, and drops off-canvas or overlapping
-        // ones silently. The single-stroke vector font handles printable ASCII plus the Latin
-        // diacritics that decompose to an ASCII base + combining mark (grave, acute, circumflex,
-        // tilde, diaeresis, ring, caron, cedilla); ligatures like ß, æ, ø and the non-Latin
-        // blocks render as '?'. LabelSize is the cap height in pixels — the font scales continuously,
+        // Label every feature with its "name" property. Polygon/line labels sit on the
+        // centroid / arclength midpoint; point labels walk Imhof's 8-position candidate ring
+        // around the dot (NE → NW → SE → SW → E → W → N → S) so the label doesn't paint on
+        // top of the point marker. Collision and off-canvas rejection drop labels silently.
+        // The single-stroke vector font handles printable ASCII plus the Latin diacritics that
+        // decompose to an ASCII base + combining mark (grave, acute, circumflex, tilde,
+        // diaeresis, ring, caron, cedilla); ligatures like ß, æ, ø and the non-Latin blocks
+        // render as '?'. LabelSize is the cap height in pixels — the font scales continuously,
         // so any positive value works (12–16 for 2k canvases, 20+ for high-res).
         var features = GeoConverter.Read("cities.geojson");
 

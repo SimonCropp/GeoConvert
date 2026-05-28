@@ -81,10 +81,13 @@ public sealed class RenderOptions
     /// is null — the default-for-every-layer label rule. Typical use: <c>feature =>
     /// feature.Properties.TryGetValue("name", out var v) ? v as string : null</c>. Labels render in
     /// a single-stroke vector font (printable ASCII plus Latin diacritics — text is NFD-normalised
-    /// so "Côte d'Ivoire" stays legible; ligatures like ß/æ/ø substitute as '?') sized to <see cref="LabelSize"/>,
-    /// centred on the geometry's pixel-space anchor (polygon centroid, line midpoint, point
-    /// itself). A greedy collision pass drops labels that would overlap an already-placed one or
-    /// extend off the canvas — no rotation, no candidate-offset search.
+    /// so "Côte d'Ivoire" stays legible; ligatures like ß/æ/ø substitute as '?') sized to <see cref="LabelSize"/>.
+    /// Polygon and line labels are centred on the geometry's pixel-space anchor (centroid /
+    /// arclength midpoint); point labels sit beside the dot, walking the classical Imhof
+    /// 8-position candidate ring (upper-right preferred, then upper-left, the lower corners, then
+    /// the cardinals) until one fits clear of the canvas edges and every previously-placed label.
+    /// Off-canvas or fully-blocked labels drop silently — no rotation, no candidate-offset search
+    /// beyond the 8 ring positions.
     /// </summary>
     public Func<Feature, string?>? Label { get; set; }
 
