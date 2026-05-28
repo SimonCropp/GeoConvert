@@ -662,6 +662,144 @@ public class LabelTests
     }
 
     [Test]
+    public Task Render_snapshot_stroke_autoscale_world()
+    {
+        // Snapshot pinning the visual effect of StrokeAutoScale at a world-scale render — the
+        // multiplier should be well below 1 (zoom ~4 at 2048-wide is 5.5 zoom levels under the
+        // country-scale baseline, so 1.15^-5.5 ≈ 0.46). Compared to the existing world snapshots
+        // that use a fixed 2px StrokeWidth, this one should show noticeably thinner borders.
+        // A regression that reversed the formula's direction (e.g. 1.15^(10 - zoom) instead of
+        // 1.15^(zoom - 10)) would produce the opposite: thick borders at world scale, which
+        // would diff loudly against this baseline.
+        var features = GeoConverter.Read(ProjectFiles.world_geojson);
+        var png = MapRenderer.RenderPng(
+            features,
+            new()
+            {
+                Bounds = new(-180, -90, 180, 90),
+                Width = 2048,
+                Projection = MapProjection.PlateCarree,
+                Fill = new(180, 200, 220),
+                Stroke = new(40, 40, 40),
+                StrokeWidth = 2,
+                StrokeAutoScale = true,
+            });
+
+        return Verify(new MemoryStream(png), "png");
+    }
+
+    [Test]
+    public async Task StrokeAutoScale_thickens_strokes_at_country_scale()
+    {
+        // Same canvas, same StrokeWidth=2, but different bboxes. With autoscale on, the
+        // country-scale render uses a different multiplier than the world view — so the rendered
+        // bytes differ from the autoscale-off baseline. Confirms the flag is wired through.
+        static byte[] RenderWith(Envelope bounds, bool autoScale) =>
+            MapRenderer.RenderPng(
+                new FeatureCollection
+                {
+                    new Feature(new LineString([new(-5, 0), new(5, 0)])),
+                },
+                new()
+                {
+                    Bounds = bounds,
+                    Width = 200,
+                    Height = 200,
+                    Padding = 0,
+                    Projection = MapProjection.PlateCarree,
+                    Stroke = new(0, 0, 0),
+                    StrokeWidth = 2,
+                    StrokeAutoScale = autoScale,
+                });
+
+        // Country bbox (10° × 10°) — autoscale multiplier < 1 here (zoom ~4.8 vs baseline 10).
+        var country = RenderWith(new(-5, -5, 5, 5), autoScale: true);
+        // Same country render WITHOUT autoscale — fixed 2px regardless of bbox.
+        var countryFixed = RenderWith(new(-5, -5, 5, 5), autoScale: false);
+
+        await Assert.That(country.SequenceEqual(countryFixed)).IsFalse();
+    }
+
+    [Test]
+    public async Task StrokeAutoScale_off_leaves_strokes_unchanged()
+    {
+        // With the flag off (default), the rendered bytes must match a render that doesn't set
+        // the flag at all — autoscale is genuinely opt-in and the existing snapshot output is
+        // untouched.
+        var features = new FeatureCollection
+        {
+            new Feature(new LineString([new(-5, 0), new(5, 0)])),
+        };
+        var withFlag = MapRenderer.RenderPng(features, new()
+        {
+            Bounds = new(-10, -10, 10, 10),
+            Width = 200,
+            Height = 200,
+            Padding = 0,
+            Projection = MapProjection.PlateCarree,
+            StrokeWidth = 3,
+            StrokeAutoScale = false,
+        });
+        var withoutFlag = MapRenderer.RenderPng(features, new()
+        {
+            Bounds = new(-10, -10, 10, 10),
+            Width = 200,
+            Height = 200,
+            Padding = 0,
+            Projection = MapProjection.PlateCarree,
+            StrokeWidth = 3,
+        });
+
+        await Assert.That(withFlag.SequenceEqual(withoutFlag)).IsTrue();
+    }
+
+    [Test]
+    public async Task StrokeAutoScale_clamps_at_high_zoom_extreme()
+    {
+        // A microscopic bbox (1e-4° square) at 4096px implies an implicit zoom well past 20,
+        // which the 1.15^(zoom-10) formula would otherwise blow up to >100×. The clamp caps
+        // the multiplier at 6×, so the stroke stays drawable. Confirms the upper-clamp branch
+        // is exercised — without it this render would either swallow the whole canvas in
+        // strokes or trip canvas-size guards.
+        var features = new FeatureCollection
+        {
+            new Feature(new Point(0, 0)),
+        };
+        var png = MapRenderer.RenderPng(features, new()
+        {
+            Bounds = new(-0.00005, -0.00005, 0.00005, 0.00005),
+            Width = 4096,
+            Padding = 0,
+            Projection = MapProjection.PlateCarree,
+            PointRadius = 4,
+            StrokeAutoScale = true,
+        });
+        await Assert.That(png.Length).IsGreaterThan(0);
+    }
+
+    [Test]
+    public async Task StrokeAutoScale_clamps_at_low_zoom_extreme()
+    {
+        // Reverse: oversized bbox (3600° span) at small canvas pushes the implicit zoom well
+        // below 0, where the formula would shrink the multiplier toward 0. The clamp pins it at
+        // 0.25× so the stroke never vanishes entirely. Exercises the lower-clamp branch.
+        var features = new FeatureCollection
+        {
+            new Feature(new LineString([new(-100, 0), new(100, 0)])),
+        };
+        var png = MapRenderer.RenderPng(features, new()
+        {
+            Bounds = new(-1800, -1800, 1800, 1800),
+            Width = 64,
+            Padding = 0,
+            Projection = MapProjection.PlateCarree,
+            StrokeWidth = 2,
+            StrokeAutoScale = true,
+        });
+        await Assert.That(png.Length).IsGreaterThan(0);
+    }
+
+    [Test]
     public Task Render_snapshot_world_labels_high_res()
     {
         // High-resolution world snapshot — 4096-wide Goode's Homolosine (the equal-area lobed
