@@ -80,7 +80,8 @@ public sealed class RenderOptions
     /// Resolves the label text for a feature when its layer's <see cref="GeoConvert.LayerStyle.Label"/>
     /// is null — the default-for-every-layer label rule. Typical use: <c>feature =>
     /// feature.Properties.TryGetValue("name", out var v) ? v as string : null</c>. Labels render in
-    /// a single-stroke vector font (printable ASCII only) sized to <see cref="LabelSize"/>,
+    /// a single-stroke vector font (printable ASCII plus Latin diacritics — text is NFD-normalised
+    /// so "Côte d'Ivoire" stays legible; ligatures like ß/æ/ø substitute as '?') sized to <see cref="LabelSize"/>,
     /// centred on the geometry's pixel-space anchor (polygon centroid, line midpoint, point
     /// itself). A greedy collision pass drops labels that would overlap an already-placed one or
     /// extend off the canvas — no rotation, no candidate-offset search.

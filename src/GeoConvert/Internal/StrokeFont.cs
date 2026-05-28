@@ -6,9 +6,18 @@
 /// rendered geometry) rather than visible pixel blocks.
 /// <para>
 /// Coordinate convention: x grows right, y grows up, baseline at y=0, cap height at y=14, lowercase
-/// x-height at y=10, descenders down to y=-4, ascenders top at y=14. Per-glyph width is variable
-/// (proportional). The renderer scales font units to pixels by <paramref>size</paramref>/14 so the
-/// `size` parameter reads as cap height in pixels.
+/// x-height at y=10, descenders down to y=-4, combining marks reach up to y=17. Per-glyph width is
+/// variable (proportional). The renderer scales font units to pixels by <paramref>size</paramref>/14
+/// so the `size` parameter reads as cap height in pixels.
+/// </para>
+/// <para>
+/// Coverage is printable ASCII (U+0020–U+007E) for the base glyphs, plus a handful of combining
+/// marks (grave, acute, circumflex, tilde, diaeresis, ring above, caron, cedilla). Input is
+/// normalised to NFD so precomposed forms — "ô" (U+00F4), "Á" (U+00C1), "ñ" (U+00F1) and the rest
+/// of Latin-1 Supplement / Latin Extended-A that decomposes into one of those marks — render as
+/// the ASCII base glyph with the mark stroked above (or below, for cedilla). Characters that
+/// don't decompose to an ASCII base (ß, æ, ø, þ, Đ, the Greek/Cyrillic blocks, CJK, …) still
+/// substitute as '?'.
 /// </para>
 /// <para>
 /// The font is intentionally not historic Hershey — that data is public-domain but reproducing it
@@ -21,11 +30,12 @@ static class StrokeFont
 {
     public const double CapHeight = 14;
 
-    // The glyph cell extends from y=-4 (deepest descender on g/j/p/q/y) to y=16 (top of '[' and
-    // accent space above the cap line). The collision pass uses these so a label's bbox covers
-    // every pixel it could paint, not just the cap rectangle — without that, two lines of text
-    // at safe-looking cap-to-cap spacing have descenders biting into the next line's caps.
-    public const double AscenderTop = 16;
+    // The glyph cell extends from y=-4 (deepest descender on g/j/p/q/y) to y=17 (top of combining
+    // marks like circumflex / caron sitting one font unit above the cap line). The collision pass
+    // uses these so a label's bbox covers every pixel it could paint, not just the cap rectangle —
+    // without that, two lines of text at safe-looking cap-to-cap spacing have descenders or
+    // accents biting into the next line's caps.
+    public const double AscenderTop = 17;
     public const double DescenderBottom = -4;
 
     // Horizontal gap between glyph cells, in font units. 2 units at default size 14 → ~1.4 pixels;
@@ -36,30 +46,43 @@ static class StrokeFont
 
     static readonly Dictionary<char, Glyph> glyphs = BuildGlyphs();
 
+    // Combining marks (Unicode NonSpacingMark, U+0300+). Strokes are defined centred on x=0 in
+    // font units — they're positioned at the horizontal centre of the preceding base glyph rather
+    // than at the pen position, and don't advance the pen.
+    static readonly Dictionary<char, (double X, double Y)[][]> marks = BuildMarks();
+
     /// <summary>Measures the rendered size of <paramref name="text"/> at the given cap-height
     /// <paramref name="size"/> in pixels.</summary>
     public static (double Width, double Height) Measure(string text, double size)
     {
-        if (text.Length == 0)
+        // Normalise so precomposed accented characters split into base + combining mark — only the
+        // base glyph contributes width.
+        var normalized = text.Normalize(NormalizationForm.FormD);
+        if (normalized.Length == 0)
         {
             return (0, size);
         }
 
         var unit = size / CapHeight;
         var widthInFontUnits = 0d;
-        for (var i = 0; i < text.Length; i++)
+        var baseCount = 0;
+        for (var i = 0; i < normalized.Length; i++)
         {
-            var glyph = GlyphFor(text[i]);
-            widthInFontUnits += glyph.Width;
-            // Tracking between glyphs, not after the last one — so the bounding box is tight on
-            // the right side of the final character.
-            if (i + 1 < text.Length)
+            if (IsCombiningMark(normalized[i]))
+            {
+                continue;
+            }
+
+            if (baseCount > 0)
             {
                 widthInFontUnits += Tracking;
             }
+
+            widthInFontUnits += GlyphFor(normalized[i]).Width;
+            baseCount++;
         }
 
-        // Glyph cells span y ∈ [-4, 16] but the measured height is the cap height — descenders
+        // Glyph cells span y ∈ [-4, 17] but the measured height is the cap height — descenders
         // and accents extend slightly above/below the reported bbox. Labeller uses the bbox for
         // collision; tighter centring on cap height matches what the eye reads as "the text".
         return (widthInFontUnits * unit, size);
@@ -73,6 +96,7 @@ static class StrokeFont
     /// </summary>
     public static void Render(Canvas canvas, string text, double leftX, double baselineY, double size, Rgba color, Rgba? halo)
     {
+        var normalized = text.Normalize(NormalizationForm.FormD);
         var unit = size / CapHeight;
         // Stroke widths scale gently with size: keeps small text crisp (width 1) and grows the
         // weight as text gets bigger so big text doesn't look reedy. Halo is one pixel wider so
@@ -82,36 +106,76 @@ static class StrokeFont
 
         if (halo is { } haloColor)
         {
-            DrawStrokes(canvas, text, leftX, baselineY, unit, haloWidth, haloColor);
+            DrawStrokes(canvas, normalized, leftX, baselineY, unit, haloWidth, haloColor);
         }
 
-        DrawStrokes(canvas, text, leftX, baselineY, unit, strokeWidth, color);
+        DrawStrokes(canvas, normalized, leftX, baselineY, unit, strokeWidth, color);
     }
 
     static void DrawStrokes(Canvas canvas, string text, double leftX, double baselineY, double unit, double strokeWidth, Rgba color)
     {
         var penX = leftX;
+        var previousBaseCentreX = 0d;
+        var hasPreviousBase = false;
         for (var i = 0; i < text.Length; i++)
         {
-            var glyph = GlyphFor(text[i]);
-            foreach (var stroke in glyph.Strokes)
+            var character = text[i];
+            if (marks.TryGetValue(character, out var markStrokes))
             {
-                for (var p = 0; p + 1 < stroke.Length; p++)
+                if (!hasPreviousBase)
                 {
-                    // Y is flipped: font coords grow up from the baseline, canvas pixels grow down
-                    // from the top. So baselineY - y * unit lands the y=0 vertex on the baseline
-                    // row and y=14 vertices `cap*unit` pixels above it.
-                    var ax = penX + stroke[p].X * unit;
-                    var ay = baselineY - stroke[p].Y * unit;
-                    var bx = penX + stroke[p + 1].X * unit;
-                    var by = baselineY - stroke[p + 1].Y * unit;
-                    canvas.StrokeLine(ax, ay, bx, by, strokeWidth, color);
+                    // Leading combining mark with no base to attach to — drop silently rather than
+                    // anchor it at leftX, which would float in space.
+                    continue;
                 }
+
+                DrawAt(canvas, markStrokes, previousBaseCentreX, baselineY, unit, strokeWidth, color);
+                continue;
             }
 
-            penX += (glyph.Width + Tracking) * unit;
+            if (IsCombiningMark(character))
+            {
+                // Combining mark outside our table (some Vietnamese tone marks, stacked accents
+                // beyond the basic Latin set). Drop rather than substitute '?' — the base glyph
+                // is already on the canvas, so swallowing the accent reads better than a stray
+                // '?' beside a correctly-rendered letter.
+                continue;
+            }
+
+            var glyph = GlyphFor(character);
+            if (hasPreviousBase)
+            {
+                penX += Tracking * unit;
+            }
+
+            DrawAt(canvas, glyph.Strokes, penX, baselineY, unit, strokeWidth, color);
+            previousBaseCentreX = penX + glyph.Width * unit / 2;
+            penX += glyph.Width * unit;
+            hasPreviousBase = true;
         }
     }
+
+    static void DrawAt(Canvas canvas, (double X, double Y)[][] strokes, double originX, double baselineY, double unit, double strokeWidth, Rgba color)
+    {
+        foreach (var stroke in strokes)
+        {
+            for (var p = 0; p + 1 < stroke.Length; p++)
+            {
+                // Y is flipped: font coords grow up from the baseline, canvas pixels grow down
+                // from the top. So baselineY - y * unit lands the y=0 vertex on the baseline
+                // row and y=14 vertices `cap*unit` pixels above it.
+                var ax = originX + stroke[p].X * unit;
+                var ay = baselineY - stroke[p].Y * unit;
+                var bx = originX + stroke[p + 1].X * unit;
+                var by = baselineY - stroke[p + 1].Y * unit;
+                canvas.StrokeLine(ax, ay, bx, by, strokeWidth, color);
+            }
+        }
+    }
+
+    static bool IsCombiningMark(char character) =>
+        System.Globalization.CharUnicodeInfo.GetUnicodeCategory(character) ==
+        System.Globalization.UnicodeCategory.NonSpacingMark;
 
     static Glyph GlyphFor(char character) =>
         glyphs.TryGetValue(character, out var g) ? g : glyphs['?'];
@@ -122,25 +186,44 @@ static class StrokeFont
 
     static (double X, double Y)[] S(params (double, double)[] points) => points;
 
-    static Dictionary<char, Glyph> BuildGlyphs()
-    {
-        // Approximated 12-gon arc shared by O, 0, o, etc. Centre at (cx, cy), radius r. Returns
-        // the 13 vertices of a closed loop (last == first) ready to be passed straight to
-        // StrokeLine via a polyline. A 12-segment approximation reads smooth at typical label
-        // sizes without bloating the glyph table.
-        static (double X, double Y)[] Ring(double cx, double cy, double rx, double ry)
+    // Combining-mark strokes, defined in font units centred on x=0 and sitting just above the cap
+    // line (y ∈ [15, 17]) or, for cedilla, hanging below the baseline (y ∈ [-3, 0]). The renderer
+    // translates them to the centre of the preceding base glyph at draw time, so a wide letter
+    // like 'M' and a narrow letter like 'i' both get their accent in the right place without
+    // per-glyph anchor tables. Marks are written as literal combining characters in source —
+    // they visually attach to the closing quote of the char literal but are otherwise valid.
+    static Dictionary<char, (double X, double Y)[][]> BuildMarks() =>
+        new()
         {
-            const int segments = 12;
-            var points = new (double X, double Y)[segments + 1];
-            for (var i = 0; i <= segments; i++)
-            {
-                var angle = i * 2 * Math.PI / segments;
-                points[i] = (cx + rx * Math.Cos(angle), cy + ry * Math.Sin(angle));
-            }
+            ['̀'] = [S((-2, 17), (1, 15))],                       // grave
+            ['́'] = [S((-1, 15), (2, 17))],                       // acute
+            ['̂'] = [S((-2, 15), (0, 17), (2, 15))],              // circumflex
+            ['̃'] = [S((-3, 16), (-1, 17), (1, 15), (3, 16))],    // tilde
+            ['̈'] = [S((-2, 15), (-2, 16)), S((2, 15), (2, 16))], // diaeresis (two dots)
+            ['̊'] = [Ring(0, 16, 1, 1)],                          // ring above
+            ['̌'] = [S((-2, 17), (0, 15), (2, 17))],              // caron (hacek)
+            ['̧'] = [S((0, 0), (0, -2), (-2, -3))],               // cedilla
+        };
 
-            return points;
+    // Approximated 12-gon ring (shared by BuildGlyphs and BuildMarks). Centre at (cx, cy), radii
+    // (rx, ry). Returns the 13 vertices of a closed loop (last == first) ready to be passed
+    // straight to StrokeLine via a polyline. A 12-segment approximation reads smooth at typical
+    // label sizes without bloating the tables.
+    static (double X, double Y)[] Ring(double cx, double cy, double rx, double ry)
+    {
+        const int segments = 12;
+        var points = new (double X, double Y)[segments + 1];
+        for (var i = 0; i <= segments; i++)
+        {
+            var angle = i * 2 * Math.PI / segments;
+            points[i] = (cx + rx * Math.Cos(angle), cy + ry * Math.Sin(angle));
         }
 
+        return points;
+    }
+
+    static Dictionary<char, Glyph> BuildGlyphs()
+    {
         // Same as Ring but only a portion of the ellipse — used for C, c, e, etc. that aren't
         // closed. startAngle and endAngle are in turns (1.0 = full revolution) measured clockwise
         // from 3 o'clock (positive y up).
