@@ -1,9 +1,6 @@
-using System.Runtime.InteropServices;
-
 /// <summary>A software RGBA raster with source-over blending and basic line/disc/polygon fills.</summary>
 sealed class Canvas
 {
-    readonly byte[] pixels;
     // Reused across FillPolygon calls so a render with hundreds of polygons doesn't allocate a fresh
     // crossings list per call.
     readonly List<double> scanlineCrossings = [];
@@ -12,9 +9,9 @@ sealed class Canvas
     {
         Width = width;
         Height = height;
-        pixels = new byte[width * height * 4];
+        Pixels = new byte[width * height * 4];
         // Fill the background a pixel (uint) at a time rather than byte-by-byte.
-        MemoryMarshal.Cast<byte, uint>(pixels.AsSpan()).Fill(Pack(background));
+        MemoryMarshal.Cast<byte, uint>(Pixels.AsSpan()).Fill(Pack(background));
     }
 
     // Packs RGBA into a uint so that reinterpreting the pixel buffer as uints yields the R,G,B,A byte order.
@@ -27,7 +24,7 @@ sealed class Canvas
 
     public int Height { get; }
 
-    public byte[] Pixels => pixels;
+    public byte[] Pixels { get; }
 
     public void Blend(int x, int y, Rgba color)
     {
@@ -39,10 +36,10 @@ sealed class Canvas
         var i = (y * Width + x) * 4;
         if (color.A == 255)
         {
-            pixels[i] = color.R;
-            pixels[i + 1] = color.G;
-            pixels[i + 2] = color.B;
-            pixels[i + 3] = 255;
+            Pixels[i] = color.R;
+            Pixels[i + 1] = color.G;
+            Pixels[i + 2] = color.B;
+            Pixels[i + 3] = 255;
             return;
         }
 
@@ -55,10 +52,10 @@ sealed class Canvas
     // (which clips to the span ends once, then runs without bounds checks).
     void BlendTranslucent(int i, double preR, double preG, double preB, double aByte, double inverse)
     {
-        pixels[i] = (byte)(preR + pixels[i] * inverse);
-        pixels[i + 1] = (byte)(preG + pixels[i + 1] * inverse);
-        pixels[i + 2] = (byte)(preB + pixels[i + 2] * inverse);
-        pixels[i + 3] = (byte)(aByte + pixels[i + 3] * inverse);
+        Pixels[i] = (byte)(preR + Pixels[i] * inverse);
+        Pixels[i + 1] = (byte)(preG + Pixels[i + 1] * inverse);
+        Pixels[i + 2] = (byte)(preB + Pixels[i + 2] * inverse);
+        Pixels[i + 3] = (byte)(aByte + Pixels[i + 3] * inverse);
     }
 
     /// <summary>
@@ -226,7 +223,7 @@ sealed class Canvas
                 if (opaque)
                 {
                     // An opaque fill overwrites the span, so write whole pixels directly.
-                    var span = pixels.AsSpan((y * Width + startX) * 4, (endX - startX + 1) * 4);
+                    var span = Pixels.AsSpan((y * Width + startX) * 4, (endX - startX + 1) * 4);
                     MemoryMarshal.Cast<byte, uint>(span).Fill(packed);
                 }
                 else

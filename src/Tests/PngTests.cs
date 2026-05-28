@@ -187,7 +187,7 @@ public class PngTests
                 Projection = MapProjection.PlateCarree,
             });
 
-        return Verify(new MemoryStream(png), "png");
+        return Verify(png, "png");
     }
 
     [Test]
@@ -206,7 +206,7 @@ public class PngTests
                 Projection = MapProjection.PlateCarree,
             });
 
-        return Verify(new MemoryStream(png), "png");
+        return Verify(png, "png");
     }
 
     [Test]
@@ -478,7 +478,7 @@ public class PngTests
                 Projection = MapProjection.Lambert,
             });
 
-        return Verify(new MemoryStream(png), "png");
+        return Verify(png, "png");
     }
 
     [Test]
@@ -834,7 +834,7 @@ public class PngTests
                 Ocean = new(200, 220, 240),
             });
 
-        return Verify(new MemoryStream(png), "png");
+        return Verify(png, "png");
     }
 
     [Test]
@@ -849,7 +849,7 @@ public class PngTests
                 Projection = MapProjection.WebMercator
             });
 
-        return Verify(new MemoryStream(png), "png");
+        return Verify(png, "png");
     }
 
     [Test]
@@ -867,7 +867,7 @@ public class PngTests
                 Projection = MapProjection.WebMercator,
             });
 
-        return Verify(new MemoryStream(png), "png");
+        return Verify(png, "png");
     }
 
     [Test]
@@ -985,14 +985,14 @@ public class PngTests
             PointRadius = 1,
             LayerStyle = layer => layer.Name switch
             {
-                "background" => new LayerStyle
+                "background" => new()
                 {
                     Fill = new(20, 200, 20),
                     Stroke = new(20, 200, 20),
                     StrokeWidth = 2,
                     PointRadius = 2,
                 },
-                "overlay" => new LayerStyle
+                "overlay" => new()
                 {
                     Fill = new(220, 30, 30),
                     Stroke = new(220, 30, 30),
@@ -1007,19 +1007,19 @@ public class PngTests
         var (width, _, pixels) = Decode(png);
 
         // Sample a pixel inside the outer polygon but outside the overlay (top-left corner area).
-        var outer = ((width / 16) * width + (width / 16)) * 4;
+        var outer = (width / 16 * width + width / 16) * 4;
         await Assert.That(pixels[outer]).IsEqualTo((byte)20);
         await Assert.That(pixels[outer + 1]).IsEqualTo((byte)200);
         await Assert.That(pixels[outer + 2]).IsEqualTo((byte)20);
 
         // Sample the centre: it sits inside both polygons, but the overlay paints after its parent so
         // it should win (red, not green).
-        var centre = ((width / 2) * width + (width / 2)) * 4;
+        var centre = (width / 2 * width + width / 2) * 4;
         await Assert.That(pixels[centre]).IsEqualTo((byte)220);
         await Assert.That(pixels[centre + 1]).IsEqualTo((byte)30);
         await Assert.That(pixels[centre + 2]).IsEqualTo((byte)30);
 
-        await Verify(new MemoryStream(png), "png");
+        await Verify(png, "png");
     }
 
     [Test]
@@ -1042,17 +1042,17 @@ public class PngTests
             // Auto would pick Lambert here and curve the polygon edges.
             Projection = MapProjection.PlateCarree,
             Fill = new(180, 60, 30),
-            LayerStyle = _ => new LayerStyle(),
+            LayerStyle = _ => new(),
         };
 
         var png = MapRenderer.RenderPng(features, options);
         var (width, _, pixels) = Decode(png);
-        var centre = ((width / 2) * width + (width / 2)) * 4;
+        var centre = (width / 2 * width + width / 2) * 4;
         await Assert.That(pixels[centre]).IsEqualTo((byte)180);
         await Assert.That(pixels[centre + 1]).IsEqualTo((byte)60);
         await Assert.That(pixels[centre + 2]).IsEqualTo((byte)30);
 
-        await Verify(new MemoryStream(png), "png");
+        await Verify(png, "png");
     }
 
     [Test]
@@ -1097,18 +1097,18 @@ public class PngTests
         var (width, _, pixels) = Decode(png);
 
         // Outside the upper polygon → lower's green wins.
-        var outer = ((width / 16) * width + (width / 16)) * 4;
+        var outer = (width / 16 * width + width / 16) * 4;
         await Assert.That(pixels[outer]).IsEqualTo((byte)20);
         await Assert.That(pixels[outer + 1]).IsEqualTo((byte)200);
         await Assert.That(pixels[outer + 2]).IsEqualTo((byte)20);
 
         // Inside both → upper (last in the list) wins on top.
-        var centre = ((width / 2) * width + (width / 2)) * 4;
+        var centre = (width / 2 * width + width / 2) * 4;
         await Assert.That(pixels[centre]).IsEqualTo((byte)220);
         await Assert.That(pixels[centre + 1]).IsEqualTo((byte)30);
         await Assert.That(pixels[centre + 2]).IsEqualTo((byte)30);
 
-        await Verify(new MemoryStream(png), "png");
+        await Verify(png, "png");
     }
 
     [Test]
@@ -1120,11 +1120,17 @@ public class PngTests
         // drive the projection) and the rightmost non-bg column would stay close to 0.
         var westPoint = new FeatureCollection
         {
-            Features = { new(new Point(-40, 0)) },
+            Features =
+            {
+                new(new Point(-40, 0))
+            },
         };
         var eastPoint = new FeatureCollection
         {
-            Features = { new(new Point(40, 0)) },
+            Features =
+            {
+                new(new Point(40, 0))
+            },
         };
 
         var options = new RenderOptions
@@ -1146,7 +1152,7 @@ public class PngTests
                 continue;
             }
 
-            var column = (p / 4) % width;
+            var column = p / 4 % width;
             if (column > rightmost)
             {
                 rightmost = column;
@@ -1202,7 +1208,9 @@ public class PngTests
         var count = 0;
         for (var i = 0; i < pixels.Length; i += 4)
         {
-            if (pixels[i] != 255 || pixels[i + 1] != 255 || pixels[i + 2] != 255)
+            if (pixels[i] != 255 ||
+                pixels[i + 1] != 255 ||
+                pixels[i + 2] != 255)
             {
                 count++;
             }
@@ -1225,7 +1233,9 @@ public class PngTests
             for (var column = 0; column < width; column++)
             {
                 var offset = (row * width + column) * 4;
-                if (pixels[offset] != 255 || pixels[offset + 1] != 255 || pixels[offset + 2] != 255)
+                if (pixels[offset] != 255 ||
+                    pixels[offset + 1] != 255 ||
+                    pixels[offset + 2] != 255)
                 {
                     rowHasPaint = true;
                     break;
@@ -1257,7 +1267,7 @@ public class PngTests
                 continue;
             }
 
-            sum += (i / 4) % width;
+            sum += i / 4 % width;
             count++;
         }
 

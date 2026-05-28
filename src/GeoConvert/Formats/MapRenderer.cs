@@ -718,7 +718,7 @@ public static class MapRenderer
                 var pixels = rings.Select(ToPixels).ToArray();
                 // For non-interrupted projections fill and stroke trace the same rings — no
                 // clipping happens, so every edge is "real".
-                yield return new PolygonBatch(pixels, pixels);
+                yield return new(pixels, pixels);
                 yield break;
             }
 
@@ -755,7 +755,7 @@ public static class MapRenderer
 
                 if (fills.Count > 0)
                 {
-                    yield return new PolygonBatch(fills.ToArray(), strokes.ToArray());
+                    yield return new(fills.ToArray(), strokes.ToArray());
                 }
             }
         }
@@ -1586,7 +1586,7 @@ public static class MapRenderer
                         yield return chain.ToArray();
                     }
 
-                    chain = new List<(double X, double Y)>();
+                    chain = new();
                 }
                 else
                 {

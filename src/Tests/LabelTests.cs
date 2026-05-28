@@ -271,7 +271,7 @@ public class LabelTests
         withoutHalo.TryPlace("A", 40, 16, 14, Rgba.Black, halo: null);
         var withoutHaloSecond = withoutHalo.TryPlace("A", 40 + textWidth + 1, 16, 14, Rgba.Black, halo: null);
 
-        var withHalo = new Labeller(new Canvas(200, 32, Rgba.White));
+        var withHalo = new Labeller(new(200, 32, Rgba.White));
         withHalo.TryPlace("A", 40, 16, 14, Rgba.Black, halo: Rgba.White);
         var withHaloSecond = withHalo.TryPlace("A", 40 + textWidth + 1, 16, 14, Rgba.Black, halo: Rgba.White);
 
@@ -697,9 +697,9 @@ public class LabelTests
         };
         var options = LabelOptions();
         options.Label = _ => null;
-        options.LayerStyle = _ => new LayerStyle
+        options.LayerStyle = _ => new()
         {
-            Label = feature => feature.Properties.TryGetValue("code", out var v) ? v as string : null,
+            Label = _ => _.Properties.TryGetValue("code", out var v) ? v as string : null,
         };
         var pixels = Render(features, options);
         await Assert.That(LabelPixels(pixels)).IsGreaterThan(0);
@@ -716,7 +716,7 @@ public class LabelTests
             new Feature(new Point(0, 0), Props("OK")),
         };
         var options = LabelOptions();
-        options.LayerStyle = _ => new LayerStyle();
+        options.LayerStyle = _ => new();
         var pixels = Render(features, options);
         await Assert.That(LabelPixels(pixels)).IsGreaterThan(0);
     }
@@ -879,7 +879,7 @@ public class LabelTests
             feature.Properties.TryGetValue("rank", out var v) ? Convert.ToDouble(v) : 0;
 
         var png = MapRenderer.RenderPng(features, options);
-        var (_, _, pixels) = Decode(png);
+        var pixels = Decode(png);
 
         // Cross-check: same scene without the priority callback must produce a different image —
         // confirms the override actually changed the winner rather than coincidentally agreeing
@@ -888,7 +888,7 @@ public class LabelTests
         await Assert.That(LabelPixels(pixels)).IsGreaterThan(0);
         await Assert.That(pixels.SequenceEqual(defaultPixels)).IsFalse();
 
-        await Verify(new MemoryStream(png), "png");
+        await Verify(png, "png");
     }
 
     [Test]
@@ -915,10 +915,10 @@ public class LabelTests
                 ? p
                 : 0;
         var png = MapRenderer.RenderPng(features, options);
-        var (_, _, pixels) = Decode(png);
+        var pixels = Decode(png);
         await Assert.That(LabelPixels(pixels)).IsGreaterThan(0);
 
-        await Verify(new MemoryStream(png), "png");
+        await Verify(png, "png");
     }
 
     [Test]
@@ -953,17 +953,17 @@ public class LabelTests
         options.LabelPriority = _ => 0;
         options.LayerStyle = layer => layer.Name switch
         {
-            "background" => new LayerStyle
+            "background" => new()
             {
-                LabelPriority = f => Convert.ToDouble(f.Properties["w"]),
+                LabelPriority = _ => Convert.ToDouble(_.Properties["w"]),
             },
             _ => null,
         };
         var png = MapRenderer.RenderPng([lower, upper], options);
-        var (_, _, pixels) = Decode(png);
+        var pixels = Decode(png);
         await Assert.That(LabelPixels(pixels)).IsGreaterThan(0);
 
-        await Verify(new MemoryStream(png), "png");
+        await Verify(png, "png");
     }
 
     [Test]
@@ -990,7 +990,7 @@ public class LabelTests
                 StrokeAutoScale = true,
             });
 
-        return Verify(new MemoryStream(png), "png");
+        return Verify(png, "png");
     }
 
     [Test]
@@ -1001,10 +1001,9 @@ public class LabelTests
         // bytes differ from the autoscale-off baseline. Confirms the flag is wired through.
         static byte[] RenderWith(Envelope bounds, bool autoScale) =>
             MapRenderer.RenderPng(
-                new FeatureCollection
-                {
-                    new Feature(new LineString([new(-5, 0), new(5, 0)])),
-                },
+                [
+                    new Feature(new LineString([new(-5, 0), new(5, 0)]))
+                ],
                 new()
                 {
                     Bounds = bounds,
@@ -1138,7 +1137,7 @@ public class LabelTests
                 LabelHalo = new(255, 255, 255, 220),
             });
 
-        return Verify(new MemoryStream(png), "png");
+        return Verify(png, "png");
     }
 
     static RenderOptions LabelOptions() =>
@@ -1161,15 +1160,13 @@ public class LabelTests
     static byte[] Render(FeatureCollection features, RenderOptions options)
     {
         var png = MapRenderer.RenderPng(features, options);
-        var (_, _, pixels) = Decode(png);
-        return pixels;
+        return Decode(png);
     }
 
     static byte[] Render(IReadOnlyList<FeatureCollection> layers, RenderOptions options)
     {
         var png = MapRenderer.RenderPng(layers, options);
-        var (_, _, pixels) = Decode(png);
-        return pixels;
+        return Decode(png);
     }
 
     // Counts pixels that aren't pure white — with LabelOptions() forcing geometry to fully
@@ -1198,7 +1195,7 @@ public class LabelTests
 
     // Mirrors PngTests.Decode — kept local to avoid making PngTests' helpers public for a
     // test-only consumer.
-    static (int Width, int Height, byte[] Rgba) Decode(byte[] data)
+    static byte[] Decode(byte[] data)
     {
         var position = 8;
         var width = 0;
@@ -1239,7 +1236,7 @@ public class LabelTests
             Array.Copy(rawBytes, y * (stride + 1) + 1, rgba, y * stride, stride);
         }
 
-        return (width, height, rgba);
+        return rgba;
     }
 
     // Custom Geometry subclass used to exercise ComputeAnchor's default arm. None of the

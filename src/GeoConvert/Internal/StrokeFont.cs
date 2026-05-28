@@ -40,7 +40,7 @@ static class StrokeFont
 
     // Horizontal gap between glyph cells, in font units. 2 units at default size 14 → ~1.4 pixels;
     // enough to keep adjacent letters from running into each other without spreading text out.
-    const double Tracking = 2;
+    const double tracking = 2;
 
     public readonly record struct Glyph(double Width, (double X, double Y)[][] Strokes);
 
@@ -75,7 +75,7 @@ static class StrokeFont
 
             if (baseCount > 0)
             {
-                widthInFontUnits += Tracking;
+                widthInFontUnits += tracking;
             }
 
             widthInFontUnits += GlyphFor(normalized[i]).Width;
@@ -145,7 +145,7 @@ static class StrokeFont
             var glyph = GlyphFor(character);
             if (hasPreviousBase)
             {
-                penX += Tracking * unit;
+                penX += tracking * unit;
             }
 
             DrawAt(canvas, glyph.Strokes, penX, baselineY, unit, strokeWidth, color);
@@ -174,8 +174,8 @@ static class StrokeFont
     }
 
     static bool IsCombiningMark(char character) =>
-        System.Globalization.CharUnicodeInfo.GetUnicodeCategory(character) ==
-        System.Globalization.UnicodeCategory.NonSpacingMark;
+        CharUnicodeInfo.GetUnicodeCategory(character) ==
+        UnicodeCategory.NonSpacingMark;
 
     static Glyph GlyphFor(char character) =>
         glyphs.TryGetValue(character, out var g) ? g : glyphs['?'];
