@@ -139,7 +139,7 @@ public static class MapRenderer
         var labeller = new Labeller(canvas);
         foreach (var layer in layers)
         {
-            DrawLabels(layer, projection, options, labeller);
+            DrawLabels(layer, projection, options, labeller, strokeMultiplier);
         }
 
         Png.Write(stream, canvas.Pixels, canvas.Width, canvas.Height, options.Compression);
@@ -282,9 +282,9 @@ public static class MapRenderer
     // so on collision the higher-up-the-tree label wins. That mirrors the typical cartographic
     // hierarchy (country labels outrank state labels outrank city labels) when callers build their
     // layer tree from coarse-to-fine.
-    static void DrawLabels(FeatureCollection layer, Projection projection, RenderOptions options, Labeller labeller)
+    static void DrawLabels(FeatureCollection layer, Projection projection, RenderOptions options, Labeller labeller, double strokeMultiplier)
     {
-        var style = ResolveLabel(options.LayerStyle?.Invoke(layer), options);
+        var style = ResolveLabel(options.LayerStyle?.Invoke(layer), options, strokeMultiplier);
         if (style.Label != null)
         {
             // Process features highest-priority-first within the layer. When the caller provided
@@ -313,14 +313,21 @@ public static class MapRenderer
 
                 if (ComputeAnchor(geometry, projection) is { } anchor)
                 {
-                    labeller.TryPlace(text, anchor.X, anchor.Y, style.Size, style.Color, style.Halo);
+                    // Point anchors get an Imhof candidate ring around the dot — pointOffset is
+                    // the gap between the dot edge and the nearer label edge. PointRadius reads
+                    // straight out of the resolved style (already × strokeMultiplier), plus a
+                    // small constant pad so the label doesn't kiss the dot. Polygon and line
+                    // anchors pass pointOffset=0 → Labeller centres the label on the anchor,
+                    // which is what the interior of a feature should do.
+                    var pointOffset = anchor.Kind == AnchorKind.Point ? style.PointRadius + 2 : 0;
+                    labeller.TryPlace(text, anchor.X, anchor.Y, style.Size, style.Color, style.Halo, pointOffset);
                 }
             }
         }
 
         foreach (var child in layer.Children)
         {
-            DrawLabels(child, projection, options, labeller);
+            DrawLabels(child, projection, options, labeller, strokeMultiplier);
         }
     }
 
@@ -388,39 +395,62 @@ public static class MapRenderer
     // Mirrors Resolve for the label knobs: per-layer overrides take precedence, falling back to the
     // RenderOptions defaults independently per property. Label itself can be left null on the layer
     // to inherit the options-wide default (the typical "label every layer using this property" case).
-    static ResolvedLabelStyle ResolveLabel(LayerStyle? overrides, RenderOptions options) =>
+    // PointRadius is folded in (multiplied by strokeMultiplier exactly as the geometry pass does it)
+    // so DrawLabels can size the Imhof candidate ring's offset to clear the dot the renderer drew.
+    static ResolvedLabelStyle ResolveLabel(LayerStyle? overrides, RenderOptions options, double strokeMultiplier) =>
         new(
             overrides?.Label ?? options.Label,
             overrides?.LabelSize ?? options.LabelSize,
             overrides?.LabelColor ?? options.LabelColor,
             overrides?.LabelHalo ?? options.LabelHalo,
-            overrides?.LabelPriority ?? options.LabelPriority);
+            overrides?.LabelPriority ?? options.LabelPriority,
+            (overrides?.PointRadius ?? options.PointRadius) * strokeMultiplier);
 
-    // Pixel-space anchor for a label. Polygons use the signed-area-weighted centroid of their
+    // Pixel-space anchor for a label, paired with its kind so DrawLabels knows whether to centre
+    // the label (Area: polygon centroid / line midpoint) or walk the Imhof ring around it (Point:
+    // dot, multi-point first vertex). Polygons use the signed-area-weighted centroid of their
     // outer ring; lines use the arclength midpoint; multi-* picks the largest sub-piece (so a
     // multi-polygon country like New Zealand labels on the North Island, not Stewart Island).
     // For non-linear projections (Lambert, Goode) the centroid is computed in lon/lat then
     // projected — strictly that's not the projected centroid, but it's the right ballpark for
-    // label placement at this fidelity. GeometryCollection descends into its first member with
-    // a usable anchor.
-    static (double X, double Y)? ComputeAnchor(Geometry geometry, Projection projection)
+    // label placement at this fidelity. GeometryCollection descends into its first member with a
+    // usable anchor and inherits that child's kind.
+    static AnchorPoint? ComputeAnchor(Geometry geometry, Projection projection)
     {
         switch (geometry)
         {
             case Point point:
-                return projection.ToPixel(point.Coordinate);
+            {
+                var (px, py) = projection.ToPixel(point.Coordinate);
+                return new AnchorPoint(px, py, AnchorKind.Point);
+            }
             case MultiPoint multiPoint:
-                return multiPoint.Positions.Count == 0
-                    ? null
-                    : projection.ToPixel(multiPoint.Positions[0]);
+                if (multiPoint.Positions.Count == 0)
+                {
+                    return null;
+                }
+                var (mx, my) = projection.ToPixel(multiPoint.Positions[0]);
+                return new AnchorPoint(mx, my, AnchorKind.Point);
             case LineString line:
-                return LineAnchor(line.Positions, projection);
+                return LineAnchor(line.Positions, projection) is { } lineAnchor
+                    ? new AnchorPoint(lineAnchor.X, lineAnchor.Y, AnchorKind.Area)
+                    : null;
             case MultiLineString multiLine:
-                return LongestLineAnchor(multiLine.LineStrings, projection);
+                return LongestLineAnchor(multiLine.LineStrings, projection) is { } multiLineAnchor
+                    ? new AnchorPoint(multiLineAnchor.X, multiLineAnchor.Y, AnchorKind.Area)
+                    : null;
             case Polygon polygon:
-                return polygon.Rings.Count == 0 ? null : PolygonAnchor(polygon.Rings[0], projection);
+                if (polygon.Rings.Count == 0)
+                {
+                    return null;
+                }
+                return PolygonAnchor(polygon.Rings[0], projection) is { } polygonAnchor
+                    ? new AnchorPoint(polygonAnchor.X, polygonAnchor.Y, AnchorKind.Area)
+                    : null;
             case MultiPolygon multiPolygon:
-                return LargestPolygonAnchor(multiPolygon.Polygons, projection);
+                return LargestPolygonAnchor(multiPolygon.Polygons, projection) is { } multiPolygonAnchor
+                    ? new AnchorPoint(multiPolygonAnchor.X, multiPolygonAnchor.Y, AnchorKind.Area)
+                    : null;
             case GeometryCollection collection:
                 foreach (var child in collection.Geometries)
                 {
@@ -585,7 +615,15 @@ public static class MapRenderer
 
     readonly record struct ResolvedStyle(Rgba Stroke, Rgba Fill, double StrokeWidth, double PointRadius);
 
-    readonly record struct ResolvedLabelStyle(Func<Feature, string?>? Label, double Size, Rgba Color, Rgba? Halo, Func<Feature, double>? Priority);
+    readonly record struct ResolvedLabelStyle(Func<Feature, string?>? Label, double Size, Rgba Color, Rgba? Halo, Func<Feature, double>? Priority, double PointRadius);
+
+    // Whether a label's anchor came from a point feature (anchor IS the feature; label should sit
+    // beside the dot, walking the Imhof candidate ring) or from a polygon/line interior (anchor is
+    // the centroid / midpoint; label should sit ON it). GeometryCollection inherits its kind from
+    // the first child that yields a usable anchor.
+    enum AnchorKind { Point, Area }
+
+    readonly record struct AnchorPoint(double X, double Y, AnchorKind Kind);
 
     /// <summary>One projected polygon piece: closed rings to fill (even-odd) plus the open
     /// polylines to stroke. Fill and Strokes diverge for interrupted Goode, where the clipped

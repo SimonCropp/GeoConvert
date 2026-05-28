@@ -24,9 +24,10 @@ public sealed class LayerStyle
     /// Resolves the label text for a feature in this layer (e.g. <c>feature =>
     /// feature.Properties["name"] as string</c>). Return null — or leave this property null — to
     /// skip labelling features in this layer; when null, <see cref="RenderOptions.Label"/> is used
-    /// instead. The label is anchored at the geometry's centroid for polygons, the arclength
-    /// midpoint for lines, and the point itself for points; off-canvas anchors and overlaps with
-    /// already-placed labels are silently dropped.
+    /// instead. Polygon/line labels are centred on the geometry's centroid / arclength midpoint;
+    /// point labels walk an Imhof 8-position ring around the dot, preferring upper-right and
+    /// falling through to NW, the lower corners, then the cardinals on collision. Off-canvas
+    /// anchors and overlaps with already-placed labels are silently dropped.
     /// </summary>
     public Func<Feature, string?>? Label { get; set; }
 

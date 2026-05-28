@@ -121,8 +121,12 @@ upscaling, so no visible pixel blocks) and a greedy collision placer (`Internal/
 the cap height in pixels (default 14); stroke weight grows gently with size. Anchors are
 polygon centroid (shoelace), line arclength midpoint, point itself; multi-* picks the largest
 sub-piece by area/length; `GeometryCollection` recurses to the first child with a usable
-anchor; off-canvas or overlapping labels are dropped silently (no candidate-offset search, no
-rotation). Collision order defaults to "biggest feature first" (polygon area / line length;
+anchor. Polygon/line labels sit centred on the anchor (it's the interior of the feature);
+point labels walk Imhof's classical 8-position candidate ring around the dot (NE → NW → SE
+→ SW → E → W → N → S, after Imhof 1962/Yoeli 1972) at `PointRadius + 2 px` clearance and
+take the first slot that's on-canvas and clear of every placed bbox — so labels don't paint
+on top of the point marker they describe. Off-canvas or fully-blocked labels still drop
+silently (no candidate-offset search beyond the 8 ring positions, no rotation). Collision order defaults to "biggest feature first" (polygon area / line length;
 points last), so on overlap the bigger feature's label wins; override with
 `RenderOptions.LabelPriority` (or `LayerStyle.LabelPriority`) for any
 `Func<Feature, double>` — typical patterns are reading a property like `POP_EST` or capturing
