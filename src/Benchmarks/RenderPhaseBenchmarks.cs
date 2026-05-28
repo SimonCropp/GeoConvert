@@ -91,3 +91,26 @@ public class RenderPhaseBenchmarks
         return memory.Length;
     }
 }
+
+// Separate fixture for the big-polygon workload — each polygon spans the whole canvas so
+// FillPolygon's row count clears the parallel-scanline threshold. Compares against the small-
+// polygon RenderPhaseBenchmarks above to show where per-polygon parallelism helps and where it
+// doesn't.
+[MemoryDiagnoser]
+public class RenderBigPolygonBenchmarks
+{
+    FeatureCollection data = null!;
+    RenderOptions options = null!;
+
+    [GlobalSetup]
+    public void Setup()
+    {
+        data = SampleData.BigPolygons(10);
+        options = new() { Width = 1024, Height = 768, Compression = CompressionLevel.NoCompression };
+    }
+
+    // NoCompression strips deflate variability so the rasterizer's share is visible per-iter.
+    [Benchmark]
+    public int Full_NoCompression() =>
+        MapRenderer.RenderPng(data, options).Length;
+}

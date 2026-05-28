@@ -34,6 +34,36 @@ static class SampleData
         return collection;
     }
 
+    /// <summary>
+    /// A few big polygons sized so each spans most of the canvas — exercises FillPolygon's
+    /// per-polygon scanline parallelism (which only kicks in above ~64 rows). The polygons
+    /// overlap deliberately so the source-over blend path is exercised, not the opaque
+    /// Span.Fill fast path.
+    /// </summary>
+    public static FeatureCollection BigPolygons(int count)
+    {
+        var collection = new FeatureCollection();
+        // Each polygon spans 0..10 in lon/lat with a small offset per index — at typical render
+        // sizes that's the whole canvas, so the polygon ends up hundreds of rows tall.
+        for (var i = 0; i < count; i++)
+        {
+            var d = i * 0.05;
+            var polygon = new Polygon(
+            [
+                [new(0 + d, 0), new(10, 0 + d), new(10 - d, 10), new(0, 10 - d), new(0 + d, 0)],
+            ]);
+            collection.Add(new Feature(polygon)
+            {
+                Properties =
+                {
+                    ["id"] = (long)i,
+                },
+            });
+        }
+
+        return collection;
+    }
+
     /// <summary>Points carrying many attribute columns — stresses the .dbf field-inference path.</summary>
     public static FeatureCollection WidePoints(int count, int columns)
     {
