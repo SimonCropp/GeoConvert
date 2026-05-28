@@ -36,9 +36,11 @@ public class LabelTests
     [Test]
     public async Task Font_renders_every_printable_ascii_glyph()
     {
-        // Iterates every glyph (' ' through '~') so each glyph's stroke list is traversed —
-        // confirms the table covers printable ASCII and every entry produces sensible output.
-        // Non-space glyphs must each contribute at least one painted pixel; space stays blank.
+        // Iterates every base glyph (' ' through '~') so each glyph's stroke list is traversed —
+        // confirms the ASCII table covers printable ASCII and every entry produces sensible
+        // output. Combining marks have their own coverage below; this exists to keep the base
+        // glyph data covered. Non-space glyphs must each contribute at least one painted pixel;
+        // space stays blank.
         var canvas = new Canvas(2400, 40, Rgba.White);
         var text = new string(Enumerable.Range(0x20, 0x7E - 0x20 + 1).Select(_ => (char)_).ToArray());
         StrokeFont.Render(canvas, text, 4, 28, 14, Rgba.Black, halo: null);
@@ -52,9 +54,10 @@ public class LabelTests
     [Test]
     public async Task Font_substitutes_unknown_characters_with_question_mark()
     {
-        // A glyph outside printable ASCII falls back to '?' rather than producing nothing —
-        // keeping the rendered width honest so Labeller's collision math isn't fooled by an
-        // empty-but-non-zero-text bbox.
+        // A character with no glyph and no NFD decomposition into mappable parts falls back to '?'
+        // rather than producing nothing — keeping the rendered width honest so Labeller's collision
+        // math isn't fooled by an empty-but-non-zero-text bbox. Tab is the test input because it's
+        // outside the printable-ASCII table and decomposes to itself (no combining mark).
         var canvas = new Canvas(64, 40, Rgba.White);
         StrokeFont.Render(canvas, "\t", 8, 28, 14, Rgba.Black, halo: null);
         var withSubstitute = NonBackgroundCount(canvas.Pixels);
@@ -64,6 +67,109 @@ public class LabelTests
         var directQuestion = NonBackgroundCount(direct.Pixels);
 
         await Assert.That(withSubstitute).IsEqualTo(directQuestion);
+    }
+
+    [Test]
+    public async Task Font_renders_precomposed_diacritic_via_NFD()
+    {
+        // "ô" (U+00F4) NFD-decomposes to 'o' + combining circumflex (U+0302). The renderer should
+        // paint the lowercase 'o' base glyph and the circumflex stroke above it — visibly more ink
+        // than 'o' alone and more than the question-mark fallback.
+        var bare = new Canvas(48, 40, Rgba.White);
+        StrokeFont.Render(bare, "o", 8, 28, 14, Rgba.Black, halo: null);
+        var bareInk = NonBackgroundCount(bare.Pixels);
+
+        var accented = new Canvas(48, 40, Rgba.White);
+        StrokeFont.Render(accented, "ô", 8, 28, 14, Rgba.Black, halo: null);
+        var accentedInk = NonBackgroundCount(accented.Pixels);
+
+        // Accent adds strokes above the base glyph — measurable ink delta.
+        await Assert.That(accentedInk).IsGreaterThan(bareInk);
+
+        // And it's not '?' substitution: rendering '?' on a fresh canvas shouldn't match.
+        var fallback = new Canvas(48, 40, Rgba.White);
+        StrokeFont.Render(fallback, "?", 8, 28, 14, Rgba.Black, halo: null);
+        await Assert.That(NonBackgroundCount(fallback.Pixels)).IsNotEqualTo(accentedInk);
+    }
+
+    [Test]
+    public async Task Font_measure_treats_combining_marks_as_zero_width()
+    {
+        // After NFD decomposition the combining mark contributes nothing to width — "ô" measures
+        // the same as "o" because only the base glyph advances the pen.
+        var (bareWidth, _) = StrokeFont.Measure("o", 14);
+        var (accentedWidth, _) = StrokeFont.Measure("ô", 14);
+        await Assert.That(accentedWidth).IsEqualTo(bareWidth);
+    }
+
+    [Test]
+    public async Task Font_renders_each_supported_combining_mark()
+    {
+        // One representative for each combining mark in the table: grave, acute, circumflex,
+        // tilde, diaeresis, ring above, caron, cedilla. Each must produce more ink than the bare
+        // base letter to confirm the mark dispatched through DrawAt.
+        var samples = new (string Bare, string Accented)[]
+        {
+            ("a", "à"),   // grave
+            ("e", "é"),   // acute
+            ("o", "ô"),   // circumflex
+            ("n", "ñ"),   // tilde
+            ("u", "ü"),   // diaeresis
+            ("a", "å"),   // ring above
+            ("s", "š"),   // caron
+            ("c", "ç"),   // cedilla
+        };
+        foreach (var (bare, accented) in samples)
+        {
+            var bareCanvas = new Canvas(48, 40, Rgba.White);
+            StrokeFont.Render(bareCanvas, bare, 8, 28, 14, Rgba.Black, halo: null);
+            var accentedCanvas = new Canvas(48, 40, Rgba.White);
+            StrokeFont.Render(accentedCanvas, accented, 8, 28, 14, Rgba.Black, halo: null);
+
+            await Assert.That(NonBackgroundCount(accentedCanvas.Pixels))
+                .IsGreaterThan(NonBackgroundCount(bareCanvas.Pixels));
+        }
+    }
+
+    [Test]
+    public async Task Font_drops_leading_standalone_combining_mark()
+    {
+        // A combining mark with no preceding base glyph has nothing to attach to — drop it
+        // silently rather than anchor it at leftX. So a string that's *only* a combining
+        // circumflex paints nothing.
+        var canvas = new Canvas(48, 40, Rgba.White);
+        StrokeFont.Render(canvas, "̂", 8, 28, 14, Rgba.Black, halo: null);
+        await Assert.That(NonBackgroundCount(canvas.Pixels)).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task Font_drops_unsupported_combining_mark_silently()
+    {
+        // A combining mark outside the table (here the Vietnamese hook above, U+0309) is dropped
+        // rather than substituted with '?', so "o" + U+0309 paints the same ink as plain "o" —
+        // a missing accent reads better than a stray '?' next to the correctly-drawn base letter.
+        var bare = new Canvas(48, 40, Rgba.White);
+        StrokeFont.Render(bare, "o", 8, 28, 14, Rgba.Black, halo: null);
+
+        var withUnsupportedMark = new Canvas(48, 40, Rgba.White);
+        StrokeFont.Render(withUnsupportedMark, "ỏ", 8, 28, 14, Rgba.Black, halo: null);
+
+        await Assert.That(NonBackgroundCount(withUnsupportedMark.Pixels))
+            .IsEqualTo(NonBackgroundCount(bare.Pixels));
+    }
+
+    [Test]
+    public async Task Font_undecomposable_ligature_still_falls_back_to_question_mark()
+    {
+        // ß has no NFD decomposition into ASCII + combining marks — it's a single codepoint that
+        // doesn't break down. So it still hits the GlyphFor fallback to '?'.
+        var canvas = new Canvas(48, 40, Rgba.White);
+        StrokeFont.Render(canvas, "ß", 8, 28, 14, Rgba.Black, halo: null);
+        var ligatureInk = NonBackgroundCount(canvas.Pixels);
+
+        var fallback = new Canvas(48, 40, Rgba.White);
+        StrokeFont.Render(fallback, "?", 8, 28, 14, Rgba.Black, halo: null);
+        await Assert.That(ligatureInk).IsEqualTo(NonBackgroundCount(fallback.Pixels));
     }
 
     [Test]
@@ -527,6 +633,43 @@ public class LabelTests
         options.LabelHalo = null;
         var pixels = Render(features, options);
         await Assert.That(LabelPixels(pixels)).IsGreaterThan(0);
+    }
+
+    [Test]
+    public Task Render_snapshot_with_diacritic_labels()
+    {
+        // A diacritic-heavy label set covering every supported combining mark (grave, acute,
+        // circumflex, tilde, diaeresis, ring, caron, cedilla) plus an undecomposable ligature (ß)
+        // and a non-Latin script (こんにちは) that falls back to '?'. Points are spread on a wide
+        // canvas at well-separated lon/lat so every label fits — the snapshot pins where each
+        // accent lands relative to its base glyph and locks in the '?' fallback path. Halo on so
+        // the white ring around the strokes is part of the visual baseline.
+        var features = new FeatureCollection
+        {
+            new Feature(new Point(-160, 60), Props("Montréal")),
+            new Feature(new Point(-120, 40), Props("São Paulo")),
+            new Feature(new Point(-80, 20), Props("Côte d'Ivoire")),
+            new Feature(new Point(-40, 0), Props("Mañana")),
+            new Feature(new Point(0, -20), Props("Über")),
+            new Feature(new Point(40, -40), Props("Århus")),
+            new Feature(new Point(80, -60), Props("Plzeň")),
+            new Feature(new Point(120, 60), Props("Curaçao")),
+            new Feature(new Point(120, 0), Props("Straße")),       // ß stays '?'
+            new Feature(new Point(160, -40), Props("こんにちは")),  // non-Latin falls back to '?'
+        };
+        var options = new RenderOptions
+        {
+            Bounds = new(-180, -80, 180, 80),
+            Width = 1200,
+            Projection = MapProjection.PlateCarree,
+            Label = feature => feature.Properties.TryGetValue("name", out var v) ? v as string : null,
+            LabelSize = 18,
+            LabelColor = new(30, 30, 30),
+            LabelHalo = new(255, 255, 255, 220),
+            Fill = new(220, 220, 220),
+            Stroke = new(80, 80, 80),
+        };
+        return Verify(new MemoryStream(MapRenderer.RenderPng(features, options)), "png");
     }
 
     [Test]

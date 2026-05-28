@@ -106,9 +106,12 @@ equator-symmetric bounds and silently falls back to `PlateCarree` there). The CL
 `lambert-conformal-conic` as accepted aliases). PNG also supports optional feature labels: set
 `RenderOptions.Label` (or `LayerStyle.Label` per layer) to a `Func<Feature, string?>` and the
 renderer adds a label pass on top of geometry using a hand-rolled single-stroke vector font in
-the Hershey idiom (`Internal/StrokeFont.cs`, printable ASCII only — anything else renders as
-`?`; scales continuously via `Canvas.StrokeLine` rather than nearest-neighbour upscaling, so
-no visible pixel blocks) and a greedy collision placer (`Internal/Labeller.cs`). `LabelSize` is
+the Hershey idiom (`Internal/StrokeFont.cs`, printable ASCII for the base glyphs plus combining
+marks for grave/acute/circumflex/tilde/diaeresis/ring/caron/cedilla — input is NFD-normalised
+so precomposed forms like "Côte" or "São" render as the ASCII base with the accent stroked
+above; ligatures that don't decompose to an ASCII base — ß, æ, ø, þ, Đ — and non-Latin scripts
+still substitute as `?`; scales continuously via `Canvas.StrokeLine` rather than nearest-neighbour
+upscaling, so no visible pixel blocks) and a greedy collision placer (`Internal/Labeller.cs`). `LabelSize` is
 the cap height in pixels (default 14); stroke weight grows gently with size. Anchors are
 polygon centroid (shoelace), line arclength midpoint, point itself; multi-* picks the largest
 sub-piece by area/length; `GeometryCollection` recurses to the first child with a usable

@@ -413,7 +413,8 @@ public static class Runner
                                      (Lambert Conformal Conic, low distortion at country/state
                                      scale), or 'goode' (Goode's Homolosine, equal-area world map).
               --label <property>     PNG only: render each feature's property value as a text label
-                                     (single-stroke vector font, printable ASCII only). Anchored at
+                                     (single-stroke vector font; printable ASCII plus Latin
+                                     diacritics, ligatures like ß/æ/ø render as '?'). Anchored at
                                      polygon centroid / line midpoint / point. Off-canvas and
                                      overlapping labels are dropped silently.
               --label-size <pixels>  Cap height of label text in pixels. Default 14.
