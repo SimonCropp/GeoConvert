@@ -1227,16 +1227,8 @@ public class LabelTests
         using var zlib = new ZLibStream(compressed, CompressionMode.Decompress);
         using var raw = new MemoryStream();
         zlib.CopyTo(raw);
-        var rawBytes = raw.ToArray();
 
-        var stride = width * 4;
-        var rgba = new byte[width * height * 4];
-        for (var y = 0; y < height; y++)
-        {
-            Array.Copy(rawBytes, y * (stride + 1) + 1, rgba, y * stride, stride);
-        }
-
-        return rgba;
+        return PngDecoder.Reconstruct(raw.ToArray(), width, height);
     }
 
     // Custom Geometry subclass used to exercise ComputeAnchor's default arm. None of the
