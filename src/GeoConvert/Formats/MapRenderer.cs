@@ -95,7 +95,7 @@ public static class MapRenderer
     static void Render(IReadOnlyList<FeatureCollection> layers, Stream stream, RenderOptions options, Envelope bounds)
     {
         var projection = new Projection(bounds, options);
-        var canvas = new Canvas(projection.Width, projection.Height, options.Background);
+        using var canvas = new Canvas(projection.Width, projection.Height, options.Background);
 
         // StrokeAutoScale: derive a multiplier from the implicit zoom (canvas/bbox ratio) so the
         // same scene rendered at a tighter bbox or bigger canvas gets proportionally thicker
