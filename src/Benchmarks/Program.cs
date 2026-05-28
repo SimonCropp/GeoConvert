@@ -5,6 +5,9 @@ using System.IO.Compression;
 
 if (args.Length > 0 && args[0] == "--sizes")
 {
+    // Diagnostic: print PNG output sizes for each sample workload × compression level. Useful for
+    // tracking the file-size impact of encoder changes (e.g. filter selection) without running
+    // the full benchmark suite.
     var workloads = new (string Name, FeatureCollection Data)[]
     {
         ("Polygons500", SampleData.Polygons(500)),
