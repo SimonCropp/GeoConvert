@@ -1,6 +1,10 @@
+using System.IO.Hashing;
+
 /// <summary>
 /// Minimal PNG encoder for 8-bit truecolor-with-alpha images. The image data is zlib-compressed with
-/// the BCL <see cref="ZLibStream"/>; chunk CRCs are computed here. No third-party dependencies.
+/// the BCL <see cref="ZLibStream"/>; chunk CRCs use <see cref="Crc32"/> from System.IO.Hashing, which
+/// dispatches to PCLMULQDQ on x86 and PMULL on ARM — several × faster than the slicing-by-8 table
+/// approach this previously used (the IDAT CRC on a 1024×768 image is ~3 MB of input).
 /// </summary>
 static class Png
 {
@@ -8,9 +12,6 @@ static class Png
     static readonly byte[] ihdrType = "IHDR"u8.ToArray();
     static readonly byte[] idatType = "IDAT"u8.ToArray();
     static readonly byte[] iendType = "IEND"u8.ToArray();
-    // Slicing-by-8 CRC32 (poly 0xEDB88320). The first table is the canonical per-byte table; the next
-    // seven tables shift it so eight bytes of input can be folded into the running CRC per iteration.
-    static readonly uint[][] crcTables = BuildCrcTables();
 
     public static void Write(Stream stream, byte[] rgba, int width, int height, CompressionLevel compression)
     {
@@ -65,84 +66,13 @@ static class Png
         stream.Write(type);
         stream.Write(data);
 
-        var crc = Crc32(type, data);
+        // PNG CRCs cover chunk type then data — Crc32 accumulates across Append calls so we don't
+        // need to concatenate first.
+        var crc = new Crc32();
+        crc.Append(type);
+        crc.Append(data);
         Span<byte> crcBytes = stackalloc byte[4];
-        BinaryPrimitives.WriteUInt32BigEndian(crcBytes, crc);
+        BinaryPrimitives.WriteUInt32BigEndian(crcBytes, crc.GetCurrentHashAsUInt32());
         stream.Write(crcBytes);
-    }
-
-    static uint Crc32(ReadOnlySpan<byte> type, ReadOnlySpan<byte> data)
-    {
-        var crc = 0xFFFFFFFFu;
-        crc = Update(crc, type);
-        crc = Update(crc, data);
-        return crc ^ 0xFFFFFFFFu;
-    }
-
-    // Slicing-by-8: fold eight input bytes per iteration through eight precomputed tables. For an IDAT
-    // chunk on a 1024×768 image that's ~3 MB of CRC work; the byte-by-byte original is ~5–8× slower.
-    static uint Update(uint crc, ReadOnlySpan<byte> data)
-    {
-        var i = 0;
-        var t0 = crcTables[0];
-        var t1 = crcTables[1];
-        var t2 = crcTables[2];
-        var t3 = crcTables[3];
-        var t4 = crcTables[4];
-        var t5 = crcTables[5];
-        var t6 = crcTables[6];
-        var t7 = crcTables[7];
-        while (i + 8 <= data.Length)
-        {
-            crc ^= (uint)(data[i] | (data[i + 1] << 8) | (data[i + 2] << 16) | (data[i + 3] << 24));
-            crc = t7[crc & 0xFF]
-                  ^ t6[(crc >> 8) & 0xFF]
-                  ^ t5[(crc >> 16) & 0xFF]
-                  ^ t4[crc >> 24]
-                  ^ t3[data[i + 4]]
-                  ^ t2[data[i + 5]]
-                  ^ t1[data[i + 6]]
-                  ^ t0[data[i + 7]];
-            i += 8;
-        }
-
-        while (i < data.Length)
-        {
-            crc = t0[(crc ^ data[i]) & 0xFF] ^ (crc >> 8);
-            i++;
-        }
-
-        return crc;
-    }
-
-    static uint[][] BuildCrcTables()
-    {
-        var tables = new uint[8][];
-        var table0 = new uint[256];
-        for (var n = 0u; n < 256; n++)
-        {
-            var c = n;
-            for (var k = 0; k < 8; k++)
-            {
-                c = (c & 1) != 0 ? 0xEDB88320u ^ (c >> 1) : c >> 1;
-            }
-
-            table0[n] = c;
-        }
-
-        tables[0] = table0;
-        for (var t = 1; t < 8; t++)
-        {
-            var prev = tables[t - 1];
-            var next = new uint[256];
-            for (var n = 0; n < 256; n++)
-            {
-                next[n] = (prev[n] >> 8) ^ table0[prev[n] & 0xFF];
-            }
-
-            tables[t] = next;
-        }
-
-        return tables;
     }
 }

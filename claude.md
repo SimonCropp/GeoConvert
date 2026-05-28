@@ -6,8 +6,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 GeoConvert converts maps between geospatial formats (GeoJSON, TopoJSON, Shapefile, FlatGeobuf, KML/KMZ,
 GPX, WKT, WKB, CSV) and renders a bounding box to PNG. It ships as a library plus a `geoconvert` .NET
-tool. **Hard constraint: no third-party dependencies** — only the .NET BCL. Adding a NuGet reference for
-geo/raster/serialization work is a design violation; the right move is to hand-roll it (see below).
+tool. **Hard constraint: no third-party dependencies** — only the .NET BCL plus Microsoft-authored
+out-of-band packages (currently `System.IO.Hashing` for CRC32, which dispatches to PCLMULQDQ / PMULL —
+several × faster than the slicing-by-8 table approach for the PNG IDAT chunk). Adding a NuGet
+reference for geo/raster/serialization work is a design violation; the right move is to hand-roll it
+(see below).
 
 ## Commands
 
@@ -71,7 +74,7 @@ Hub-and-spoke around one in-memory model:
   via `RenderOptions`.
 - **Hand-rolled internals** (`src/GeoConvert/Internal/`) exist because of the no-dependency rule:
   `FlatBufferBuilder`/`FlatBufferTable` (FlatGeobuf's FlatBuffers wire format), `Dbf` (dBASE attribute
-  table), `WktParser`, `CsvParser`, `Png` (encoder, uses BCL `ZLibStream` + a hand-written CRC32),
+  table), `WktParser`, `CsvParser`, `Png` (encoder, uses BCL `ZLibStream` + `System.IO.Hashing.Crc32`),
   `Canvas` (software rasterizer with even-odd polygon fill and antialiased thick-line strokes / disc
   fills via fractional-coverage blending; polygon fill edges are binary — sharp boundaries where
   filled features meet untextured background still show stair-stepping, but in typical configs the
