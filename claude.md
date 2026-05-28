@@ -103,7 +103,13 @@ from `RenderOptions`). `RenderOptions.Projection` selects the layout — `Auto` 
 with standard parallels auto-picked at 1/6 and 5/6 of the data's latitude range; degenerates on
 equator-symmetric bounds and silently falls back to `PlateCarree` there). The CLI exposes this as
 `--projection auto|plate-carree|web-mercator|lambert` (with `equirectangular`, `mercator`, `lcc`, and
-`lambert-conformal-conic` as accepted aliases). PNG also supports optional feature labels: set
+`lambert-conformal-conic` as accepted aliases). `RenderOptions.StrokeAutoScale` (default off) opts
+in to zoom-aware stroke widths: a multiplier derived from the implicit zoom (`log2(canvas/bbox/256
+× 360)`) grows by 1.15× per zoom level with country-scale (zoom 10) as the multiplier-of-1 anchor,
+clamped to [0.25, 6]. So the same scene rendered at a tighter bbox or larger canvas gets
+proportionally thicker borders, matching the tile-map convention. Label size is intentionally NOT
+scaled — text stays at fixed pixel sizes across zooms (web-map convention). PNG also supports
+optional feature labels: set
 `RenderOptions.Label` (or `LayerStyle.Label` per layer) to a `Func<Feature, string?>` and the
 renderer adds a label pass on top of geometry using a hand-rolled single-stroke vector font in
 the Hershey idiom (`Internal/StrokeFont.cs`, printable ASCII only — anything else renders as
