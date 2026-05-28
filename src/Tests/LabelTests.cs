@@ -45,7 +45,7 @@ public class LabelTests
         var text = new string(Enumerable.Range(0x20, 0x7E - 0x20 + 1).Select(_ => (char)_).ToArray());
         StrokeFont.Render(canvas, text, 4, 28, 14, Rgba.Black, halo: null);
 
-        var painted = NonBackgroundCount(canvas.Pixels);
+        var painted = NonBackgroundCount(LogicalPixels(canvas));
         // 95 glyphs - 1 space = 94 glyphs that each contribute at least a few pixels. The hard
         // lower bound here is loose; in practice it's well into the thousands.
         await Assert.That(painted).IsGreaterThan(94);
@@ -60,11 +60,11 @@ public class LabelTests
         // outside the printable-ASCII table and decomposes to itself (no combining mark).
         var canvas = new Canvas(64, 40, Rgba.White);
         StrokeFont.Render(canvas, "\t", 8, 28, 14, Rgba.Black, halo: null);
-        var withSubstitute = NonBackgroundCount(canvas.Pixels);
+        var withSubstitute = NonBackgroundCount(LogicalPixels(canvas));
 
         var direct = new Canvas(64, 40, Rgba.White);
         StrokeFont.Render(direct, "?", 8, 28, 14, Rgba.Black, halo: null);
-        var directQuestion = NonBackgroundCount(direct.Pixels);
+        var directQuestion = NonBackgroundCount(LogicalPixels(direct));
 
         await Assert.That(withSubstitute).IsEqualTo(directQuestion);
     }
@@ -77,11 +77,11 @@ public class LabelTests
         // than 'o' alone and more than the question-mark fallback.
         var bare = new Canvas(48, 40, Rgba.White);
         StrokeFont.Render(bare, "o", 8, 28, 14, Rgba.Black, halo: null);
-        var bareInk = NonBackgroundCount(bare.Pixels);
+        var bareInk = NonBackgroundCount(LogicalPixels(bare));
 
         var accented = new Canvas(48, 40, Rgba.White);
         StrokeFont.Render(accented, "ô", 8, 28, 14, Rgba.Black, halo: null);
-        var accentedInk = NonBackgroundCount(accented.Pixels);
+        var accentedInk = NonBackgroundCount(LogicalPixels(accented));
 
         // Accent adds strokes above the base glyph — measurable ink delta.
         await Assert.That(accentedInk).IsGreaterThan(bareInk);
@@ -89,7 +89,7 @@ public class LabelTests
         // And it's not '?' substitution: rendering '?' on a fresh canvas shouldn't match.
         var fallback = new Canvas(48, 40, Rgba.White);
         StrokeFont.Render(fallback, "?", 8, 28, 14, Rgba.Black, halo: null);
-        await Assert.That(NonBackgroundCount(fallback.Pixels)).IsNotEqualTo(accentedInk);
+        await Assert.That(NonBackgroundCount(LogicalPixels(fallback))).IsNotEqualTo(accentedInk);
     }
 
     [Test]
@@ -126,8 +126,8 @@ public class LabelTests
             var accentedCanvas = new Canvas(48, 40, Rgba.White);
             StrokeFont.Render(accentedCanvas, accented, 8, 28, 14, Rgba.Black, halo: null);
 
-            await Assert.That(NonBackgroundCount(accentedCanvas.Pixels))
-                .IsGreaterThan(NonBackgroundCount(bareCanvas.Pixels));
+            await Assert.That(NonBackgroundCount(LogicalPixels(accentedCanvas)))
+                .IsGreaterThan(NonBackgroundCount(LogicalPixels(bareCanvas)));
         }
     }
 
@@ -139,7 +139,7 @@ public class LabelTests
         // circumflex paints nothing.
         var canvas = new Canvas(48, 40, Rgba.White);
         StrokeFont.Render(canvas, "̂", 8, 28, 14, Rgba.Black, halo: null);
-        await Assert.That(NonBackgroundCount(canvas.Pixels)).IsEqualTo(0);
+        await Assert.That(NonBackgroundCount(LogicalPixels(canvas))).IsEqualTo(0);
     }
 
     [Test]
@@ -154,8 +154,8 @@ public class LabelTests
         var withUnsupportedMark = new Canvas(48, 40, Rgba.White);
         StrokeFont.Render(withUnsupportedMark, "ỏ", 8, 28, 14, Rgba.Black, halo: null);
 
-        await Assert.That(NonBackgroundCount(withUnsupportedMark.Pixels))
-            .IsEqualTo(NonBackgroundCount(bare.Pixels));
+        await Assert.That(NonBackgroundCount(LogicalPixels(withUnsupportedMark)))
+            .IsEqualTo(NonBackgroundCount(LogicalPixels(bare)));
     }
 
     [Test]
@@ -165,11 +165,11 @@ public class LabelTests
         // doesn't break down. So it still hits the GlyphFor fallback to '?'.
         var canvas = new Canvas(48, 40, Rgba.White);
         StrokeFont.Render(canvas, "ß", 8, 28, 14, Rgba.Black, halo: null);
-        var ligatureInk = NonBackgroundCount(canvas.Pixels);
+        var ligatureInk = NonBackgroundCount(LogicalPixels(canvas));
 
         var fallback = new Canvas(48, 40, Rgba.White);
         StrokeFont.Render(fallback, "?", 8, 28, 14, Rgba.Black, halo: null);
-        await Assert.That(ligatureInk).IsEqualTo(NonBackgroundCount(fallback.Pixels));
+        await Assert.That(ligatureInk).IsEqualTo(NonBackgroundCount(LogicalPixels(fallback)));
     }
 
     [Test]
@@ -183,7 +183,7 @@ public class LabelTests
         var canvas = new Canvas(64, 40, Rgba.White);
         StrokeFont.Render(canvas, "A", 8, 28, 16, Rgba.Black, halo: new(255, 0, 0));
         var redDominant = 0;
-        for (var i = 0; i + 4 <= canvas.Pixels.Length; i += 4)
+        for (var i = 0; i + 4 <= canvas.PixelByteCount; i += 4)
         {
             var r = canvas.Pixels[i];
             var g = canvas.Pixels[i + 1];
@@ -205,7 +205,7 @@ public class LabelTests
         // a point to itself and checking pixels were laid down (and that the call doesn't throw).
         var canvas = new Canvas(32, 32, Rgba.White);
         canvas.StrokeLine(16, 16, 16, 16, width: 4, Rgba.Black);
-        await Assert.That(NonBackgroundCount(canvas.Pixels)).IsGreaterThan(0);
+        await Assert.That(NonBackgroundCount(LogicalPixels(canvas))).IsGreaterThan(0);
     }
 
     [Test]
@@ -1171,7 +1171,7 @@ public class LabelTests
 
     // Counts pixels that aren't pure white — with LabelOptions() forcing geometry to fully
     // transparent stroke/fill, every non-white pixel in the output is label text (or halo).
-    static int LabelPixels(byte[] pixels)
+    static int LabelPixels(ReadOnlySpan<byte> pixels)
     {
         var count = 0;
         for (var i = 0; i < pixels.Length; i += 4)
@@ -1185,7 +1185,13 @@ public class LabelTests
         return count;
     }
 
-    static int NonBackgroundCount(byte[] pixels) => LabelPixels(pixels);
+    static int NonBackgroundCount(ReadOnlySpan<byte> pixels) => LabelPixels(pixels);
+
+    // Tight view over a Canvas's logical pixel region — strips any oversized trailing bytes the
+    // ArrayPool rental may have included, so the test helpers above iterate over actual canvas
+    // pixels and not stale pool content.
+    static ReadOnlySpan<byte> LogicalPixels(Canvas canvas) =>
+        canvas.Pixels.AsSpan(0, canvas.PixelByteCount);
 
     static Dictionary<string, object?> Props(string name, string? key = null) =>
         NameProps(name, key);

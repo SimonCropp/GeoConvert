@@ -1,18 +1,35 @@
 /// <summary>A software RGBA raster with source-over blending and basic line/disc/polygon fills.</summary>
-sealed class Canvas
+sealed class Canvas : IDisposable
 {
     // Reused across FillPolygon calls so a render with hundreds of polygons doesn't allocate a fresh
     // crossings list per call.
     readonly List<double> scanlineCrossings = [];
 
+    // The logical pixel-buffer size (width × height × 4 bytes). May be smaller than Pixels.Length —
+    // ArrayPool returns arrays at least the requested size, potentially larger — so anything reading
+    // the buffer goes through width/height, not Pixels.Length, for the upper bound. Trailing bytes
+    // beyond logicalSize are never written or read.
+    readonly int logicalSize;
+
     public Canvas(int width, int height, Rgba background)
     {
         Width = width;
         Height = height;
-        Pixels = new byte[width * height * 4];
-        // Fill the background a pixel (uint) at a time rather than byte-by-byte.
-        MemoryMarshal.Cast<byte, uint>(Pixels.AsSpan()).Fill(Pack(background));
+        logicalSize = width * height * 4;
+        // Rent from the shared pool rather than allocating fresh. The 3+ MB pixel buffer was the
+        // single largest per-render allocation (60% of the Full_Optimal byte budget on the
+        // benchmark workload). High-throughput callers — servers rendering many maps back-to-back —
+        // get most rents from a thread-local bucket and pay no allocation per call. Single renders
+        // see no win and a tiny dispatch overhead; nothing regresses.
+        Pixels = ArrayPool<byte>.Shared.Rent(logicalSize);
+        // Fill only the logical span — the rented array may be larger; the trailing bytes are
+        // never read, so leaving stale pool content there is fine.
+        MemoryMarshal.Cast<byte, uint>(Pixels.AsSpan(0, logicalSize)).Fill(Pack(background));
     }
+
+    // Returns the pixel buffer to the pool. Owners must dispose so the array is recycled; the only
+    // owner today is MapRenderer.Render via `using var canvas = ...`.
+    public void Dispose() => ArrayPool<byte>.Shared.Return(Pixels);
 
     // Packs RGBA into a uint so that reinterpreting the pixel buffer as uints yields the R,G,B,A byte order.
     static uint Pack(Rgba color) =>
@@ -25,6 +42,11 @@ sealed class Canvas
     public int Height { get; }
 
     public byte[] Pixels { get; }
+
+    // Logical pixel-buffer length in bytes (width × height × 4). Pixels.Length may be larger
+    // since ArrayPool can return an oversized array; consumers reading the full buffer should
+    // bound by this rather than Pixels.Length.
+    public int PixelByteCount => logicalSize;
 
     public void Blend(int x, int y, Rgba color)
     {
