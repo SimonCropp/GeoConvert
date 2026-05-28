@@ -97,6 +97,13 @@ public static class MapRenderer
         var projection = new Projection(bounds, options);
         var canvas = new Canvas(projection.Width, projection.Height, options.Background);
 
+        // StrokeAutoScale: derive a multiplier from the implicit zoom (canvas/bbox ratio) so the
+        // same scene rendered at a tighter bbox or bigger canvas gets proportionally thicker
+        // strokes, matching what tile-map stylesheets do across zoom levels. When the flag is
+        // off, the multiplier is 1.0 — the threading is the same in both cases so there's no
+        // branch on every feature.
+        var strokeMultiplier = options.StrokeAutoScale ? ComputeStrokeMultiplier(canvas, bounds) : 1.0;
+
         if (options.Ocean is { } ocean)
         {
             // Paint the projection envelope first so every feature layer renders on top of it. For
@@ -115,14 +122,14 @@ public static class MapRenderer
             {
                 for (var i = 0; i + 1 < chain.Length; i++)
                 {
-                    canvas.StrokeLine(chain[i].X, chain[i].Y, chain[i + 1].X, chain[i + 1].Y, options.StrokeWidth, options.Stroke);
+                    canvas.StrokeLine(chain[i].X, chain[i].Y, chain[i + 1].X, chain[i + 1].Y, options.StrokeWidth * strokeMultiplier, options.Stroke);
                 }
             }
         }
 
         foreach (var layer in layers)
         {
-            DrawLayer(canvas, layer, projection, options);
+            DrawLayer(canvas, layer, projection, options, strokeMultiplier);
         }
 
         // Labels run after every geometry pass so they sit on top of all fills and strokes —
@@ -141,9 +148,9 @@ public static class MapRenderer
     // Pre-order: a layer paints its own features first, then recurses into its children. Source-over
     // blending means whatever paints last sits on top, so children naturally appear over their parent
     // — pick layer styles via RenderOptions.LayerStyle to keep them visually distinct.
-    static void DrawLayer(Canvas canvas, FeatureCollection layer, Projection projection, RenderOptions options)
+    static void DrawLayer(Canvas canvas, FeatureCollection layer, Projection projection, RenderOptions options, double strokeMultiplier)
     {
-        var style = Resolve(options.LayerStyle?.Invoke(layer), options);
+        var style = Resolve(options.LayerStyle?.Invoke(layer), options, strokeMultiplier);
         foreach (var feature in layer.Features)
         {
             if (feature.Geometry is { } geometry)
@@ -154,18 +161,37 @@ public static class MapRenderer
 
         foreach (var child in layer.Children)
         {
-            DrawLayer(canvas, child, projection, options);
+            DrawLayer(canvas, child, projection, options, strokeMultiplier);
         }
     }
 
     // Collapses the user-facing LayerStyle (any subset of overrides) into the four concrete values the
     // rasterizer needs, falling back to RenderOptions defaults for each null property independently.
-    static ResolvedStyle Resolve(LayerStyle? overrides, RenderOptions options) =>
+    // The strokeMultiplier multiplies both StrokeWidth and PointRadius — it's 1.0 unless
+    // StrokeAutoScale is on, in which case it follows the zoom-derived factor from Render().
+    static ResolvedStyle Resolve(LayerStyle? overrides, RenderOptions options, double strokeMultiplier) =>
         new(
             overrides?.Stroke ?? options.Stroke,
             overrides?.Fill ?? options.Fill,
-            overrides?.StrokeWidth ?? options.StrokeWidth,
-            overrides?.PointRadius ?? options.PointRadius);
+            (overrides?.StrokeWidth ?? options.StrokeWidth) * strokeMultiplier,
+            (overrides?.PointRadius ?? options.PointRadius) * strokeMultiplier);
+
+    /// <summary>
+    /// Derives a stroke-width multiplier from the canvas/bbox ratio — the static-render equivalent
+    /// of tile-map zoom-aware styling. Uses the smaller of the horizontal and vertical
+    /// pixels-per-degree (the axis that actually fits the rendered extent), converts to an
+    /// implicit zoom via the tile-map convention (zoom = log2(width-at-360° / 256)), then grows
+    /// the multiplier by 1.15× per zoom level with zoom 10 (country-scale) as the
+    /// multiplier-of-1 baseline. Clamped to [0.25, 6] so a degenerate bbox doesn't blow the
+    /// multiplier to infinity or zero.
+    /// </summary>
+    static double ComputeStrokeMultiplier(Canvas canvas, Envelope bounds)
+    {
+        var pixelsPerDegree = Math.Min(canvas.Width / bounds.Width, canvas.Height / bounds.Height);
+        var zoom = Math.Log2(pixelsPerDegree * 360.0 / 256);
+        var multiplier = Math.Pow(1.15, zoom - 10);
+        return Math.Clamp(multiplier, 0.25, 6);
+    }
 
     static void Draw(Canvas canvas, Geometry geometry, Projection projection, ResolvedStyle style)
     {
@@ -557,7 +583,7 @@ public static class MapRenderer
         return Math.Sqrt(dx * dx + dy * dy);
     }
 
-    readonly record struct ResolvedStyle(Rgba Stroke, Rgba Fill, int StrokeWidth, int PointRadius);
+    readonly record struct ResolvedStyle(Rgba Stroke, Rgba Fill, double StrokeWidth, double PointRadius);
 
     readonly record struct ResolvedLabelStyle(Func<Feature, string?>? Label, double Size, Rgba Color, Rgba? Halo, Func<Feature, double>? Priority);
 

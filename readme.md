@@ -303,6 +303,11 @@ MapRenderer.RenderPng([basemap, roads], "stacked.png", options);
 <!-- endSnippet -->
 
 
+## Stroke autoscale
+
+When rendering the same data at different canvas sizes — or the same canvas at different bounding boxes — fixed pixel stroke widths look proportionally thinner as features get bigger on screen. The same problem tile-map stylesheets solve with zoom-dependent line widths. Set `RenderOptions.StrokeAutoScale = true` to opt into a zoom-aware multiplier: the implicit zoom is derived from the canvas/bbox ratio, and `StrokeWidth` / `PointRadius` are scaled by `1.15^(zoom − 10)` clamped to `[0.25, 6]`. The country-scale view (zoom ~10) is the multiplier-of-1 baseline, so a typical regional render is unchanged; a world view thins down to ~0.4×, a city view scales up to ~2.3×. Label size is intentionally not scaled, matching what every shipping web map does. Off by default so existing renders are unchanged.
+
+
 ## Labels
 
 Set `RenderOptions.Label` (or `LayerStyle.Label` for a per-layer override) to a callback that pulls the label text off each feature; the renderer adds a label pass after geometry that anchors each label at the geometry's centre (polygon centroid, line arclength midpoint, point itself), runs a greedy collision check against already-placed labels, and drops anything off-canvas or overlapping. The single-stroke vector font (Hershey-style, hand-rolled) covers printable ASCII — non-ASCII renders as `?`. `LabelSize` is the cap height in pixels and the font scales continuously, so any positive value works (12–16 reads comfortably on a 2k canvas, 20+ on high-res). A halo traces the strokes in semi-transparent white by default for legibility — pass `LabelHalo = null` to skip it.

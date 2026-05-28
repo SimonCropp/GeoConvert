@@ -54,6 +54,19 @@ public sealed class RenderOptions
     public int PointRadius { get; set; } = 4;
 
     /// <summary>
+    /// When true, <see cref="StrokeWidth"/> and <see cref="PointRadius"/> are multiplied by an
+    /// implicit-zoom factor derived from the canvas/bbox ratio — so the same scene rendered at a
+    /// tighter bbox (or larger canvas) gets proportionally thicker strokes, the way tile-map
+    /// stylesheets thicken lines at higher zoom levels. The multiplier follows the web-map
+    /// convention of 1.15× growth per zoom level (~doubling every five zooms), anchored so a
+    /// country-scale view is the multiplier-of-1 baseline, and clamped to [0.25, 6] so degenerate
+    /// bboxes don't produce nonsensical extremes. Label size is intentionally NOT scaled — text
+    /// stays at fixed pixel sizes across zooms, the same convention every shipping web map uses.
+    /// Defaults to false (off) so existing snapshot output is unchanged; opt in per render.
+    /// </summary>
+    public bool StrokeAutoScale { get; set; }
+
+    /// <summary>
     /// Per-layer style override. Invoked once for each <see cref="FeatureCollection"/> visited during
     /// rendering (the root plus every nested layer in <see cref="FeatureCollection.Children"/>). Return
     /// null — or leave this property null — to use the default colors above; return a
