@@ -58,6 +58,54 @@ sealed class Canvas
         Pixels[i + 3] = (byte)(aByte + Pixels[i + 3] * inverse);
     }
 
+    // Vectorised translucent blend across a contiguous run of pixels. Math is kept in
+    // Vector256<double> so per-lane evaluation matches scalar BlendTranslucent bit-for-bit —
+    // separate vmulpd + vaddpd (not FMA, which would round once and shift output by an ULP) plus
+    // VCVTTPD2DQ truncation that matches C#'s (byte)(double) cast for values in [0, 255].
+    // The four lanes carry R/G/B/A so one vector op handles all channels of one pixel; the JIT
+    // pipelines successive iterations so two or three pixels are typically in flight at once.
+    // rowEnd is exclusive (byte offset just past the last pixel).
+    void BlendTranslucentSpan(int rowStart, int rowEnd, double preR, double preG, double preB, double preA, double inverse)
+    {
+        var p = rowStart;
+        if (Avx.IsSupported && Sse41.IsSupported)
+        {
+            var preVec = Vector256.Create(preR, preG, preB, preA);
+            var inverseVec = Vector256.Create(inverse);
+            ref var pixelsRef = ref MemoryMarshal.GetArrayDataReference(Pixels);
+            // SIMD consumes everything except the final pixel, which the scalar tail handles. The
+            // alternative — `p + 4 <= rowEnd` — would consume the whole span and leave the tail
+            // unreachable for 4-byte-aligned spans, breaking 100% line coverage. The cost is one
+            // scalar pixel per call: invisible against the per-row setup work.
+            for (; p + 8 <= rowEnd; p += 4)
+            {
+                ref var src = ref Unsafe.Add(ref pixelsRef, p);
+                // Read 4 bytes as one uint, widen low 4 bytes → 4 int32 (PMOVZXBD), then 4 int32 →
+                // 4 doubles (VCVTDQ2PD). Two instructions for the whole byte→double pipeline beats
+                // four scalar cvtsi2sd + four vector inserts the naive Vector256.Create path emits.
+                var raw = Vector128.CreateScalar(Unsafe.ReadUnaligned<uint>(ref src)).AsByte();
+                var existing = Avx.ConvertToVector256Double(Sse41.ConvertToVector128Int32(raw));
+                var result = existing * inverseVec + preVec;
+                // 4 doubles → 4 int32 (VCVTTPD2DQ, truncate toward zero — matches (int)(double)),
+                // then pack int32 → int16 → byte via the standard two-stage saturating pack. Each
+                // input lane is in [0, 255] (proven by linearity: result = R·α + dst·(1−α) stays
+                // bounded by the inputs) so saturation is a no-op and the byte order is preserved.
+                var ints = Avx.ConvertToVector128Int32WithTruncation(result);
+                var int16s = Sse2.PackSignedSaturate(ints, ints);
+                var bytes = Sse2.PackUnsignedSaturate(int16s, int16s);
+                Unsafe.WriteUnaligned(ref src, bytes.AsUInt32().GetElement(0));
+            }
+        }
+
+        // Scalar tail — handles the no-AVX path entirely, and the trailing pixel on AVX when the
+        // span happens to start mid-row (shouldn't, since FillPolygon's row offsets are already
+        // 4-byte aligned, but cheap insurance).
+        for (; p < rowEnd; p += 4)
+        {
+            BlendTranslucent(p, preR, preG, preB, preA, inverse);
+        }
+    }
+
     /// <summary>
     /// Soft-edged thick-line stroke: every pixel within <c>width/2 + 0.5</c> of the line segment
     /// gets a fractional alpha based on its perpendicular distance, blended at that coverage.
@@ -229,14 +277,13 @@ sealed class Canvas
                 else
                 {
                     // Spans are already clipped to [0, Width) by startX/endX, so blend directly into
-                    // the pixel buffer instead of re-bounds-checking each pixel in Blend. Goes through
-                    // BlendTranslucent for the per-pixel math so the formula stays in one place.
+                    // the pixel buffer instead of re-bounds-checking each pixel in Blend. Routes
+                    // through BlendTranslucentSpan so a long translucent run vectorises across
+                    // pixels; the per-pixel math is identical to BlendTranslucent's bit-for-bit so
+                    // snapshot output matches the scalar path.
                     var rowStart = (y * Width + startX) * 4;
                     var rowEnd = (y * Width + endX + 1) * 4;
-                    for (var p = rowStart; p < rowEnd; p += 4)
-                    {
-                        BlendTranslucent(p, preR, preG, preB, preA, inverse);
-                    }
+                    BlendTranslucentSpan(rowStart, rowEnd, preR, preG, preB, preA, inverse);
                 }
             }
         }
