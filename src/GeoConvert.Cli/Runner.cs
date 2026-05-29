@@ -40,6 +40,8 @@ public static class Runner
         Rgba? labelColor = null;
         Rgba? labelHalo = null;
         var labelHaloExplicit = false;
+        Rgba? labelKnockout = null;
+        var labelKnockoutExplicit = false;
 
         for (var i = 0; i < args.Length; i++)
         {
@@ -160,6 +162,31 @@ public static class Runner
 
                     labelHalo = halo;
                     break;
+                case "--label-knockout":
+                    if (i + 1 >= args.Length)
+                    {
+                        error.WriteLine("Missing value for --label-knockout.");
+                        return 2;
+                    }
+
+                    labelKnockoutExplicit = true;
+                    var knockoutText = args[++i];
+                    if (knockoutText.Equals("none", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Explicit "none" suppresses the knockout, distinct from leaving the flag
+                        // off (which inherits the RenderOptions default of null/off).
+                        labelKnockout = null;
+                        break;
+                    }
+
+                    if (!TryParseColor(knockoutText, out var knockoutColor))
+                    {
+                        error.WriteLine("--label-knockout must be '#RRGGBB', '#RRGGBBAA', or 'none'.");
+                        return 2;
+                    }
+
+                    labelKnockout = knockoutColor;
+                    break;
                 case "--from":
                 case "--to":
                     if (i + 1 >= args.Length)
@@ -253,6 +280,11 @@ public static class Runner
                 if (labelHaloExplicit)
                 {
                     renderOptions.LabelHalo = labelHalo;
+                }
+
+                if (labelKnockoutExplicit)
+                {
+                    renderOptions.LabelKnockout = labelKnockout;
                 }
 
                 MapRenderer.RenderPng(features, outputPath, renderOptions);
@@ -420,8 +452,14 @@ public static class Runner
                                      Off-canvas and overlapping labels are dropped silently.
               --label-size <pixels>  Cap height of label text in pixels. Default 14.
               --label-color <#hex>   Label text color, '#RRGGBB' or '#RRGGBBAA'. Default near-black.
-              --label-halo <#hex|none>  Halo color painted under label text. Default semi-transparent
-                                     white; pass 'none' to disable.
+              --label-halo <#hex|none>  Halo color stroked under label text (extends 2px past the
+                                     glyph stroke on every side). Default semi-transparent white;
+                                     pass 'none' to disable.
+              --label-knockout <#hex|none>  Solid-fill backdrop painted over each label's bounding
+                                     box before the halo and text — the "knockout" style that
+                                     erases (or, for a semi-transparent colour, dims) the geometry
+                                     under the label. Default off; pass 'none' to keep it off.
+                                     Pair with '--label-halo none' for a flat rectangle backdrop.
               --list                 List supported formats.
               -h, --help             Show this help.
 

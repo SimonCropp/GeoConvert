@@ -23,8 +23,14 @@ Options:
                          Off-canvas and overlapping labels are dropped silently.
   --label-size <pixels>  Cap height of label text in pixels. Default 14.
   --label-color <#hex>   Label text color, '#RRGGBB' or '#RRGGBBAA'. Default near-black.
-  --label-halo <#hex|none>  Halo color painted under label text. Default semi-transparent
-                         white; pass 'none' to disable.
+  --label-halo <#hex|none>  Halo color stroked under label text (extends 2px past the
+                         glyph stroke on every side). Default semi-transparent white;
+                         pass 'none' to disable.
+  --label-knockout <#hex|none>  Solid-fill backdrop painted over each label's bounding
+                         box before the halo and text — the "knockout" style that
+                         erases (or, for a semi-transparent colour, dims) the geometry
+                         under the label. Default off; pass 'none' to keep it off.
+                         Pair with '--label-halo none' for a flat rectangle backdrop.
   --list                 List supported formats.
   -h, --help             Show this help.
 

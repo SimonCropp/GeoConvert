@@ -99,10 +99,12 @@ static class StrokeFont
         var normalized = text.Normalize(NormalizationForm.FormD);
         var unit = size / CapHeight;
         // Stroke widths scale gently with size: keeps small text crisp (width 1) and grows the
-        // weight as text gets bigger so big text doesn't look reedy. Halo is one pixel wider so
-        // it rings the foreground stroke uniformly.
+        // weight as text gets bigger so big text doesn't look reedy. Halo extends 2 px past the
+        // foreground stroke on every side so busy backgrounds (dense country borders,
+        // closely-spaced contour lines) don't bleed through the ring around each glyph — a
+        // 1-pixel halo turned out too thin against typical political-boundary fills.
         var strokeWidth = Math.Max(1, size / 12);
-        var haloWidth = strokeWidth + 2;
+        var haloWidth = strokeWidth + 4;
 
         if (halo is { } haloColor)
         {

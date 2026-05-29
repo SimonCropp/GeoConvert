@@ -209,6 +209,47 @@ public class LabelTests
     }
 
     [Test]
+    public async Task Canvas_fill_rect_paints_solid_block()
+    {
+        // Opaque fill of an interior rect leaves the centre pixel the fill colour and untouched
+        // pixels well outside the rect at the background colour. The bounds are inclusive at low
+        // and exclusive at high, so picking ints lets the per-pixel loop hit every covered pixel.
+        var canvas = new Canvas(40, 40, Rgba.White);
+        canvas.FillRect(10, 10, 30, 30, new(100, 150, 200));
+
+        var inside = (20 * 40 + 20) * 4;
+        await Assert.That(canvas.Pixels[inside]).IsEqualTo((byte)100);
+        await Assert.That(canvas.Pixels[inside + 1]).IsEqualTo((byte)150);
+        await Assert.That(canvas.Pixels[inside + 2]).IsEqualTo((byte)200);
+
+        // Far corner: untouched white.
+        await Assert.That(canvas.Pixels[0]).IsEqualTo((byte)255);
+    }
+
+    [Test]
+    public async Task Canvas_fill_rect_skips_zero_alpha()
+    {
+        // A fully-transparent colour is a no-op — the early exit avoids a per-pixel Blend loop
+        // that would short-circuit anyway. Exercises the alpha==0 fast-path.
+        var canvas = new Canvas(20, 20, Rgba.White);
+        canvas.FillRect(0, 0, 20, 20, Rgba.Transparent);
+        await Assert.That(NonBackgroundCount(LogicalPixels(canvas))).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task Canvas_fill_rect_clips_to_canvas_bounds()
+    {
+        // Off-canvas rect coordinates get clipped, so a fill that overlaps the right/bottom edge
+        // paints up to the edge and stops — no out-of-bounds writes, no thrown exceptions.
+        var canvas = new Canvas(10, 10, Rgba.White);
+        canvas.FillRect(5, 5, 100, 100, Rgba.Black);
+
+        // Bottom-right pixel sits inside the requested rect after clipping.
+        var corner = (9 * 10 + 9) * 4;
+        await Assert.That(canvas.Pixels[corner]).IsEqualTo((byte)0);
+    }
+
+    [Test]
     public async Task Canvas_disc_paints_full_coverage_at_centre()
     {
         // FillDisc painted directly. The very centre pixel sits at distance 0 from the centre and
@@ -256,6 +297,62 @@ public class LabelTests
         var canvas = new Canvas(64, 32, Rgba.White);
         var labeller = new Labeller(canvas);
         await Assert.That(labeller.TryPlace("OFFSCREEN", 1, 1, 14, Rgba.Black, halo: null)).IsFalse();
+    }
+
+    [Test]
+    public async Task Labeller_knockout_paints_backdrop_under_text()
+    {
+        // With a fully-opaque red knockout the rect underneath every label pixel reads as red —
+        // including pixels where no glyph stroke landed (the gaps between letters). Without
+        // knockout those same pixels stay the background colour. Compare a knockout render to a
+        // plain one and assert (a) the knockout-coloured backdrop is present and (b) the foreground
+        // text colour still wins where the strokes land (so knockout doesn't *replace* the text).
+        var canvas = new Canvas(120, 40, Rgba.White);
+        var labeller = new Labeller(canvas);
+        labeller.TryPlace("HI", 60, 20, 14, Rgba.Black, halo: null, pointOffset: 0, knockout: new(255, 0, 0));
+
+        var redPixels = 0;
+        var blackPixels = 0;
+        for (var i = 0; i + 4 <= canvas.PixelByteCount; i += 4)
+        {
+            var r = canvas.Pixels[i];
+            var g = canvas.Pixels[i + 1];
+            var b = canvas.Pixels[i + 2];
+            if (r == 255 && g == 0 && b == 0)
+            {
+                redPixels++;
+            }
+            else if (r < 80 && g < 80 && b < 80)
+            {
+                blackPixels++;
+            }
+        }
+
+        // Backdrop covers the entire bbox so we expect many red pixels — far more than the
+        // black stroke ink within the same bbox.
+        await Assert.That(redPixels).IsGreaterThan(blackPixels);
+        await Assert.That(blackPixels).IsGreaterThan(0);
+    }
+
+    [Test]
+    public async Task Labeller_knockout_pad_widens_collision_box()
+    {
+        // Same shape as the halo collision test: without a backdrop two labels just clear of each
+        // other both fit; turn knockout on and the 2-pixel pad pushes them into collision and the
+        // second is dropped. Confirms knockout participates in the collision bbox the same way the
+        // halo does (and that the pad applies even when halo is null).
+        var (textWidth, _) = StrokeFont.Measure("A", 14);
+
+        var withoutKnockout = new Labeller(new(200, 32, Rgba.White));
+        withoutKnockout.TryPlace("A", 40, 16, 14, Rgba.Black, halo: null);
+        var secondWithoutKnockout = withoutKnockout.TryPlace("A", 40 + textWidth + 1, 16, 14, Rgba.Black, halo: null);
+
+        var withKnockout = new Labeller(new(200, 32, Rgba.White));
+        withKnockout.TryPlace("A", 40, 16, 14, Rgba.Black, halo: null, pointOffset: 0, knockout: Rgba.White);
+        var secondWithKnockout = withKnockout.TryPlace("A", 40 + textWidth + 1, 16, 14, Rgba.Black, halo: null, pointOffset: 0, knockout: Rgba.White);
+
+        await Assert.That(secondWithoutKnockout).IsTrue();
+        await Assert.That(secondWithKnockout).IsFalse();
     }
 
     [Test]
@@ -781,6 +878,78 @@ public class LabelTests
     }
 
     [Test]
+    public async Task Label_inherits_knockout_from_options()
+    {
+        // Knockout colour distinct from background and from any text/halo. Underlying geometry
+        // would normally paint blue (the polygon fill); the knockout rect should cover it within
+        // each label bbox so the backdrop colour appears in the output.
+        var features = new FeatureCollection
+        {
+            new Feature(
+                new Polygon([[new(-80, -40), new(80, -40), new(80, 40), new(-80, 40), new(-80, -40)]]),
+                new Dictionary<string, object?> { ["name"] = "X" }),
+        };
+        var options = new RenderOptions
+        {
+            Bounds = new(-90, -50, 90, 50),
+            Width = 200,
+            Projection = MapProjection.PlateCarree,
+            Padding = 0,
+            Label = feature => feature.Properties.TryGetValue("name", out var v) ? v as string : null,
+            LabelSize = 20,
+            LabelColor = Rgba.Black,
+            LabelHalo = null,
+            LabelKnockout = new(0, 200, 0),
+            Fill = new(0, 0, 200),
+            Stroke = new(0, 0, 100),
+        };
+        var pixels = Render(features, options);
+
+        var greenPixels = 0;
+        for (var i = 0; i + 4 <= pixels.Length; i += 4)
+        {
+            // The knockout colour blends over the blue fill — exact (0,200,0) appears on
+            // backdrop pixels the fill already painted under (no blending needed since knockout
+            // is fully opaque).
+            if (pixels[i] == 0 && pixels[i + 1] == 200 && pixels[i + 2] == 0)
+            {
+                greenPixels++;
+            }
+        }
+
+        await Assert.That(greenPixels).IsGreaterThan(0);
+    }
+
+    [Test]
+    public async Task Layer_label_knockout_overrides_options()
+    {
+        // Per-layer override of LabelKnockout — same fall-through pattern as the other label knobs.
+        var features = new FeatureCollection
+        {
+            Name = "custom",
+            Features =
+            {
+                new(new Point(0, 0), Props("X")),
+            },
+        };
+        var options = LabelOptions();
+        options.LabelKnockout = null;
+        options.LayerStyle = _ => new() { LabelKnockout = new(255, 200, 0) };
+        var pixels = Render(features, options);
+
+        var orangePixels = 0;
+        for (var i = 0; i + 4 <= pixels.Length; i += 4)
+        {
+            if (pixels[i] == 255 && pixels[i + 1] == 200 && pixels[i + 2] == 0)
+            {
+                orangePixels++;
+            }
+        }
+
+        await Assert.That(orangePixels).IsGreaterThan(0);
+    }
+
+    [Test]
     public async Task Label_renders_without_halo()
     {
         // Halo explicitly disabled → the halo branch in StrokeFont.Render is skipped. The text
@@ -830,6 +999,63 @@ public class LabelTests
             Stroke = new(80, 80, 80),
         };
         return Verify(new MemoryStream(MapRenderer.RenderPng(features, options)), "png");
+    }
+
+    [Test]
+    public Task Render_snapshot_label_halo()
+    {
+        // Companion to the readme's RenderLabelHalo snippet — same scene, same options. Acts as
+        // the visual baseline for the "halo treatment" image in the docs and locks in regressions
+        // to the halo's interaction with country borders. Cropped to western Europe so dense
+        // political borders read at this size; Lambert is the Auto choice at this lat/lon span.
+        var features = GeoConverter.Read(ProjectFiles.world_geojson);
+        var png = MapRenderer.RenderPng(
+            features,
+            new()
+            {
+                Bounds = new(-12, 35, 32, 60),
+                Width = 800,
+                Projection = MapProjection.Lambert,
+                Background = new(245, 245, 245),
+                Fill = new(220, 220, 210),
+                Stroke = new(120, 120, 120),
+                StrokeWidth = 1,
+                Label = feature =>
+                    feature.Properties.TryGetValue("NAME", out var value) ? value as string : null,
+                LabelSize = 14,
+                LabelColor = new(30, 30, 30),
+                LabelHalo = new(255, 255, 255, 220),
+            });
+        return Verify(png, "png");
+    }
+
+    [Test]
+    public Task Render_snapshot_label_knockout()
+    {
+        // Pair to Render_snapshot_label_halo: identical scene with knockout swapped in for the
+        // halo. Locked in as a snapshot so the readme image stays in sync with the code, and so
+        // any regression to the knockout rect (size, padding, fill order vs the halo pass) shows
+        // up as a visible diff next to the halo baseline.
+        var features = GeoConverter.Read(ProjectFiles.world_geojson);
+        var png = MapRenderer.RenderPng(
+            features,
+            new()
+            {
+                Bounds = new(-12, 35, 32, 60),
+                Width = 800,
+                Projection = MapProjection.Lambert,
+                Background = new(245, 245, 245),
+                Fill = new(220, 220, 210),
+                Stroke = new(120, 120, 120),
+                StrokeWidth = 1,
+                Label = feature =>
+                    feature.Properties.TryGetValue("NAME", out var value) ? value as string : null,
+                LabelSize = 14,
+                LabelColor = new(30, 30, 30),
+                LabelHalo = null,
+                LabelKnockout = new(245, 245, 245),
+            });
+        return Verify(png, "png");
     }
 
     [Test]

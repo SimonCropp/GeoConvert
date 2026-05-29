@@ -1,8 +1,3 @@
-using BenchmarkDotNet.Running;
-using GeoConvert;
-using GeoConvert.Benchmarks;
-using System.IO.Compression;
-
 if (args.Length > 0 && args[0] == "--sizes")
 {
     // Diagnostic: print PNG output sizes for each sample workload × compression level. Useful for

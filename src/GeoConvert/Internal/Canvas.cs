@@ -129,6 +129,33 @@ sealed class Canvas : IDisposable
     }
 
     /// <summary>
+    /// Axis-aligned solid fill of the half-open rect [<paramref name="x0"/>, <paramref name="x1"/>)
+    /// × [<paramref name="y0"/>, <paramref name="y1"/>). Edges aren't antialiased — the rect is
+    /// rounded to whole pixels and every covered pixel gets a full alpha blend. Used by the label
+    /// pass to paint the "knockout" backdrop under each label's bbox; tiny enough that a
+    /// per-pixel Blend loop is fine without the FillPolygon scanline machinery.
+    /// </summary>
+    public void FillRect(double x0, double y0, double x1, double y1, Rgba color)
+    {
+        if (color.A == 0)
+        {
+            return;
+        }
+
+        var minX = Math.Max(0, (int)Math.Floor(x0));
+        var minY = Math.Max(0, (int)Math.Floor(y0));
+        var maxX = Math.Min(Width - 1, (int)Math.Ceiling(x1) - 1);
+        var maxY = Math.Min(Height - 1, (int)Math.Ceiling(y1) - 1);
+        for (var y = minY; y <= maxY; y++)
+        {
+            for (var x = minX; x <= maxX; x++)
+            {
+                Blend(x, y, color);
+            }
+        }
+    }
+
+    /// <summary>
     /// Soft-edged thick-line stroke: every pixel within <c>width/2 + 0.5</c> of the line segment
     /// gets a fractional alpha based on its perpendicular distance, blended at that coverage.
     /// Antialiased everywhere — used both for label glyph strokes and for the renderer's polygon

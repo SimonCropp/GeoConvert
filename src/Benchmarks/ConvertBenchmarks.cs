@@ -1,7 +1,3 @@
-using BenchmarkDotNet.Attributes;
-
-namespace GeoConvert.Benchmarks;
-
 // Writes and reads a 500-polygon collection through each stream format.
 [MemoryDiagnoser]
 public class ConvertBenchmarks

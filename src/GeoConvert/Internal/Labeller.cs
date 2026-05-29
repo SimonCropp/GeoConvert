@@ -37,8 +37,13 @@ sealed class Labeller
     /// label is dropped. The offset is the gap between the point and the *nearer* edge of the
     /// label box, so callers typically pass <c>point-radius + small padding</c> to keep the label
     /// from kissing the dot.
+    /// <para>When <paramref name="knockout"/> is non-null, a filled rectangle of that colour is
+    /// painted over the label's bbox before the halo/text strokes — the cartographic "mask" style
+    /// that erases (or, for a semi-transparent colour, dims) the underlying geometry under the
+    /// label. Knockout and <paramref name="halo"/> are independent: typical use is knockout for the
+    /// backdrop and halo set to null, but both can coexist.</para>
     /// </summary>
-    public bool TryPlace(string text, double anchorX, double anchorY, double size, Rgba color, Rgba? halo, double pointOffset = 0)
+    public bool TryPlace(string text, double anchorX, double anchorY, double size, Rgba color, Rgba? halo, double pointOffset = 0, Rgba? knockout = null)
     {
         if (string.IsNullOrEmpty(text))
         {
@@ -57,7 +62,7 @@ sealed class Labeller
             // point are the easiest to misattribute. Sequence: NE, NW, SE, SW, E, W, N, S.
             foreach (var (leftX, baselineY) in PointCandidates(anchorX, anchorY, width, size, pointOffset))
             {
-                if (TryPlaceAt(text, leftX, baselineY, width, size, color, halo))
+                if (TryPlaceAt(text, leftX, baselineY, width, size, color, halo, knockout))
                 {
                     return true;
                 }
@@ -71,7 +76,7 @@ sealed class Labeller
         // would visually push caps upward by the descender depth.
         var centredLeftX = anchorX - width / 2;
         var centredBaselineY = anchorY + size / 2;
-        return TryPlaceAt(text, centredLeftX, centredBaselineY, width, size, color, halo);
+        return TryPlaceAt(text, centredLeftX, centredBaselineY, width, size, color, halo, knockout);
     }
 
     static IEnumerable<(double LeftX, double BaselineY)> PointCandidates(double anchorX, double anchorY, double width, double size, double offset)
@@ -99,7 +104,7 @@ sealed class Labeller
         yield return (anchorX - width / 2, anchorY + offset + size);
     }
 
-    bool TryPlaceAt(string text, double leftX, double baselineY, double width, double size, Rgba color, Rgba? halo)
+    bool TryPlaceAt(string text, double leftX, double baselineY, double width, double size, Rgba color, Rgba? halo, Rgba? knockout)
     {
         var unit = size / StrokeFont.CapHeight;
         var capTopY = baselineY - size;
@@ -114,13 +119,14 @@ sealed class Labeller
         var inkTopY = capTopY - ascenderRise;
         var inkBottomY = baselineY + descenderDrop;
 
-        // Halo strokes extend exactly one pixel beyond the foreground stroke on each side
-        // (StrokeFont uses haloWidth = strokeWidth + 2). So a 1-pixel collision pad is enough to
-        // keep two labels' halos from grazing each other — anything larger steals room from
-        // legitimate label placements. The pad does NOT scale with size because the halo's
-        // extent past the foreground stroke is a fixed pixel ring regardless of how thick the
-        // strokes themselves get.
-        var pad = halo.HasValue ? 1d : 0;
+        // Halo strokes extend two pixels beyond the foreground stroke on each side (StrokeFont
+        // uses haloWidth = strokeWidth + 4). A 2-pixel collision pad is enough to keep two
+        // labels' halos from grazing each other. Knockout draws a solid rect over the same bbox
+        // so it needs the pad too — without it the rect would clip glyph descenders on labels
+        // whose ink reaches the edge. The pad does NOT scale with size because the halo's extent
+        // past the foreground stroke is a fixed pixel ring regardless of how thick the strokes
+        // themselves get.
+        var pad = halo.HasValue || knockout.HasValue ? 2d : 0;
         var bx0 = leftX - pad;
         var by0 = inkTopY - pad;
         var bx1 = leftX + width + pad;
@@ -141,6 +147,14 @@ sealed class Labeller
             {
                 return false;
             }
+        }
+
+        if (knockout is { } knockoutColor)
+        {
+            // Paint the backdrop before halo + text so both render over (and source-over blend
+            // with) the knockout colour rather than the underlying geometry. A semi-transparent
+            // knockout reads as a dimming wash; a fully-opaque one fully erases the geometry.
+            canvas.FillRect(bx0, by0, bx1, by1, knockoutColor);
         }
 
         StrokeFont.Render(canvas, text, leftX, baselineY, size, color, halo);

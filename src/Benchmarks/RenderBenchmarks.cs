@@ -1,7 +1,3 @@
-using BenchmarkDotNet.Attributes;
-
-namespace GeoConvert.Benchmarks;
-
 // Rasterises a 500-polygon collection to a PNG.
 [MemoryDiagnoser]
 public class RenderBenchmarks

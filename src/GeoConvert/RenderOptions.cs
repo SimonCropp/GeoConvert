@@ -119,11 +119,27 @@ public sealed class RenderOptions
     public Rgba LabelColor { get; set; } = new(20, 20, 20);
 
     /// <summary>
-    /// Color of the one-pixel halo painted under label text for legibility against busy fills.
-    /// Defaults to a semi-transparent white so labels stay readable on dark backgrounds out of the
-    /// box. Set to null to skip the halo pass entirely.
+    /// Color of the halo stroked under label text for legibility against busy fills. The halo
+    /// extends two pixels past the foreground glyph stroke on every side, so a dark text colour
+    /// over a light halo reads as a soft outline around each letter. Defaults to a
+    /// semi-transparent white so labels stay readable on dark backgrounds out of the box. Set to
+    /// null to skip the halo pass entirely. For a heavier "mask out the geometry under the label"
+    /// look — useful when borders or contour lines bleed through the halo ring — pair this with
+    /// (or replace it by) <see cref="LabelKnockout"/>.
     /// </summary>
     public Rgba? LabelHalo { get; set; } = new(255, 255, 255, 200);
+
+    /// <summary>
+    /// Optional solid-fill backdrop painted over the label's bounding box before the halo and text
+    /// strokes. Null (default) skips the backdrop; set to a colour — typically
+    /// <see cref="Background"/> — for the "knockout" cartographic style where the geometry under
+    /// each label is erased rather than overlaid. A semi-transparent colour dims the geometry
+    /// instead of fully erasing it (a softer alternative to a thicker halo when borders still
+    /// show through the stroked ring). Knockout and <see cref="LabelHalo"/> are independent: leave
+    /// the halo on for a knockout-rect with a halo stroke around the text, or null the halo for a
+    /// flat rectangle backdrop.
+    /// </summary>
+    public Rgba? LabelKnockout { get; set; }
 
     /// <summary>
     /// Deflate level used for the PNG <c>IDAT</c> chunk. Defaults to <see cref="CompressionLevel.Optimal"/>;
