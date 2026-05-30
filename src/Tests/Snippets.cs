@@ -260,6 +260,69 @@ static class Snippets
         #endregion
     }
 
+    public static void RenderLabelHalo()
+    {
+        #region RenderLabelHalo
+
+        // Halo treatment: every glyph stroke is first drawn in the halo colour at a slightly
+        // wider stroke, so the foreground text reads against busy fills as if outlined. The
+        // halo extends 2 px past the foreground stroke on every side; that's enough to lift
+        // text off most country-fill colours but a thin border line can still bleed through
+        // the ring on dense political maps. Default halo is a semi-transparent white, which
+        // works for dark text on light backgrounds out of the box; pass null to disable.
+        var features = GeoConverter.Read("countries.geojson");
+        var options = new RenderOptions
+        {
+            Bounds = new(-12, 35, 32, 60),
+            Width = 800,
+            Projection = MapProjection.Lambert,
+            Background = new(245, 245, 245),
+            Fill = new(220, 220, 210),
+            Stroke = new(120, 120, 120),
+            StrokeWidth = 1,
+            Label = feature =>
+                feature.Properties.TryGetValue("NAME", out var value) ? value as string : null,
+            LabelSize = 14,
+            LabelColor = new(30, 30, 30),
+            LabelHalo = new(255, 255, 255, 220),
+        };
+        MapRenderer.RenderPng(features, "europe-halo.png", options);
+
+        #endregion
+    }
+
+    public static void RenderLabelKnockout()
+    {
+        #region RenderLabelKnockout
+
+        // Knockout treatment: before the halo and text strokes, a solid rect of the knockout
+        // colour is painted over the label's bounding box. The geometry underneath is fully
+        // erased (opaque colour) or dimmed (semi-transparent), so country borders don't bleed
+        // through the way they can with a halo ring. Typically set to match Background for a
+        // clean masked look; pair with LabelHalo = null for a flat rectangle, or leave the
+        // halo on for a knockout-rect with an outline around the text.
+        var features = GeoConverter.Read("countries.geojson");
+        var options = new RenderOptions
+        {
+            Bounds = new(-12, 35, 32, 60),
+            Width = 800,
+            Projection = MapProjection.Lambert,
+            Background = new(245, 245, 245),
+            Fill = new(220, 220, 210),
+            Stroke = new(120, 120, 120),
+            StrokeWidth = 1,
+            Label = feature =>
+                feature.Properties.TryGetValue("NAME", out var value) ? value as string : null,
+            LabelSize = 14,
+            LabelColor = new(30, 30, 30),
+            LabelHalo = null,
+            LabelKnockout = new(245, 245, 245),
+        };
+        MapRenderer.RenderPng(features, "europe-knockout.png", options);
+
+        #endregion
+    }
+
     public static void Compression()
     {
         var features = GeoConverter.Read("countries.geojson");

@@ -147,7 +147,7 @@ var options = new RenderOptions
 
 MapRenderer.RenderPng(features, "world.png", options);
 ```
-<sup><a href='/src/Tests/Snippets.cs#L297-L312' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderWebMercator' title='Start of snippet'>anchor</a></sup>
+<sup><a href='/src/Tests/Snippets.cs#L360-L375' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderWebMercator' title='Start of snippet'>anchor</a></sup>
 <!-- endSnippet -->
 
 From the command line, pass `--projection`:
@@ -173,7 +173,7 @@ var options = new RenderOptions
 
 MapRenderer.RenderPng(features, "states.png", options);
 ```
-<sup><a href='/src/Tests/Snippets.cs#L317-L331' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderLambert' title='Start of snippet'>anchor</a></sup>
+<sup><a href='/src/Tests/Snippets.cs#L380-L394' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderLambert' title='Start of snippet'>anchor</a></sup>
 <!-- endSnippet -->
 
 ```
@@ -202,7 +202,7 @@ var options = new RenderOptions
 
 MapRenderer.RenderPng(features, "world.png", options);
 ```
-<sup><a href='/src/Tests/Snippets.cs#L336-L355' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderGoode' title='Start of snippet'>anchor</a></sup>
+<sup><a href='/src/Tests/Snippets.cs#L399-L418' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderGoode' title='Start of snippet'>anchor</a></sup>
 <!-- endSnippet -->
 
 ```
@@ -310,9 +310,84 @@ When rendering the same data at different canvas sizes — or the same canvas at
 
 ## Labels
 
-Set `RenderOptions.Label` (or `LayerStyle.Label` for a per-layer override) to a callback that pulls the label text off each feature; the renderer adds a label pass after geometry that anchors each label at the geometry's centre (polygon centroid, line arclength midpoint, point itself), runs a greedy collision check against already-placed labels, and drops anything off-canvas or overlapping. The single-stroke vector font (Hershey-style, hand-rolled) covers printable ASCII — non-ASCII renders as `?`. `LabelSize` is the cap height in pixels and the font scales continuously, so any positive value works (12–16 reads comfortably on a 2k canvas, 20+ on high-res). A halo traces the strokes in semi-transparent white by default for legibility — pass `LabelHalo = null` to skip it.
+Set `RenderOptions.Label` (or `LayerStyle.Label` for a per-layer override) to a callback that pulls the label text off each feature; the renderer adds a label pass after geometry that anchors each label at the geometry's centre (polygon centroid, line arclength midpoint, point itself), runs a greedy collision check against already-placed labels, and drops anything off-canvas or overlapping. The single-stroke vector font (Hershey-style, hand-rolled) covers printable ASCII — non-ASCII renders as `?`. `LabelSize` is the cap height in pixels and the font scales continuously, so any positive value works (12–16 reads comfortably on a 2k canvas, 20+ on high-res). A halo traces the strokes in semi-transparent white by default for legibility — pass `LabelHalo = null` to skip it. For busy backgrounds where the halo ring still bleeds (dense political borders, contour lines), set `LabelKnockout` to a colour — typically `Background` — to paint a solid rect over the label's bbox before the text, masking the geometry out underneath; a semi-transparent colour dims rather than erases it.
 
 Collision order defaults to "biggest feature first" (polygon area, then line length, points last) so on overlap the bigger feature's label wins — that puts a country's name down before a small neighbouring island's. Override with `RenderOptions.LabelPriority` (or per-layer via `LayerStyle.LabelPriority`) for any `Func<Feature, double>`: read a property like population or look priorities up in an external table.
+
+### Halo
+
+A halo strokes each glyph at the halo colour at a slightly wider stroke before the foreground text — every letter ends up ringed by the halo colour, lifting the text off busy fills. Default is a semi-transparent white that works for dark text on light backgrounds out of the box; set `LabelHalo = null` to skip it. The halo extends 2 px past the foreground stroke on every side, so it survives most country-fill colours but a thin border line crossing the label can still bleed through the ring — see Knockout below for the cure.
+
+<!-- snippet: RenderLabelHalo -->
+<a id='snippet-RenderLabelHalo'></a>
+```cs
+// Halo treatment: every glyph stroke is first drawn in the halo colour at a slightly
+// wider stroke, so the foreground text reads against busy fills as if outlined. The
+// halo extends 2 px past the foreground stroke on every side; that's enough to lift
+// text off most country-fill colours but a thin border line can still bleed through
+// the ring on dense political maps. Default halo is a semi-transparent white, which
+// works for dark text on light backgrounds out of the box; pass null to disable.
+var features = GeoConverter.Read("countries.geojson");
+var options = new RenderOptions
+{
+    Bounds = new(-12, 35, 32, 60),
+    Width = 800,
+    Projection = MapProjection.Lambert,
+    Background = new(245, 245, 245),
+    Fill = new(220, 220, 210),
+    Stroke = new(120, 120, 120),
+    StrokeWidth = 1,
+    Label = feature =>
+        feature.Properties.TryGetValue("NAME", out var value) ? value as string : null,
+    LabelSize = 14,
+    LabelColor = new(30, 30, 30),
+    LabelHalo = new(255, 255, 255, 220),
+};
+MapRenderer.RenderPng(features, "europe-halo.png", options);
+```
+<sup><a href='/src/Tests/Snippets.cs#L265-L291' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderLabelHalo' title='Start of snippet'>anchor</a></sup>
+<!-- endSnippet -->
+
+<img src="/src/Tests/LabelTests.Render_snapshot_label_halo.verified.png" width="600">
+
+### Knockout
+
+A knockout paints a solid-fill rectangle over the label's bounding box before the halo and text — geometry under the label is erased (opaque knockout colour) or dimmed (semi-transparent), so dense political borders or contour lines never bleed through. Off by default; set `LabelKnockout` to a colour — typically `Background` — to enable it. Knockout and `LabelHalo` are independent: leave the halo on for a knockout rect with an outline around the text, or null the halo for a flat rectangle.
+
+<!-- snippet: RenderLabelKnockout -->
+<a id='snippet-RenderLabelKnockout'></a>
+```cs
+// Knockout treatment: before the halo and text strokes, a solid rect of the knockout
+// colour is painted over the label's bounding box. The geometry underneath is fully
+// erased (opaque colour) or dimmed (semi-transparent), so country borders don't bleed
+// through the way they can with a halo ring. Typically set to match Background for a
+// clean masked look; pair with LabelHalo = null for a flat rectangle, or leave the
+// halo on for a knockout-rect with an outline around the text.
+var features = GeoConverter.Read("countries.geojson");
+var options = new RenderOptions
+{
+    Bounds = new(-12, 35, 32, 60),
+    Width = 800,
+    Projection = MapProjection.Lambert,
+    Background = new(245, 245, 245),
+    Fill = new(220, 220, 210),
+    Stroke = new(120, 120, 120),
+    StrokeWidth = 1,
+    Label = feature =>
+        feature.Properties.TryGetValue("NAME", out var value) ? value as string : null,
+    LabelSize = 14,
+    LabelColor = new(30, 30, 30),
+    LabelHalo = null,
+    LabelKnockout = new(245, 245, 245),
+};
+MapRenderer.RenderPng(features, "europe-knockout.png", options);
+```
+<sup><a href='/src/Tests/Snippets.cs#L296-L323' title='Snippet source file'>snippet source</a> | <a href='#snippet-RenderLabelKnockout' title='Start of snippet'>anchor</a></sup>
+<!-- endSnippet -->
+
+<img src="/src/Tests/LabelTests.Render_snapshot_label_knockout.verified.png" width="600">
+
+### LabelPriority and per-layer overrides
 
 <!-- snippet: RenderLabels -->
 <a id='snippet-RenderLabels'></a>
@@ -415,7 +490,7 @@ using (var parquet = File.Create("world.parquet"))
     GeoParquet.Write(parquet, features, ParquetCompression.Gzip, CompressionLevel.SmallestSize);
 }
 ```
-<sup><a href='/src/Tests/Snippets.cs#L267-L292' title='Snippet source file'>snippet source</a> | <a href='#snippet-Compression' title='Start of snippet'>anchor</a></sup>
+<sup><a href='/src/Tests/Snippets.cs#L330-L355' title='Snippet source file'>snippet source</a> | <a href='#snippet-Compression' title='Start of snippet'>anchor</a></sup>
 <!-- endSnippet -->
 
 

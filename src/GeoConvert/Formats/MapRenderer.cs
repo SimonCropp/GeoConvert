@@ -320,7 +320,7 @@ public static class MapRenderer
                     // anchors pass pointOffset=0 → Labeller centres the label on the anchor,
                     // which is what the interior of a feature should do.
                     var pointOffset = anchor.Kind == AnchorKind.Point ? style.PointRadius + 2 : 0;
-                    labeller.TryPlace(text, anchor.X, anchor.Y, style.Size, style.Color, style.Halo, pointOffset);
+                    labeller.TryPlace(text, anchor.X, anchor.Y, style.Size, style.Color, style.Halo, pointOffset, style.Knockout);
                 }
             }
         }
@@ -403,6 +403,7 @@ public static class MapRenderer
             overrides?.LabelSize ?? options.LabelSize,
             overrides?.LabelColor ?? options.LabelColor,
             overrides?.LabelHalo ?? options.LabelHalo,
+            overrides?.LabelKnockout ?? options.LabelKnockout,
             overrides?.LabelPriority ?? options.LabelPriority,
             (overrides?.PointRadius ?? options.PointRadius) * strokeMultiplier);
 
@@ -615,7 +616,7 @@ public static class MapRenderer
 
     readonly record struct ResolvedStyle(Rgba Stroke, Rgba Fill, double StrokeWidth, double PointRadius);
 
-    readonly record struct ResolvedLabelStyle(Func<Feature, string?>? Label, double Size, Rgba Color, Rgba? Halo, Func<Feature, double>? Priority, double PointRadius);
+    readonly record struct ResolvedLabelStyle(Func<Feature, string?>? Label, double Size, Rgba Color, Rgba? Halo, Rgba? Knockout, Func<Feature, double>? Priority, double PointRadius);
 
     // Whether a label's anchor came from a point feature (anchor IS the feature; label should sit
     // beside the dot, walking the Imhof candidate ring) or from a polygon/line interior (anchor is

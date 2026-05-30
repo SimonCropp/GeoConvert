@@ -38,11 +38,20 @@ public sealed class LayerStyle
     /// <summary>Color of the label text itself. Null inherits <see cref="RenderOptions.LabelColor"/>.</summary>
     public Rgba? LabelColor { get; set; }
 
-    /// <summary>Color of the one-pixel halo painted under label text for legibility over busy
-    /// fills. Null inherits <see cref="RenderOptions.LabelHalo"/> — which itself defaults to a
-    /// semi-transparent white, so labels stay readable out of the box. Pass
-    /// <see cref="Rgba.Transparent"/> to suppress the halo for a specific layer.</summary>
+    /// <summary>Color of the halo stroked under label text for legibility over busy fills. Null
+    /// inherits <see cref="RenderOptions.LabelHalo"/> — which itself defaults to a semi-transparent
+    /// white, so labels stay readable out of the box. Pass <see cref="Rgba.Transparent"/> to
+    /// suppress the halo for a specific layer. For a heavier "mask out the geometry under the
+    /// label" look, pair with (or replace by) <see cref="LabelKnockout"/>.</summary>
     public Rgba? LabelHalo { get; set; }
+
+    /// <summary>Solid-fill backdrop painted over the label's bounding box before the halo and
+    /// text strokes — the "knockout" alternative to a halo stroke when borders or contour lines
+    /// bleed through the ring. Null inherits <see cref="RenderOptions.LabelKnockout"/> (off by
+    /// default). Pass <see cref="Rgba.Transparent"/> to explicitly suppress the knockout for a
+    /// specific layer when the options-level default has it on. See
+    /// <see cref="RenderOptions.LabelKnockout"/> for the trade-off between knockout and halo.</summary>
+    public Rgba? LabelKnockout { get; set; }
 
     /// <summary>Per-feature priority for label collision; higher = placed first, lower scores
     /// drop on overlap. Null inherits <see cref="RenderOptions.LabelPriority"/> (which itself

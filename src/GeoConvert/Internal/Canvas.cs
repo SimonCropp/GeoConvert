@@ -129,6 +129,33 @@ sealed class Canvas : IDisposable
     }
 
     /// <summary>
+    /// Axis-aligned solid fill of the half-open rect [<paramref name="x0"/>, <paramref name="x1"/>)
+    /// × [<paramref name="y0"/>, <paramref name="y1"/>). Edges aren't antialiased — the rect is
+    /// rounded to whole pixels and every covered pixel gets a full alpha blend. Used by the label
+    /// pass to paint the "knockout" backdrop under each label's bbox; tiny enough that a
+    /// per-pixel Blend loop is fine without the FillPolygon scanline machinery.
+    /// </summary>
+    public void FillRect(double x0, double y0, double x1, double y1, Rgba color)
+    {
+        if (color.A == 0)
+        {
+            return;
+        }
+
+        var minX = Math.Max(0, (int)Math.Floor(x0));
+        var minY = Math.Max(0, (int)Math.Floor(y0));
+        var maxX = Math.Min(Width - 1, (int)Math.Ceiling(x1) - 1);
+        var maxY = Math.Min(Height - 1, (int)Math.Ceiling(y1) - 1);
+        for (var y = minY; y <= maxY; y++)
+        {
+            for (var x = minX; x <= maxX; x++)
+            {
+                Blend(x, y, color);
+            }
+        }
+    }
+
+    /// <summary>
     /// Soft-edged thick-line stroke: every pixel within <c>width/2 + 0.5</c> of the line segment
     /// gets a fractional alpha based on its perpendicular distance, blended at that coverage.
     /// Antialiased everywhere — used both for label glyph strokes and for the renderer's polygon
@@ -143,10 +170,16 @@ sealed class Canvas : IDisposable
         // ramp at the outer edge of the stroke: below this distance coverage = 1, beyond it
         // coverage = 0, with a linear fall-off in between.
         var outer = radius + 0.5;
-        var minX = (int)Math.Floor(Math.Min(x0, x1) - outer);
-        var maxX = (int)Math.Ceiling(Math.Max(x0, x1) + outer);
-        var minY = (int)Math.Floor(Math.Min(y0, y1) - outer);
-        var maxY = (int)Math.Ceiling(Math.Max(y0, y1) + outer);
+        // Clamp the iteration bounds to the canvas BEFORE the int casts. Projections like Lambert
+        // can produce wildly out-of-bounds coordinates for features far from the standard parallels
+        // (Antarctica through a northern-hemisphere cone, etc.); without the clamp the int cast
+        // overflows and/or the outer y-loop runs over billions of rows, doing per-pixel Blend
+        // rejection — effectively an infinite loop. Blend rejects out-of-canvas pixels anyway, so
+        // clamping the loop bounds is purely a fast-path with no visual change.
+        var minX = Math.Max(0, (int)Math.Floor(Math.Min(x0, x1) - outer));
+        var maxX = Math.Min(Width - 1, (int)Math.Ceiling(Math.Max(x0, x1) + outer));
+        var minY = Math.Max(0, (int)Math.Floor(Math.Min(y0, y1) - outer));
+        var maxY = Math.Min(Height - 1, (int)Math.Ceiling(Math.Max(y0, y1) + outer));
 
         var dx = x1 - x0;
         var dy = y1 - y0;
@@ -204,10 +237,12 @@ sealed class Canvas : IDisposable
                     for (var k = 0; k < 4; k++)
                     {
                         var alpha = (byte)alphaVec.GetElement(k);
-                        if (alpha != 0)
+                        if (alpha == 0)
                         {
-                            Blend(x + k, y, new(color.R, color.G, color.B, alpha));
+                            continue;
                         }
+
+                        Blend(x + k, y, color with {A = alpha});
                     }
                 }
             }
@@ -241,7 +276,7 @@ sealed class Canvas : IDisposable
                     coverage = 1;
                 }
 
-                Blend(x, y, new(color.R, color.G, color.B, (byte)(color.A * coverage)));
+                Blend(x, y, color with {A = (byte)(color.A * coverage)});
             }
         }
     }
@@ -254,10 +289,14 @@ sealed class Canvas : IDisposable
         var r = Math.Max(radius, 0.5);
         var outer = r + 0.5;
         var outerSq = outer * outer;
-        var minX = (int)Math.Floor(cx - outer);
-        var maxX = (int)Math.Ceiling(cx + outer);
-        var minY = (int)Math.Floor(cy - outer);
-        var maxY = (int)Math.Ceiling(cy + outer);
+        // Clamp to canvas before the int cast — see StrokeLine for the rationale. A non-linear
+        // projection can hand us a (cx, cy) far outside int range; the cast would otherwise
+        // overflow and the iteration would either skip entirely or, worse, loop through billions of
+        // pixels relying on the per-pixel Blend bounds check.
+        var minX = Math.Max(0, (int)Math.Floor(cx - outer));
+        var maxX = Math.Min(Width - 1, (int)Math.Ceiling(cx + outer));
+        var minY = Math.Max(0, (int)Math.Floor(cy - outer));
+        var maxY = Math.Min(Height - 1, (int)Math.Ceiling(cy + outer));
 
         var simd = Avx.IsSupported && Sse41.IsSupported;
         var cxVec = simd ? Vector256.Create(cx) : default;
@@ -305,7 +344,7 @@ sealed class Canvas : IDisposable
                         var alpha = (byte)alphaVec.GetElement(k);
                         if (alpha != 0)
                         {
-                            Blend(x + k, y, new(color.R, color.G, color.B, alpha));
+                            Blend(x + k, y, color with {A = alpha});
                         }
                     }
                 }
@@ -326,7 +365,7 @@ sealed class Canvas : IDisposable
                     coverage = 1;
                 }
 
-                Blend(x, y, new(color.R, color.G, color.B, (byte)(color.A * coverage)));
+                Blend(x, y, color with {A = (byte)(color.A * coverage)});
             }
         }
     }
@@ -370,7 +409,7 @@ sealed class Canvas : IDisposable
         // measured tipping point on a modern x86 is ~64 rows. Below threshold the serial path
         // reuses the class-level crossings list (no allocation per render); above it each thread
         // gets a fresh list via the localInit factory.
-        if (last - first + 1 >= ParallelScanlineThreshold)
+        if (last - first + 1 >= parallelScanlineThreshold)
         {
             Parallel.For(
                 first,
@@ -394,7 +433,7 @@ sealed class Canvas : IDisposable
 
     // ~64 rows is where Parallel.For's per-iter overhead breaks even with the row work on an
     // 8-core x86. Tune downward if profile shows under-utilisation at this threshold.
-    const int ParallelScanlineThreshold = 64;
+    const int parallelScanlineThreshold = 64;
 
     // Fills one scanline of a polygon: walks every ring's edges to find x-crossings at y+0.5,
     // sorts them, then fills the pixel runs between paired crossings under the even-odd rule.
@@ -410,11 +449,14 @@ sealed class Canvas : IDisposable
             {
                 var pa = ring[i];
                 var pb = ring[i + 1 == ring.Length ? 0 : i + 1];
-                if ((pa.Y <= scan && pb.Y > scan) || (pb.Y <= scan && pa.Y > scan))
+                if ((!(pa.Y <= scan) || !(pb.Y > scan)) &&
+                    (!(pb.Y <= scan) || !(pa.Y > scan)))
                 {
-                    var t = (scan - pa.Y) / (pb.Y - pa.Y);
-                    crossings.Add(pa.X + t * (pb.X - pa.X));
+                    continue;
                 }
+
+                var t = (scan - pa.Y) / (pb.Y - pa.Y);
+                crossings.Add(pa.X + t * (pb.X - pa.X));
             }
         }
 

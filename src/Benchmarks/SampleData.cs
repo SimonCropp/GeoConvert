@@ -1,5 +1,3 @@
-namespace GeoConvert.Benchmarks;
-
 static class SampleData
 {
     /// <summary>A grid of small square polygons with a few attributes — a realistic "regions" workload.</summary>

@@ -146,6 +146,8 @@ public class CliTests
     [Arguments(new[] { "a", "b", "--label-color", "FFFFFF" }, 2)]
     [Arguments(new[] { "a", "b", "--label-halo" }, 2)]
     [Arguments(new[] { "a", "b", "--label-halo", "red" }, 2)]
+    [Arguments(new[] { "a", "b", "--label-knockout" }, 2)]
+    [Arguments(new[] { "a", "b", "--label-knockout", "red" }, 2)]
     [Arguments(new[] { "--unknown" }, 2)]
     public async Task InvalidArguments(string[] args, int expected) =>
         await Assert.That(Runner.Run(args, new StringWriter(), new StringWriter())).IsEqualTo(expected);
@@ -168,6 +170,32 @@ public class CliTests
 
         await Assert.That(code).IsEqualTo(0);
         await Assert.That(File.Exists(output)).IsTrue();
+    }
+
+    [Test]
+    public async Task RendersPngWithLabelKnockout()
+    {
+        // --label-knockout accepts a hex with optional alpha; 'none' explicitly disables it.
+        // Exercises both the explicit-color and the explicit-none paths through Runner.
+        using var directory = new TempDirectory();
+        var input = Path.Combine(directory, "in.geojson");
+        await File.WriteAllTextAsync(input, GeoJson.WriteString(Sample.Polygons()));
+        var withColor = Path.Combine(directory, "color.png");
+        var withNone = Path.Combine(directory, "none.png");
+
+        var first = Runner.Run(
+            [input, withColor, "--size", "200", "--label", "name", "--label-knockout", "#FFFFFFCC"],
+            new StringWriter(),
+            new StringWriter());
+        var second = Runner.Run(
+            [input, withNone, "--size", "200", "--label", "name", "--label-knockout", "none"],
+            new StringWriter(),
+            new StringWriter());
+
+        await Assert.That(first).IsEqualTo(0);
+        await Assert.That(second).IsEqualTo(0);
+        await Assert.That(File.Exists(withColor)).IsTrue();
+        await Assert.That(File.Exists(withNone)).IsTrue();
     }
 
     [Test]

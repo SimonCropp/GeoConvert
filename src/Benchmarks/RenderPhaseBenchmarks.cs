@@ -1,12 +1,7 @@
-using System.IO.Compression;
-using System.Reflection;
-using BenchmarkDotNet.Attributes;
-
-namespace GeoConvert.Benchmarks;
-
 // Splits PNG rendering into phases so we can see whether time goes to rasterization, deflate, or
 // PNG framing. Reflection is only used in setup to grab the internal Canvas + Png.Write — the hot
 // path inside each benchmark is direct delegate / array work.
+
 [MemoryDiagnoser]
 public class RenderPhaseBenchmarks
 {

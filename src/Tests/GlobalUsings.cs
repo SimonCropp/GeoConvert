@@ -1,10 +1,13 @@
 global using System.Buffers.Binary;
+global using System.Diagnostics;
 global using System.IO.Compression;
 global using System.Text;
 global using System.Text.Json;
 global using System.Xml;
 global using GeoConvert;
 global using GeoConvert.Cli;
+global using Parquet;
+global using Parquet.Schema;
 global using TUnit.Core;
 global using TUnit.Assertions;
 global using TUnit.Assertions.Extensions;

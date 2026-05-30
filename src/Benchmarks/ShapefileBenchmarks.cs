@@ -1,7 +1,3 @@
-using BenchmarkDotNet.Attributes;
-
-namespace GeoConvert.Benchmarks;
-
 // Writes points with many attribute columns to a shapefile, exercising the .dbf field-inference path
 // (Dbf.BuildFields). With many columns the field inference dominates the small per-point geometry I/O.
 [MemoryDiagnoser]
