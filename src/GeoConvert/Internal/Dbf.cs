@@ -100,13 +100,22 @@ static class Dbf
         switch (field.Type)
         {
             case 'L':
-                return trimmed.Length == 0
-                    ? null
-                    : trimmed[0] is 'T' or 't' or 'Y' or 'y'
-                        ? true
-                        : trimmed[0] is 'F' or 'f' or 'N' or 'n'
-                            ? false
-                            : null;
+                if (trimmed.Length == 0)
+                {
+                    return null;
+                }
+
+                if (trimmed[0] is 'T' or 't' or 'Y' or 'y')
+                {
+                    return true;
+                }
+
+                if (trimmed[0] is 'F' or 'f' or 'N' or 'n')
+                {
+                    return false;
+                }
+
+                return null;
             case 'N':
             case 'F':
                 if (trimmed.Length == 0)
@@ -120,9 +129,12 @@ static class Dbf
                     return l;
                 }
 
-                return double.TryParse(trimmed, NumberStyles.Float, CultureInfo.InvariantCulture, out var d)
-                    ? d
-                    : null;
+                if (double.TryParse(trimmed, NumberStyles.Float, CultureInfo.InvariantCulture, out var d))
+                {
+                    return d;
+                }
+
+                return null;
             default:
                 return trimmed.Length == 0 ? null : trimmed;
         }

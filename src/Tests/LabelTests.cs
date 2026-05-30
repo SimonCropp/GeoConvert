@@ -209,6 +209,49 @@ public class LabelTests
     }
 
     [Test]
+    public async Task Canvas_stroke_line_with_far_out_of_canvas_endpoint_returns_promptly()
+    {
+        // Regression for the Lambert-at-Western-Europe-bounds hang: a non-linear projection can
+        // hand StrokeLine a pixel coordinate astronomically outside int range (Antarctica's
+        // latitude pushed through a northern-hemisphere LCC cone produces ρ ≈ 1e15). Without
+        // clamping the iteration bbox to the canvas up-front, the outer y-loop would iterate
+        // billions of rows relying on per-pixel Blend rejection — an effective infinite loop.
+        // With the clamp it returns in microseconds. The 1-second budget is huge relative to the
+        // real cost (<1 ms) and tiny relative to the unclamped version (>>1 minute), so even a
+        // heavily loaded CI shouldn't flake.
+        var canvas = new Canvas(32, 32, Rgba.White);
+        var sw = Stopwatch.StartNew();
+        canvas.StrokeLine(10, 10, 1e15, 1e15, width: 1, Rgba.Black);
+        await Assert.That(sw.ElapsedMilliseconds).IsLessThan(1000);
+    }
+
+    [Test]
+    public async Task Canvas_fill_disc_with_far_out_of_canvas_centre_returns_promptly()
+    {
+        // Same root cause as the StrokeLine guard above: a runaway centre coordinate would make
+        // the outer y-loop iterate over billions of out-of-canvas rows. Clamping minY/maxY to
+        // [0, Height-1] bounds the loop to the visible region.
+        var canvas = new Canvas(32, 32, Rgba.White);
+        var sw = Stopwatch.StartNew();
+        canvas.FillDisc(1e15, 1e15, radius: 2, Rgba.Black);
+        await Assert.That(sw.ElapsedMilliseconds).IsLessThan(1000);
+    }
+
+    [Test]
+    public async Task Canvas_fill_rect_with_far_out_of_canvas_corners_returns_promptly()
+    {
+        // FillRect already clipped via Math.Max/Min, but the clip step now stands on its own as a
+        // hard contract: even with both corners at 1e15, the per-row loop must stay bounded to
+        // [0, Width-1] × [0, Height-1] and return promptly. Pairs with the StrokeLine/FillDisc
+        // guards so all three rasterizer primitives are regression-locked against the same kind
+        // of projection-blow-up input.
+        var canvas = new Canvas(32, 32, Rgba.White);
+        var sw = Stopwatch.StartNew();
+        canvas.FillRect(1e15, 1e15, 2e15, 2e15, Rgba.Black);
+        await Assert.That(sw.ElapsedMilliseconds).IsLessThan(1000);
+    }
+
+    [Test]
     public async Task Canvas_fill_rect_paints_solid_block()
     {
         // Opaque fill of an interior rect leaves the centre pixel the fill colour and untouched
@@ -1020,8 +1063,7 @@ public class LabelTests
                 Fill = new(220, 220, 210),
                 Stroke = new(120, 120, 120),
                 StrokeWidth = 1,
-                Label = feature =>
-                    feature.Properties.TryGetValue("NAME", out var value) ? value as string : null,
+                Label = _ => _.Properties.TryGetValue("NAME", out var value) ? value as string : null,
                 LabelSize = 14,
                 LabelColor = new(30, 30, 30),
                 LabelHalo = new(255, 255, 255, 220),
@@ -1048,8 +1090,7 @@ public class LabelTests
                 Fill = new(220, 220, 210),
                 Stroke = new(120, 120, 120),
                 StrokeWidth = 1,
-                Label = feature =>
-                    feature.Properties.TryGetValue("NAME", out var value) ? value as string : null,
+                Label = _ => _.Properties.TryGetValue("NAME", out var value) ? value as string : null,
                 LabelSize = 14,
                 LabelColor = new(30, 30, 30),
                 LabelHalo = null,
@@ -1083,7 +1124,7 @@ public class LabelTests
             Fill = new(220, 220, 220),
             Stroke = new(80, 80, 80),
         };
-        return Verify(new MemoryStream(MapRenderer.RenderPng(features, options)), "png");
+        return Verify(MapRenderer.RenderPng(features, options), "png");
     }
 
     [Test]
@@ -1101,8 +1142,7 @@ public class LabelTests
             new Feature(new Point(0, 0), new Dictionary<string, object?> { ["name"] = "SECOND", ["rank"] = 99.0 }),
         };
         var options = LabelOptions();
-        options.LabelPriority = feature =>
-            feature.Properties.TryGetValue("rank", out var v) ? Convert.ToDouble(v) : 0;
+        options.LabelPriority = _ => _.Properties.TryGetValue("rank", out var v) ? Convert.ToDouble(v) : 0;
 
         var png = MapRenderer.RenderPng(features, options);
         var pixels = Decode(png);
