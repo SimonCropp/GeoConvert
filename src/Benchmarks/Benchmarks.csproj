@@ -16,4 +16,8 @@
     <ProjectReference Include="..\GeoConvert\GeoConvert.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="SampleData\*.fgb" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
