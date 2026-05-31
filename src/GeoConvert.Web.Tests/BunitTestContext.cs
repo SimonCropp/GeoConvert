@@ -1,0 +1,5 @@
+public class BunitTestContext : BunitContext
+{
+    public BunitTestContext() =>
+        Services.AddScoped<FileDownloadService>();
+}

@@ -1,0 +1,15 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<gpx version="1.1" creator="GeoConvert" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk>
+    <name>Land</name>
+    <trkseg>
+      <trkpt lat="0" lon="0" />
+      <trkpt lat="0" lon="10" />
+      <trkpt lat="8" lon="5" />
+      <trkpt lat="0" lon="0" />
+    </trkseg>
+  </trk>
+  <wpt lat="3" lon="5">
+    <name>City</name>
+  </wpt>
+</gpx>

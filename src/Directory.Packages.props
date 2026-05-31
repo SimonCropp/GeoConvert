@@ -16,5 +16,11 @@
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
     <!-- Test-only: cross-validates the hand-rolled GeoParquet codec against an independent reader/writer. -->
     <PackageVersion Include="Parquet.Net" Version="6.0.3" />
+    <!-- GeoConvert.Web (Blazor WASM) + GeoConvert.Web.Tests (TUnit / bunit / Playwright). -->
+    <PackageVersion Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.8" />
+    <PackageVersion Include="bunit" Version="2.7.2" />
+    <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.8" />
+    <PackageVersion Include="Microsoft.Playwright" Version="1.60.0" />
+    <PackageVersion Include="Verify.Playwright" Version="3.1.0" />
   </ItemGroup>
 </Project>

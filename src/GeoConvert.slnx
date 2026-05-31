@@ -1,11 +1,14 @@
 <Solution>
   <Project Path="GeoConvert/GeoConvert.csproj" />
   <Project Path="GeoConvert.Cli/GeoConvert.Cli.csproj" />
+  <Project Path="GeoConvert.Web/GeoConvert.Web.csproj" />
+  <Project Path="GeoConvert.Web.Tests/GeoConvert.Web.Tests.csproj" />
   <Project Path="Benchmarks/Benchmarks.csproj" />
   <Project Path="Tests/Tests.csproj" />
   <Folder Name="/SolutionItems/">
     <File Path="../readme.md" />
     <File Path="appveyor.yml" />
+    <File Path="coverage-check.ps1" />
     <File Path="Directory.Build.props" />
     <File Path="Directory.Packages.props" />
     <File Path="mdsnippets.json" />
