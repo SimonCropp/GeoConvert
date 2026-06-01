@@ -34,4 +34,21 @@ public class DetectFormatTests
 
         await Assert.That(threw).IsTrue();
     }
+
+    [Test]
+    public async Task TryDetectKnown()
+    {
+        var detected = GeoConverter.TryDetectFormat("a.kml", out var format);
+
+        await Assert.That(detected).IsTrue();
+        await Assert.That(format).IsEqualTo(GeoFormat.Kml);
+    }
+
+    [Test]
+    public async Task TryDetectUnknown()
+    {
+        var detected = GeoConverter.TryDetectFormat("data.unknown", out _);
+
+        await Assert.That(detected).IsFalse();
+    }
 }

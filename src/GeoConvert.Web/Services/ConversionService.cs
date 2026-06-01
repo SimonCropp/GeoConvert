@@ -40,12 +40,7 @@ public static class ConversionService
     /// </summary>
     public static FormatInfo? DetectReadable(string fileName)
     {
-        GeoFormat format;
-        try
-        {
-            format = GeoConverter.DetectFormat(fileName);
-        }
-        catch (GeoConvertException)
+        if (!GeoConverter.TryDetectFormat(fileName, out var format))
         {
             return null;
         }

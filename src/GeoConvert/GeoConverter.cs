@@ -6,28 +6,69 @@ namespace GeoConvert;
 /// </summary>
 public static class GeoConverter
 {
-    /// <summary>Infers the format from a file path's extension.</summary>
+    /// <summary>Infers the format from a file path's extension, throwing if the extension is unrecognized.</summary>
     public static GeoFormat DetectFormat(string path)
     {
-        var extension = Path.GetExtension(path).ToLowerInvariant();
-        return extension switch
+        if (TryDetectFormat(path, out var format))
         {
-            ".geojson" => GeoFormat.GeoJson,
-            ".json" => GeoFormat.GeoJson,
-            ".topojson" => GeoFormat.TopoJson,
-            ".shp" => GeoFormat.Shapefile,
-            ".fgb" => GeoFormat.FlatGeobuf,
-            ".kml" => GeoFormat.Kml,
-            ".kmz" => GeoFormat.Kmz,
-            ".gpx" => GeoFormat.Gpx,
-            ".wkt" => GeoFormat.Wkt,
-            ".wkb" => GeoFormat.Wkb,
-            ".csv" => GeoFormat.Csv,
-            ".parquet" => GeoFormat.GeoParquet,
-            ".geoparquet" => GeoFormat.GeoParquet,
-            ".png" => GeoFormat.Png,
-            _ => throw new GeoConvertException($"Cannot determine a map format from extension '{extension}'."),
-        };
+            return format;
+        }
+
+        var extension = Path.GetExtension(path).ToLowerInvariant();
+        throw new GeoConvertException($"Cannot determine a map format from extension '{extension}'.");
+    }
+
+    /// <summary>
+    /// Tries to infer the format from a file path's extension. Returns false (rather than throwing) when
+    /// the extension is unrecognized, so callers can treat "unsupported file" as an ordinary outcome.
+    /// </summary>
+    public static bool TryDetectFormat(string path, out GeoFormat format)
+    {
+        var extension = Path.GetExtension(path).ToLowerInvariant();
+        switch (extension)
+        {
+            case ".geojson":
+            case ".json":
+                format = GeoFormat.GeoJson;
+                return true;
+            case ".topojson":
+                format = GeoFormat.TopoJson;
+                return true;
+            case ".shp":
+                format = GeoFormat.Shapefile;
+                return true;
+            case ".fgb":
+                format = GeoFormat.FlatGeobuf;
+                return true;
+            case ".kml":
+                format = GeoFormat.Kml;
+                return true;
+            case ".kmz":
+                format = GeoFormat.Kmz;
+                return true;
+            case ".gpx":
+                format = GeoFormat.Gpx;
+                return true;
+            case ".wkt":
+                format = GeoFormat.Wkt;
+                return true;
+            case ".wkb":
+                format = GeoFormat.Wkb;
+                return true;
+            case ".csv":
+                format = GeoFormat.Csv;
+                return true;
+            case ".parquet":
+            case ".geoparquet":
+                format = GeoFormat.GeoParquet;
+                return true;
+            case ".png":
+                format = GeoFormat.Png;
+                return true;
+            default:
+                format = default;
+                return false;
+        }
     }
 
     /// <summary>Reads a file, detecting the format from its extension.</summary>
