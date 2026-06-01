@@ -11,6 +11,7 @@ global using Microsoft.Extensions.FileProviders;
 global using Microsoft.Extensions.Logging;
 global using Microsoft.JSInterop;
 global using Microsoft.Playwright;
+global using Bunit;
 global using TUnit.Core;
 global using TUnit.Assertions;
 global using TUnit.Assertions.Extensions;
