@@ -6,7 +6,7 @@
 
 Convert maps between geospatial formats, with **no third-party dependencies** — only the .NET base class libraries (`System.Text.Json`, `System.Xml`, `System.IO.Compression`). It can also render a bounding box to a PNG image. Ships as a library and a `geoconvert` command line tool.
 
-**[Try it in the browser →](https://papyrine.github.io/GeoConvert/)** — a Blazor WebAssembly app that converts maps entirely client-side (no data leaves your device).
+**[Try it in the browser →](https://papyrine.github.io/GeoConvert/)** — a Blazor WebAssembly app that converts maps entirely client-side (no data leaves the local device).
 
 
 ## Supported formats
