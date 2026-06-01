@@ -8,7 +8,7 @@
     <PackageVersion Include="Polyfill" Version="10.7.1" />
     <PackageVersion Include="System.IO.Hashing" Version="10.0.8" />
     <PackageVersion Include="ProjectFiles" Version="1.2.0" />
-    <PackageVersion Include="TUnit" Version="1.48.0" />
+    <PackageVersion Include="TUnit" Version="1.48.6" />
     <PackageVersion Include="MarkdownSnippets.MsBuild" Version="28.3.0" />
     <PackageVersion Include="Verify" Version="31.19.0" />
     <PackageVersion Include="Verify.TUnit" Version="31.19.0" />
