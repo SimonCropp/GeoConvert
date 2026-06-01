@@ -707,7 +707,7 @@ public static class MapRenderer
             return ToPixelFromProjected(projectedX, projectedY);
         }
 
-        public (double X, double Y)[] ToPixels(IReadOnlyList<Position> positions)
+        (double X, double Y)[] ToPixels(IReadOnlyList<Position> positions)
         {
             var result = new (double X, double Y)[positions.Count];
             for (var i = 0; i < positions.Count; i++)
