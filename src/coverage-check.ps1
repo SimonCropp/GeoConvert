@@ -25,7 +25,9 @@ foreach ($package in $coverage.coverage.packages.package)
         }
 
         # Normalize separators and make the path relative to src/. Microsoft coverage emits absolute
-        # paths containing /src/; coverlet emits paths already relative to its <source> root (src/).
+        # paths containing /src/; coverlet on a local build emits absolute paths too, and on a CI
+        # (deterministic) build with --use-source-link emits raw.githubusercontent URLs. All three
+        # contain a single /src/ segment, so stripping through it yields the repo-relative path.
         $relative = ($file -replace '\\', '/') -replace '^.*/src/', ''
 
         # Scope to the shipped projects (GeoConvert + GeoConvert.Cli); excludes the test project etc.
