@@ -172,4 +172,14 @@ public sealed class RenderOptions
     /// <see cref="CompressionLevel.SmallestSize"/> when output size matters more than CPU.
     /// </summary>
     public CompressionLevel Compression { get; set; } = CompressionLevel.Optimal;
+
+    /// <summary>
+    /// Optional progress sink notified as features are rasterised. Reports under
+    /// <see cref="ProgressPhase.Writing"/> with <see cref="ConvertProgress.FeatureTotal"/> set to the
+    /// total feature count across every layer, incrementing once per feature during the geometry pass
+    /// (the label pass doesn't re-report). <see cref="ConvertProgress.Bytes"/> tracks the encoded PNG as
+    /// it is written. Leave null to skip progress reporting. <see cref="GeoConverter"/> sets this
+    /// automatically when a PNG conversion is given a progress sink.
+    /// </summary>
+    public IProgress<ConvertProgress>? Progress { get; set; }
 }

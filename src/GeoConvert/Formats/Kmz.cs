@@ -11,7 +11,10 @@ namespace GeoConvert;
 /// </summary>
 public static class Kmz
 {
-    public static FeatureCollection Read(Stream stream)
+    public static FeatureCollection Read(Stream stream) =>
+        Read(stream, null);
+
+    internal static FeatureCollection Read(Stream stream, ProgressReporter? progress)
     {
         using var archive = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
         var kmlEntries = archive.Entries
@@ -26,14 +29,14 @@ public static class Kmz
         if (kmlEntries.Count == 1)
         {
             using var entryStream = kmlEntries[0].Open();
-            return Kml.Read(entryStream);
+            return Kml.Read(entryStream, progress);
         }
 
         var root = new FeatureCollection();
         foreach (var entry in kmlEntries)
         {
             using var entryStream = entry.Open();
-            var child = Kml.Read(entryStream);
+            var child = Kml.Read(entryStream, progress);
             // A KML <Document>'s name (if present) wins; otherwise fall back to the archive entry's filename.
             child.Name ??= Path.GetFileNameWithoutExtension(entry.FullName);
             root.Children.Add(child);
@@ -45,13 +48,23 @@ public static class Kmz
     public static void Write(
         Stream stream,
         FeatureCollection features,
-        CompressionLevel compression = CompressionLevel.Optimal)
+        CompressionLevel compression = CompressionLevel.Optimal) =>
+        Write(stream, features, compression, null);
+
+    internal static void Write(Stream stream, FeatureCollection features, ProgressReporter? progress) =>
+        Write(stream, features, CompressionLevel.Optimal, progress);
+
+    internal static void Write(
+        Stream stream,
+        FeatureCollection features,
+        CompressionLevel compression,
+        ProgressReporter? progress)
     {
         using var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true);
         var entry = archive.CreateEntry("doc.kml", compression);
         // A fixed timestamp keeps the archive byte-for-byte reproducible.
         entry.LastWriteTime = new(1980, 1, 1, 0, 0, 0, TimeSpan.Zero);
         using var entryStream = entry.Open();
-        Kml.Write(entryStream, features);
+        Kml.Write(entryStream, features, progress);
     }
 }

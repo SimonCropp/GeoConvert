@@ -71,35 +71,53 @@ public static class GeoConverter
         }
     }
 
-    /// <summary>Reads a file, detecting the format from its extension.</summary>
-    public static FeatureCollection Read(string path) =>
-        Read(path, DetectFormat(path));
+    /// <summary>
+    /// Reads a file, detecting the format from its extension. Pass <paramref name="progress"/> to be
+    /// notified as the source is decoded — see <see cref="ConvertProgress"/>.
+    /// </summary>
+    public static FeatureCollection Read(string path, IProgress<ConvertProgress>? progress = null) =>
+        Read(path, DetectFormat(path), progress);
 
-    public static FeatureCollection Read(string path, GeoFormat format)
+    public static FeatureCollection Read(string path, GeoFormat format, IProgress<ConvertProgress>? progress = null)
     {
         if (format == GeoFormat.Shapefile)
         {
-            return Shapefile.Read(path);
+            // Shapefile is path-based — it opens its own .shp/.shx/.dbf streams, so it builds its own
+            // progress reporter rather than reading through a facade-wrapped stream.
+            return Shapefile.Read(path, progress);
         }
 
         using var stream = File.OpenRead(path);
-        return Read(stream, format);
+        return Read(stream, format, progress);
     }
 
     /// <summary>Reads from a stream. <see cref="GeoFormat.Shapefile"/> is not supported here (use a path).</summary>
-    public static FeatureCollection Read(Stream stream, GeoFormat format) =>
+    public static FeatureCollection Read(Stream stream, GeoFormat format, IProgress<ConvertProgress>? progress = null)
+    {
+        if (progress == null)
+        {
+            return ReadFrom(stream, format, null);
+        }
+
+        // ByteTotal is the stream length when it's seekable; FeatureTotal is unknown until the source is
+        // fully parsed, so it stays null for the whole read phase.
+        var reporter = new ProgressReporter(progress, ProgressPhase.Reading, null, stream.CanSeek ? stream.Length : null);
+        return ReadFrom(new ProgressStream(stream, reporter), format, reporter);
+    }
+
+    static FeatureCollection ReadFrom(Stream stream, GeoFormat format, ProgressReporter? progress) =>
         format switch
         {
-            GeoFormat.GeoJson => GeoJson.Read(stream),
-            GeoFormat.TopoJson => TopoJson.Read(stream),
-            GeoFormat.FlatGeobuf => FlatGeobuf.Read(stream),
-            GeoFormat.Kml => Kml.Read(stream),
-            GeoFormat.Kmz => Kmz.Read(stream),
-            GeoFormat.Gpx => Gpx.Read(stream),
-            GeoFormat.Wkt => Wkt.Read(stream),
-            GeoFormat.Wkb => Wkb.Read(stream),
-            GeoFormat.Csv => Csv.Read(stream),
-            GeoFormat.GeoParquet => GeoParquet.Read(stream),
+            GeoFormat.GeoJson => GeoJson.Read(stream, progress),
+            GeoFormat.TopoJson => TopoJson.Read(stream, progress),
+            GeoFormat.FlatGeobuf => FlatGeobuf.Read(stream, progress),
+            GeoFormat.Kml => Kml.Read(stream, progress),
+            GeoFormat.Kmz => Kmz.Read(stream, progress),
+            GeoFormat.Gpx => Gpx.Read(stream, progress),
+            GeoFormat.Wkt => Wkt.Read(stream, progress),
+            GeoFormat.Wkb => Wkb.Read(stream, progress),
+            GeoFormat.Csv => Csv.Read(stream, progress),
+            GeoFormat.GeoParquet => GeoParquet.Read(stream, progress),
             GeoFormat.Shapefile => throw new GeoConvertException(
                 "Shapefiles span multiple files; read them with a file path, not a stream."),
             GeoFormat.Png => throw new GeoConvertException(
@@ -107,59 +125,86 @@ public static class GeoConverter
             _ => throw new GeoConvertException($"Unsupported format {format}."),
         };
 
-    /// <summary>Writes a file, detecting the format from its extension.</summary>
-    public static void Write(FeatureCollection features, string path) =>
-        Write(features, path, DetectFormat(path));
+    /// <summary>
+    /// Writes a file, detecting the format from its extension. Pass <paramref name="progress"/> to be
+    /// notified as the output is encoded — see <see cref="ConvertProgress"/>.
+    /// </summary>
+    public static void Write(FeatureCollection features, string path, IProgress<ConvertProgress>? progress = null) =>
+        Write(features, path, DetectFormat(path), progress);
 
-    public static void Write(FeatureCollection features, string path, GeoFormat format)
+    public static void Write(FeatureCollection features, string path, GeoFormat format, IProgress<ConvertProgress>? progress = null)
     {
         if (format == GeoFormat.Shapefile)
         {
-            Shapefile.Write(path, features);
+            // Shapefile is path-based — it writes its own .shp/.shx/.dbf streams, so it builds its own
+            // progress reporter rather than writing through a facade-wrapped stream.
+            Shapefile.Write(path, features, progress);
             return;
         }
 
         using var stream = File.Create(path);
-        Write(features, stream, format);
+        Write(features, stream, format, progress);
     }
 
     /// <summary>Writes to a stream. <see cref="GeoFormat.Shapefile"/> is not supported here (use a path).</summary>
-    public static void Write(FeatureCollection features, Stream stream, GeoFormat format)
+    public static void Write(FeatureCollection features, Stream stream, GeoFormat format, IProgress<ConvertProgress>? progress = null)
+    {
+        if (progress == null)
+        {
+            WriteTo(features, stream, format, null);
+            return;
+        }
+
+        // FeatureTotal is known up front (the whole collection, children included); ByteTotal isn't —
+        // the encoded size isn't known until the write finishes — so it stays null for the write phase.
+        var reporter = new ProgressReporter(progress, ProgressPhase.Writing, features.Count, null);
+        WriteTo(features, new ProgressStream(stream, reporter), format, reporter);
+    }
+
+    static void WriteTo(FeatureCollection features, Stream stream, GeoFormat format, ProgressReporter? progress)
     {
         switch (format)
         {
             case GeoFormat.GeoJson:
-                GeoJson.Write(stream, features);
+                GeoJson.Write(stream, features, progress);
                 break;
             case GeoFormat.TopoJson:
-                TopoJson.Write(stream, features);
+                TopoJson.Write(stream, features, progress);
                 break;
             case GeoFormat.FlatGeobuf:
-                FlatGeobuf.Write(stream, features);
+                FlatGeobuf.Write(stream, features, progress);
                 break;
             case GeoFormat.Kml:
-                Kml.Write(stream, features);
+                Kml.Write(stream, features, progress);
                 break;
             case GeoFormat.Kmz:
-                Kmz.Write(stream, features);
+                Kmz.Write(stream, features, progress);
                 break;
             case GeoFormat.Gpx:
-                Gpx.Write(stream, features);
+                Gpx.Write(stream, features, progress);
                 break;
             case GeoFormat.Wkt:
-                Wkt.Write(stream, features);
+                Wkt.Write(stream, features, progress);
                 break;
             case GeoFormat.Wkb:
-                Wkb.Write(stream, features);
+                Wkb.Write(stream, features, progress);
                 break;
             case GeoFormat.Csv:
-                Csv.Write(stream, features);
+                Csv.Write(stream, features, progress);
                 break;
             case GeoFormat.GeoParquet:
-                GeoParquet.Write(stream, features);
+                GeoParquet.Write(stream, features, progress);
                 break;
             case GeoFormat.Png:
-                MapRenderer.RenderPng(features, stream);
+                if (progress == null)
+                {
+                    MapRenderer.RenderPng(features, stream);
+                }
+                else
+                {
+                    MapRenderer.RenderPng(features, stream, progress);
+                }
+
                 break;
             case GeoFormat.Shapefile:
                 throw new GeoConvertException(
@@ -169,10 +214,14 @@ public static class GeoConverter
         }
     }
 
-    /// <summary>Converts a file to another file, detecting both formats from their extensions.</summary>
-    public static void Convert(string inputPath, string outputPath) =>
-        Convert(inputPath, DetectFormat(inputPath), outputPath, DetectFormat(outputPath));
+    /// <summary>
+    /// Converts a file to another file, detecting both formats from their extensions. When
+    /// <paramref name="progress"/> is supplied the read half reports under
+    /// <see cref="ProgressPhase.Reading"/> and the write half under <see cref="ProgressPhase.Writing"/>.
+    /// </summary>
+    public static void Convert(string inputPath, string outputPath, IProgress<ConvertProgress>? progress = null) =>
+        Convert(inputPath, DetectFormat(inputPath), outputPath, DetectFormat(outputPath), progress);
 
-    public static void Convert(string inputPath, GeoFormat from, string outputPath, GeoFormat to) =>
-        Write(Read(inputPath, from), outputPath, to);
+    public static void Convert(string inputPath, GeoFormat from, string outputPath, GeoFormat to, IProgress<ConvertProgress>? progress = null) =>
+        Write(Read(inputPath, from, progress), outputPath, to, progress);
 }

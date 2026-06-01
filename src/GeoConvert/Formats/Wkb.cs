@@ -42,7 +42,10 @@ public static class Wkb
         }
     }
 
-    public static FeatureCollection Read(Stream stream)
+    public static FeatureCollection Read(Stream stream) =>
+        Read(stream, null);
+
+    internal static FeatureCollection Read(Stream stream, ProgressReporter? progress)
     {
         using var memory = new MemoryStream();
         stream.CopyTo(memory);
@@ -53,6 +56,7 @@ public static class Wkb
             while (!cursor.AtEnd)
             {
                 collection.Add(new Feature(ReadGeometry(ref cursor)));
+                progress?.Feature();
             }
 
             return collection;
@@ -214,7 +218,10 @@ public static class Wkb
         return new(x, y, z, m);
     }
 
-    public static void Write(Stream stream, FeatureCollection collection)
+    public static void Write(Stream stream, FeatureCollection collection) =>
+        Write(stream, collection, null);
+
+    internal static void Write(Stream stream, FeatureCollection collection, ProgressReporter? progress)
     {
         using var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: true);
         foreach (var feature in collection)
@@ -223,6 +230,8 @@ public static class Wkb
             {
                 WriteGeometry(writer, geometry);
             }
+
+            progress?.Feature();
         }
     }
 

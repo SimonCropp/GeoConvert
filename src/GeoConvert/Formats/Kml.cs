@@ -14,7 +14,10 @@ public static class Kml
 {
     const string ns = "http://www.opengis.net/kml/2.2";
 
-    public static FeatureCollection Read(Stream stream)
+    public static FeatureCollection Read(Stream stream) =>
+        Read(stream, null);
+
+    internal static FeatureCollection Read(Stream stream, ProgressReporter? progress)
     {
         try
         {
@@ -22,7 +25,7 @@ public static class Kml
             var features = new FeatureCollection();
             reader.MoveToContent();
             // The first <Document> we encounter populates the root; nested Documents become child layers.
-            ScanContainer(reader, features, isRoot: true);
+            ScanContainer(reader, features, isRoot: true, progress);
             return features;
         }
         catch (GeoConvertException)
@@ -37,26 +40,27 @@ public static class Kml
 
     // Reads the children of an element (<kml>, <Document>, or <Folder>), populating `target` with
     // its placemarks, folders, name and description.
-    static void ScanContainer(XmlReader reader, FeatureCollection target, bool isRoot) =>
+    static void ScanContainer(XmlReader reader, FeatureCollection target, bool isRoot, ProgressReporter? progress) =>
         Xml.ReadChildren(reader, () =>
         {
             switch (reader.LocalName)
             {
                 case "Placemark":
                     target.Add(ReadPlacemark(reader));
+                    progress?.Feature();
                     break;
                 case "Folder":
-                    target.Children.Add(ReadContainer(reader));
+                    target.Children.Add(ReadContainer(reader, progress));
                     break;
                 case "Document":
                     if (isRoot)
                     {
                         // First Document under <kml> is the root layer itself, not a child.
-                        ScanContainer(reader, target, isRoot: false);
+                        ScanContainer(reader, target, isRoot: false, progress);
                     }
                     else
                     {
-                        target.Children.Add(ReadContainer(reader));
+                        target.Children.Add(ReadContainer(reader, progress));
                     }
 
                     break;
@@ -72,10 +76,10 @@ public static class Kml
             }
         });
 
-    static FeatureCollection ReadContainer(XmlReader reader)
+    static FeatureCollection ReadContainer(XmlReader reader, ProgressReporter? progress)
     {
         var features = new FeatureCollection();
-        ScanContainer(reader, features, isRoot: false);
+        ScanContainer(reader, features, isRoot: false, progress);
         return features;
     }
 
@@ -277,19 +281,22 @@ public static class Kml
         return value;
     }
 
-    public static void Write(Stream stream, FeatureCollection collection)
+    public static void Write(Stream stream, FeatureCollection collection) =>
+        Write(stream, collection, null);
+
+    internal static void Write(Stream stream, FeatureCollection collection, ProgressReporter? progress)
     {
         using var writer = Xml.CreateWriter(stream);
         writer.WriteStartDocument();
         writer.WriteStartElement("kml", ns);
         writer.WriteStartElement("Document", ns);
-        WriteContainerBody(writer, collection);
+        WriteContainerBody(writer, collection, progress);
         writer.WriteEndElement();
         writer.WriteEndElement();
         writer.WriteEndDocument();
     }
 
-    static void WriteContainerBody(XmlWriter writer, FeatureCollection collection)
+    static void WriteContainerBody(XmlWriter writer, FeatureCollection collection, ProgressReporter? progress)
     {
         if (collection.Name is { } name)
         {
@@ -304,12 +311,13 @@ public static class Kml
         foreach (var feature in collection.Features)
         {
             WritePlacemark(writer, feature);
+            progress?.Feature();
         }
 
         foreach (var child in collection.Children)
         {
             writer.WriteStartElement("Folder", ns);
-            WriteContainerBody(writer, child);
+            WriteContainerBody(writer, child, progress);
             writer.WriteEndElement();
         }
     }

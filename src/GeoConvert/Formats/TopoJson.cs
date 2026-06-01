@@ -16,19 +16,22 @@ public static class TopoJson
         Indented = true
     };
 
-    public static FeatureCollection Read(Stream stream)
+    public static FeatureCollection Read(Stream stream) =>
+        Read(stream, null);
+
+    internal static FeatureCollection Read(Stream stream, ProgressReporter? progress)
     {
         using var document = JsonDocument.Parse(stream);
-        return Read(document.RootElement);
+        return Read(document.RootElement, progress);
     }
 
     public static FeatureCollection ReadString(string text)
     {
         using var document = JsonDocument.Parse(text);
-        return Read(document.RootElement);
+        return Read(document.RootElement, null);
     }
 
-    static FeatureCollection Read(JsonElement root)
+    static FeatureCollection Read(JsonElement root, ProgressReporter? progress)
     {
         double[]? scale = null;
         double[]? translate = null;
@@ -47,7 +50,7 @@ public static class TopoJson
             {
                 Name = entry.Name
             };
-            ReadObject(entry.Value, arcs, scale, translate, layer);
+            ReadObject(entry.Value, arcs, scale, translate, layer, progress);
             collection.Children.Add(layer);
         }
 
@@ -59,13 +62,14 @@ public static class TopoJson
         List<List<Position>> arcs,
         double[]? scale,
         double[]? translate,
-        FeatureCollection collection)
+        FeatureCollection collection,
+        ProgressReporter? progress)
     {
         if (element.GetProperty("type").GetString() == "GeometryCollection")
         {
             foreach (var child in element.GetProperty("geometries").EnumerateArray())
             {
-                ReadObject(child, arcs, scale, translate, collection);
+                ReadObject(child, arcs, scale, translate, collection, progress);
             }
 
             return;
@@ -87,6 +91,7 @@ public static class TopoJson
         }
 
         collection.Add(feature);
+        progress?.Feature();
     }
 
     static Geometry ReadGeometry(
@@ -247,7 +252,10 @@ public static class TopoJson
         return [a, b];
     }
 
-    public static void Write(Stream stream, FeatureCollection collection)
+    public static void Write(Stream stream, FeatureCollection collection) =>
+        Write(stream, collection, null);
+
+    internal static void Write(Stream stream, FeatureCollection collection, ProgressReporter? progress)
     {
         var arcs = new List<IReadOnlyList<Position>>();
 
@@ -259,14 +267,14 @@ public static class TopoJson
         if (collection.Children.Count == 0)
         {
             // Flat input: emit a single "data" object with the root's features.
-            WriteObjectEntry(writer, "data", collection.Features, arcs);
+            WriteObjectEntry(writer, "data", collection.Features, arcs, progress);
         }
         else
         {
             // Layered input: one object per child. Root-level features (if any) go into "data".
             if (collection.Features.Count > 0)
             {
-                WriteObjectEntry(writer, "data", collection.Features, arcs);
+                WriteObjectEntry(writer, "data", collection.Features, arcs, progress);
             }
 
             var index = 0;
@@ -284,7 +292,7 @@ public static class TopoJson
 
                 // Each child layer is emitted as a flat GeometryCollection of its features
                 // (recursively flattening grandchildren — TopoJSON's object dict is single-level).
-                WriteObjectEntry(writer, unique, child, arcs);
+                WriteObjectEntry(writer, unique, child, arcs, progress);
                 index++;
             }
         }
@@ -316,7 +324,8 @@ public static class TopoJson
         Utf8JsonWriter writer,
         string key,
         IEnumerable<Feature> features,
-        List<IReadOnlyList<Position>> arcs)
+        List<IReadOnlyList<Position>> arcs,
+        ProgressReporter? progress)
     {
         writer.WriteStartObject(key);
         writer.WriteString("type", "GeometryCollection");
@@ -324,6 +333,7 @@ public static class TopoJson
         foreach (var feature in features)
         {
             WriteGeometryObject(writer, feature, arcs);
+            progress?.Feature();
         }
 
         writer.WriteEndArray();
@@ -333,7 +343,7 @@ public static class TopoJson
     public static string WriteString(FeatureCollection collection)
     {
         using var stream = new MemoryStream();
-        Write(stream, collection);
+        Write(stream, collection, null);
         return Encoding.UTF8.GetString(stream.ToArray());
     }
 

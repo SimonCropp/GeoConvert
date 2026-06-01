@@ -7,13 +7,19 @@ namespace GeoConvert;
 /// </summary>
 public static class Wkt
 {
-    public static FeatureCollection Read(Stream stream)
+    public static FeatureCollection Read(Stream stream) =>
+        Read(stream, null);
+
+    internal static FeatureCollection Read(Stream stream, ProgressReporter? progress)
     {
         using var reader = new StreamReader(stream, Encoding.UTF8, true, 1024, leaveOpen: true);
-        return ReadString(reader.ReadToEnd());
+        return ReadString(reader.ReadToEnd(), progress);
     }
 
-    public static FeatureCollection ReadString(string text)
+    public static FeatureCollection ReadString(string text) =>
+        ReadString(text, null);
+
+    internal static FeatureCollection ReadString(string text, ProgressReporter? progress)
     {
         var collection = new FeatureCollection();
         foreach (var line in text.Split('\n'))
@@ -25,6 +31,7 @@ public static class Wkt
             }
 
             collection.Add(new Feature(ParseGeometry(trimmed)));
+            progress?.Feature();
         }
 
         return collection;
@@ -37,13 +44,19 @@ public static class Wkt
         return parser.ParseGeometry();
     }
 
-    public static void Write(Stream stream, FeatureCollection collection)
+    public static void Write(Stream stream, FeatureCollection collection) =>
+        Write(stream, collection, null);
+
+    internal static void Write(Stream stream, FeatureCollection collection, ProgressReporter? progress)
     {
-        var bytes = Encoding.UTF8.GetBytes(WriteString(collection));
+        var bytes = Encoding.UTF8.GetBytes(WriteString(collection, progress));
         stream.Write(bytes, 0, bytes.Length);
     }
 
-    public static string WriteString(FeatureCollection collection)
+    public static string WriteString(FeatureCollection collection) =>
+        WriteString(collection, null);
+
+    internal static string WriteString(FeatureCollection collection, ProgressReporter? progress)
     {
         var builder = new StringBuilder();
         foreach (var feature in collection)
@@ -53,6 +66,8 @@ public static class Wkt
                 builder.Append(Format(geometry));
                 builder.Append('\n');
             }
+
+            progress?.Feature();
         }
 
         return builder.ToString();

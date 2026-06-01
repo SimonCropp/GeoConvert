@@ -16,11 +16,20 @@ public static class Shapefile
     const int version = 1000;
     const int headerLength = 100;
 
-    public static FeatureCollection Read(string path)
+    public static FeatureCollection Read(string path) =>
+        Read(path, null);
+
+    internal static FeatureCollection Read(string path, IProgress<ConvertProgress>? progress)
     {
+        // Shapefile is path-based and spans multiple files, so byte-level progress isn't tracked here;
+        // FeatureTotal is unknown until the .shp is parsed (read phase), so the report carries a feature
+        // count alone (an indeterminate read), while the write phase gets a real fraction from Count.
+        var reporter = progress == null
+            ? null
+            : new ProgressReporter(progress, ProgressPhase.Reading, null, null);
         if (Directory.Exists(path))
         {
-            return ReadDirectory(path);
+            return ReadDirectory(path, reporter);
         }
 
         var encoding = ResolveEncoding(path);
@@ -29,13 +38,13 @@ public static class Shapefile
         if (File.Exists(dbfPath))
         {
             using var dbf = File.OpenRead(dbfPath);
-            return Read(shp, dbf, encoding);
+            return Read(shp, dbf, encoding, reporter);
         }
 
-        return Read(shp, null, encoding);
+        return Read(shp, null, encoding, reporter);
     }
 
-    static FeatureCollection ReadDirectory(string directory)
+    static FeatureCollection ReadDirectory(string directory, ProgressReporter? progress)
     {
         var root = new FeatureCollection();
         // Ordered so the child sequence is stable across filesystems / repeated runs.
@@ -50,11 +59,11 @@ public static class Shapefile
             if (File.Exists(dbfPath))
             {
                 using var dbf = File.OpenRead(dbfPath);
-                child = Read(shp, dbf, encoding);
+                child = Read(shp, dbf, encoding, progress);
             }
             else
             {
-                child = Read(shp, null, encoding);
+                child = Read(shp, null, encoding, progress);
             }
 
             child.Name = Path.GetFileNameWithoutExtension(shpPath);
@@ -66,10 +75,13 @@ public static class Shapefile
 
     /// <summary>Reads geometry and attributes, decoding the .dbf as Latin-1.</summary>
     public static FeatureCollection Read(Stream shp, Stream? dbf) =>
-        Read(shp, dbf, Encoding.Latin1);
+        Read(shp, dbf, Encoding.Latin1, null);
 
     /// <summary>Reads geometry and attributes, decoding the .dbf text with <paramref name="encoding"/>.</summary>
-    public static FeatureCollection Read(Stream shp, Stream? dbf, Encoding encoding)
+    public static FeatureCollection Read(Stream shp, Stream? dbf, Encoding encoding) =>
+        Read(shp, dbf, encoding, null);
+
+    internal static FeatureCollection Read(Stream shp, Stream? dbf, Encoding encoding, ProgressReporter? progress)
     {
         var geometries = ReadGeometries(shp);
         var collection = new FeatureCollection();
@@ -79,6 +91,7 @@ public static class Shapefile
             foreach (var geometry in geometries)
             {
                 collection.Add(new Feature(geometry));
+                progress?.Feature();
             }
 
             return collection;
@@ -98,6 +111,7 @@ public static class Shapefile
             }
 
             collection.Add(feature);
+            progress?.Feature();
         }
 
         return collection;
@@ -262,13 +276,27 @@ public static class Shapefile
         return new(x, y);
     }
 
-    public static void Write(string path, FeatureCollection collection)
+    public static void Write(string path, FeatureCollection collection) =>
+        Write(path, collection, null);
+
+    internal static void Write(string path, FeatureCollection collection, IProgress<ConvertProgress>? progress)
+    {
+        // FeatureTotal is the whole tree up front; byte progress isn't tracked for this path-based,
+        // multi-file format. The reporter is built once here and shared across the recursive
+        // directory write so each layer's features count toward one total.
+        var reporter = progress == null
+            ? null
+            : new ProgressReporter(progress, ProgressPhase.Writing, collection.Count, null);
+        WriteInternal(path, collection, reporter);
+    }
+
+    static void WriteInternal(string path, FeatureCollection collection, ProgressReporter? progress)
     {
         // A directory path writes one .shp per child layer — round-tripping the bundled-dataset shape
         // produced by Read(directory). Root-level features (if any) go into "data.shp" alongside.
         if (IsDirectoryPath(path))
         {
-            WriteDirectory(path, collection);
+            WriteDirectory(path, collection, progress);
             return;
         }
 
@@ -277,6 +305,7 @@ public static class Shapefile
         foreach (var feature in collection)
         {
             contents.Add(BuildContent(shapeType, feature.Geometry));
+            progress?.Feature();
         }
 
         var bounds = collection.GetBounds();
@@ -305,14 +334,14 @@ public static class Shapefile
         path.EndsWith(Path.DirectorySeparatorChar) ||
         path.EndsWith(Path.AltDirectorySeparatorChar);
 
-    static void WriteDirectory(string directory, FeatureCollection collection)
+    static void WriteDirectory(string directory, FeatureCollection collection, ProgressReporter? progress)
     {
         Directory.CreateDirectory(directory);
         if (collection.Features.Count > 0)
         {
             var rootLayer = new FeatureCollection();
             rootLayer.Features.AddRange(collection.Features);
-            Write(Path.Combine(directory, "data.shp"), rootLayer);
+            WriteInternal(Path.Combine(directory, "data.shp"), rootLayer, progress);
         }
 
         var index = 0;
@@ -320,7 +349,7 @@ public static class Shapefile
         {
             // Child's Name → filename. Anonymous layers fall back to layer_N.
             var name = child.Name ?? $"layer_{index}";
-            Write(Path.Combine(directory, name + ".shp"), child);
+            WriteInternal(Path.Combine(directory, name + ".shp"), child, progress);
             index++;
         }
     }
