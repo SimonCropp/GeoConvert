@@ -96,6 +96,57 @@ public class ConversionServiceTests
         await Assert.That(features.Count).IsEqualTo(2);
     }
 
+    [Test]
+    public async Task Read_ReportsProgress()
+    {
+        var reports = new List<ConvertProgress>();
+        var progress = new Progress<ConvertProgress>(reports.Add);
+
+        ConversionService.Read(Sample.GeoJsonBytes, GeoFormat.GeoJson, progress);
+
+        // Progress<T> posts to the captured context; pump the loop until the queued reports drain.
+        await WaitFor(() => reports.Count > 0);
+        await Assert.That(reports.All(_ => _.Phase == ProgressPhase.Reading)).IsTrue();
+        await Assert.That(reports[^1].Features).IsEqualTo(2L);
+    }
+
+    [Test]
+    public async Task Write_ReportsProgress()
+    {
+        var features = ConversionService.Read(Sample.GeoJsonBytes, GeoFormat.GeoJson);
+        var reports = new List<ConvertProgress>();
+        var progress = new Progress<ConvertProgress>(reports.Add);
+
+        ConversionService.Write(features, GeoFormat.GeoJson, progress);
+
+        await WaitFor(() => reports.Count > 0);
+        await Assert.That(reports.All(_ => _.Phase == ProgressPhase.Writing)).IsTrue();
+        await Assert.That(reports[^1].FeatureTotal).IsEqualTo(2L);
+    }
+
+    [Test]
+    public async Task RenderPng_ReportsProgress()
+    {
+        var features = ConversionService.Read(Sample.GeoJsonBytes, GeoFormat.GeoJson);
+        var reports = new List<ConvertProgress>();
+        var progress = new Progress<ConvertProgress>(reports.Add);
+
+        ConversionService.RenderPng(features, MapProjection.Auto, 256, progress);
+
+        await WaitFor(() => reports.Count > 0);
+        await Assert.That(reports[^1].FeatureTotal).IsEqualTo(2L);
+    }
+
+    // Progress<T> raises its callback on the captured SynchronizationContext, so the reports arrive on
+    // a later turn of the message loop rather than synchronously inside the conversion call.
+    static async Task WaitFor(Func<bool> condition)
+    {
+        for (var i = 0; i < 100 && !condition(); i++)
+        {
+            await Task.Delay(1);
+        }
+    }
+
     static string ToText(byte[] bytes) =>
         Encoding.UTF8.GetString(bytes);
 }

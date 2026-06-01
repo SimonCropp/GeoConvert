@@ -48,16 +48,16 @@ public static class ConversionService
         return ReadableFormats.FirstOrDefault(_ => _.Format == format);
     }
 
-    public static FeatureCollection Read(byte[] input, GeoFormat format)
+    public static FeatureCollection Read(byte[] input, GeoFormat format, IProgress<ConvertProgress>? progress = null)
     {
         using var stream = new MemoryStream(input);
-        return GeoConverter.Read(stream, format);
+        return GeoConverter.Read(stream, format, progress);
     }
 
-    public static byte[] Write(FeatureCollection features, GeoFormat format)
+    public static byte[] Write(FeatureCollection features, GeoFormat format, IProgress<ConvertProgress>? progress = null)
     {
         using var stream = new MemoryStream();
-        GeoConverter.Write(features, stream, format);
+        GeoConverter.Write(features, stream, format, progress);
         return stream.ToArray();
     }
 
@@ -65,14 +65,15 @@ public static class ConversionService
     /// Renders a PNG with caller-chosen layout. <paramref name="projection"/> selects the map
     /// projection; <paramref name="maxDimension"/>, when positive, caps the image's longer edge at
     /// that many pixels (the shorter edge follows the aspect ratio) — otherwise the renderer's default
-    /// size applies.
+    /// size applies. <paramref name="progress"/> is reported per feature rasterised.
     /// </summary>
-    public static byte[] RenderPng(FeatureCollection features, MapProjection projection, int maxDimension)
+    public static byte[] RenderPng(FeatureCollection features, MapProjection projection, int maxDimension, IProgress<ConvertProgress>? progress = null)
     {
         var options = new RenderOptions
         {
             Projection = projection,
-            StrokeAutoScale = true
+            StrokeAutoScale = true,
+            Progress = progress
         };
         if (maxDimension > 0)
         {
@@ -82,6 +83,6 @@ public static class ConversionService
         return MapRenderer.RenderPng(features, options);
     }
 
-    public static byte[] Convert(byte[] input, GeoFormat from, GeoFormat to) =>
-        Write(Read(input, from), to);
+    public static byte[] Convert(byte[] input, GeoFormat from, GeoFormat to, IProgress<ConvertProgress>? progress = null) =>
+        Write(Read(input, from, progress), to, progress);
 }

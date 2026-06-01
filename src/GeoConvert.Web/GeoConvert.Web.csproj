@@ -5,6 +5,7 @@
     <PublishTrimmed>true</PublishTrimmed>
     <TrimMode>full</TrimMode>
     <InvariantGlobalization>true</InvariantGlobalization>
+    <WasmEnableThreads>true</WasmEnableThreads>
     <BlazorEnableTimeZoneSupport>false</BlazorEnableTimeZoneSupport>
     <UseNativeHttpHandler>true</UseNativeHttpHandler>
     <IsPackable>false</IsPackable>

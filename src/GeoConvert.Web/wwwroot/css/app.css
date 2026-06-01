@@ -199,6 +199,50 @@ header p {
     min-height: 200px;
 }
 
+.progress {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    width: 100%;
+}
+
+.progress-track {
+    position: relative;
+    overflow: hidden;
+    height: 8px;
+    border-radius: 4px;
+    background: var(--border-color);
+}
+
+.progress-fill {
+    height: 100%;
+    border-radius: 4px;
+    background: var(--primary-color);
+    transition: width 0.15s ease;
+}
+
+.progress-fill-indeterminate {
+    width: 40%;
+    animation: progress-indeterminate 1.2s ease-in-out infinite;
+}
+
+@keyframes progress-indeterminate {
+    0% { margin-left: -40%; }
+    100% { margin-left: 100%; }
+}
+
+.progress-label {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    font-size: 0.85rem;
+    color: var(--muted-color);
+}
+
+.progress-count {
+    font-variant-numeric: tabular-nums;
+}
+
 .image-options {
     display: flex;
     flex-wrap: wrap;

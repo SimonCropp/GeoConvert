@@ -33,20 +33,6 @@ window.fileDownload = {
 window.appInfo = {
     userAgent: function () {
         return navigator.userAgent;
-    },
-    // Resolve once the browser has actually painted the pending DOM update, before the caller
-    // starts long-running synchronous work that blocks the (single) WASM UI thread. A bare
-    // `await Task.Delay(1)` only flushes Blazor's DOM diff; the 1 ms timer callback then runs the
-    // blocking render before the browser composites a frame, so a just-shown spinner never paints.
-    // A double requestAnimationFrame waits for a genuinely painted frame; the setTimeout is a
-    // fallback for hidden/background tabs where rAF is paused, so this never hangs.
-    paintThen: function () {
-        return new Promise(function (resolve) {
-            var done = false;
-            var finish = function () { if (!done) { done = true; resolve(); } };
-            requestAnimationFrame(function () { requestAnimationFrame(finish); });
-            setTimeout(finish, 100);
-        });
     }
 };
 

@@ -6,7 +6,9 @@ public sealed class MultiPolygon(IReadOnlyList<Polygon> polygons) : Geometry
 
     public override GeometryType Type => GeometryType.MultiPolygon;
 
-    public override bool IsEmpty => Polygons.Count == 0 || Polygons.All(_ => _.IsEmpty);
+    public override bool IsEmpty =>
+        Polygons.Count == 0 ||
+        Polygons.All(_ => _.IsEmpty);
 
     public override bool HasZ => Polygons.Any(_ => _.HasZ);
 

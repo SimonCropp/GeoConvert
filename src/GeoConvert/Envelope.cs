@@ -10,7 +10,10 @@ public readonly record struct Envelope(double MinX, double MinY, double MaxX, do
     public bool IsEmpty =>
         // Any non-finite component disqualifies the envelope: a partial-NaN bbox (e.g. from a Position
         // with one NaN ordinate) would otherwise look populated and crash the JSON serializers downstream.
-        !double.IsFinite(MinX) || !double.IsFinite(MinY) || !double.IsFinite(MaxX) || !double.IsFinite(MaxY);
+        !double.IsFinite(MinX) ||
+        !double.IsFinite(MinY) ||
+        !double.IsFinite(MaxX) ||
+        !double.IsFinite(MaxY);
 
     public double Width => IsEmpty ? 0 : MaxX - MinX;
 

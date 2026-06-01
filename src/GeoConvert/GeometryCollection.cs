@@ -6,7 +6,9 @@ public sealed class GeometryCollection(IReadOnlyList<Geometry> geometries) : Geo
 
     public override GeometryType Type => GeometryType.GeometryCollection;
 
-    public override bool IsEmpty => Geometries.Count == 0 || Geometries.All(_ => _.IsEmpty);
+    public override bool IsEmpty =>
+        Geometries.Count == 0 ||
+        Geometries.All(_ => _.IsEmpty);
 
     public override bool HasZ => Geometries.Any(_ => _.HasZ);
 

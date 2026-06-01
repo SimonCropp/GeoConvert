@@ -29,6 +29,16 @@
         <ErrorPanel Message="@errorMessage" IssueUrl="@issueUrl" />
     }
 
+    @* The read phase happens before the convert panel exists, so its progress shows here. The render
+       preview shows its bar in the preview slot, and the download (write/render) shows its bar under the
+       Download button — each next to the action that triggered it. Reading is indeterminate: the
+       uploaded file is already in memory, so its byte fraction hits 100% instantly and the real work
+       (parsing, building features) carries on behind it — an animated bar shows that's still happening. *@
+    @if (isBusy && !isRendering && features is null)
+    {
+        <ConversionProgress Label="@progressLabel" Report="progressReport" Indeterminate="true" />
+    }
+
     @if (features is not null)
     {
         @if (isRendering || previewDataUrl is not null)
@@ -37,7 +47,7 @@
                 @if (isRendering)
                 {
                     <div class="preview-busy">
-                        <div class="spinner"></div>
+                        <ConversionProgress Label="@progressLabel" Report="progressReport" />
                     </div>
                 }
                 else
@@ -84,6 +94,14 @@
                 Download @TargetInfo?.DisplayName
             </button>
         </div>
+
+        @* Clicking Download runs the actual conversion (write, or render for PNG) on a background
+           thread; show its live progress right under the button. !isRendering excludes the preview
+           render, which has its own bar above. *@
+        @if (isBusy && !isRendering)
+        {
+            <ConversionProgress Label="@progressLabel" Report="progressReport" />
+        }
     }
 </div>
 
@@ -122,11 +140,56 @@
     int maxDimension = 2048;
     bool isBusy;
     bool isRendering;
+    ConvertProgress? progressReport;
+    string? progressLabel;
+    IProgress<ConvertProgress>? progress;
+    ProgressPhase? lastPhase;
+    long lastRepaintTick;
+
+    // Min gap between progress repaints. Time- rather than percent-based so the count keeps climbing even
+    // when the fraction is pinned (e.g. a buffered read whose byte fraction sits at 100% while features
+    // build), while still capping renders at ~16/sec for a feature-by-feature stream.
+    const long RepaintIntervalMs = 60;
 
     FormatInfo? TargetInfo => ConversionService.Find(target);
 
-    protected override async Task OnInitializedAsync() =>
+    protected override async Task OnInitializedAsync()
+    {
+        // Conversions run on a background thread (Task.Run), and Progress<T> marshals each report back
+        // to this UI thread via the captured synchronization context — so StateHasChanged below repaints
+        // the bar live while the worker crunches. Constructed here so it captures the UI context.
+        progress = new Progress<ConvertProgress>(OnProgressReport);
         userAgent = await JsRuntime.InvokeAsync<string?>("appInfo.userAgent");
+    }
+
+    void OnProgressReport(ConvertProgress report)
+    {
+        progressReport = report;
+        var now = Environment.TickCount64;
+        // Always repaint on a phase change; otherwise rate-limit so a feature-by-feature stream doesn't
+        // queue thousands of renders.
+        if (report.Phase == lastPhase && now - lastRepaintTick < RepaintIntervalMs)
+        {
+            return;
+        }
+
+        lastPhase = report.Phase;
+        lastRepaintTick = now;
+        StateHasChanged();
+    }
+
+    // Switches the visible phase and resets the throttle so the next report repaints immediately. No
+    // paint hack needed: the heavy work runs off-thread, so the UI thread stays free to paint this and
+    // every progress update.
+    void BeginPhase(string label)
+    {
+        progressLabel = label;
+        progressReport = null;
+        lastPhase = null;
+        lastRepaintTick = 0;
+        isBusy = true;
+        StateHasChanged();
+    }
 
     async Task OnFileSelected(InputFileChangeEventArgs args)
     {
@@ -150,9 +213,11 @@
             using var stream = file.OpenReadStream(MaxFileSize);
             using var memory = new MemoryStream();
             await stream.CopyToAsync(memory);
-            sourceBytes = memory.ToArray();
+            var bytes = memory.ToArray();
+            sourceBytes = bytes;
 
-            features = ConversionService.Read(sourceBytes, detected.Format);
+            BeginPhase("Reading map…");
+            features = await Task.Run(() => ConversionService.Read(bytes, detected.Format, progress));
             featureCount = features.Count;
             await RefreshPreviewAsync();
         }
@@ -161,27 +226,27 @@
             ReportError("Could not read the map", exception);
             features = null;
         }
+        finally
+        {
+            isBusy = false;
+        }
     }
 
-    // Rendering a large map is CPU-bound and synchronous on the WASM thread, so it freezes the UI.
-    // Flip the busy flag, then wait for the browser to actually paint the spinner (appInfo.paintThen)
-    // before the blocking render, so the user sees progress instead of a stalled page. A bare
-    // Task.Delay(1) flushes the DOM but the render starts before the spinner frame is composited.
+    // Rendering a large map is CPU-bound. With the multithreaded runtime it runs on a background thread
+    // (Task.Run), keeping the UI thread free to paint the progress bar live as features are rasterised.
     async Task RefreshPreviewAsync()
     {
-        if (features is null || features.Count == 0)
+        if (features is not { Count: > 0 } collection)
         {
             previewDataUrl = null;
             return;
         }
 
-        isBusy = true;
         isRendering = true;
-        StateHasChanged();
-        await JsRuntime.InvokeVoidAsync("appInfo.paintThen");
+        BeginPhase("Rendering preview…");
         try
         {
-            previewDataUrl = RenderPreview(features);
+            previewDataUrl = await Task.Run(() => RenderPreview(collection));
         }
         finally
         {
@@ -194,7 +259,7 @@
     {
         try
         {
-            var png = ConversionService.RenderPng(collection, projection, maxDimension);
+            var png = ConversionService.RenderPng(collection, projection, maxDimension, progress);
             return $"data:image/png;base64,{Convert.ToBase64String(png)}";
         }
         catch
@@ -228,7 +293,7 @@
 
     async Task Download()
     {
-        if (features is null || sourceFormat is null)
+        if (features is not { } collection || sourceFormat is null)
         {
             return;
         }
@@ -239,14 +304,15 @@
             return;
         }
 
-        isBusy = true;
-        StateHasChanged();
-        await JsRuntime.InvokeVoidAsync("appInfo.paintThen");
+        BeginPhase(info.Format == GeoFormat.Png
+            ? "Rendering image…"
+            : $"Writing {info.DisplayName}…");
         try
         {
-            var bytes = info.Format == GeoFormat.Png
-                ? ConversionService.RenderPng(features, projection, maxDimension)
-                : ConversionService.Write(features, info.Format);
+            var format = info.Format;
+            var bytes = await Task.Run(() => format == GeoFormat.Png
+                ? ConversionService.RenderPng(collection, projection, maxDimension, progress)
+                : ConversionService.Write(collection, format, progress));
             var baseName = Path.GetFileNameWithoutExtension(sourceName) ?? "map";
             await FileDownloadService.DownloadAsync($"{baseName}{info.Extension}", info.ContentType, bytes);
         }
@@ -278,5 +344,7 @@
         previewDataUrl = null;
         isBusy = false;
         isRendering = false;
+        progressReport = null;
+        progressLabel = null;
     }
 }

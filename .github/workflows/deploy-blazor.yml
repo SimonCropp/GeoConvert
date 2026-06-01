@@ -37,6 +37,12 @@ jobs:
           dotnet-version: '11.0.x'
           dotnet-quality: preview
 
+      # The app sets WasmEnableThreads, whose multithreaded runtime (the one carrying
+      # JavaScriptExports.InstallMainSynchronizationContext) ships in the wasm-tools workload. Without
+      # it the build emits a single-threaded runtime that aborts at start_runtime in the browser.
+      - name: Install wasm-tools workload
+        run: dotnet workload install wasm-tools
+
       - name: Build tests (also publishes the Blazor app for snapshot tests)
         run: dotnet build src/GeoConvert.Web.Tests --configuration Release
 

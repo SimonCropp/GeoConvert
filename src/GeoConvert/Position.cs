@@ -9,10 +9,18 @@ public readonly record struct Position(double X, double Y, double? Z = null, dou
     public bool HasZ => Z.HasValue;
     public bool HasM => M.HasValue;
 
-    public override string ToString() =>
-        M.HasValue
-            ? $"({X} {Y} {Z ?? double.NaN} {M})"
-            : Z.HasValue
-                ? $"({X} {Y} {Z})"
-                : $"({X} {Y})";
+    public override string ToString()
+    {
+        if (M.HasValue)
+        {
+            return $"({X} {Y} {Z ?? double.NaN} {M})";
+        }
+
+        if (Z.HasValue)
+        {
+            return $"({X} {Y} {Z})";
+        }
+
+        return $"({X} {Y})";
+    }
 }

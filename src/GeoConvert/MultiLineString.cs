@@ -6,7 +6,9 @@ public sealed class MultiLineString(IReadOnlyList<LineString> lineStrings) : Geo
 
     public override GeometryType Type => GeometryType.MultiLineString;
 
-    public override bool IsEmpty => LineStrings.Count == 0 || LineStrings.All(_ => _.IsEmpty);
+    public override bool IsEmpty =>
+        LineStrings.Count == 0 ||
+        LineStrings.All(_ => _.IsEmpty);
 
     public override bool HasZ => LineStrings.Any(_ => _.HasZ);
 
