@@ -1,6 +1,3 @@
-using Microsoft.AspNetCore.Components;
-using GeoConvert.Web.Layout;
-
 public class MainLayoutTests : BunitTestContext
 {
     public MainLayoutTests()

@@ -6,7 +6,7 @@ public class CoverageMopUpTests
     [Test]
     public async Task FeatureCollection_non_generic_enumerator()
     {
-        var enumerator = ((IEnumerable)Sample.Mixed()).GetEnumerator();
+        var enumerator = ((IEnumerable) Sample.Mixed()).GetEnumerator();
         await Assert.That(enumerator.MoveNext()).IsTrue();
     }
 
@@ -28,7 +28,7 @@ public class CoverageMopUpTests
         {
             new Feature(new Point(new(1, 2, null, 5)))
         };
-        var back = (Point)G.RoundtripStream(source, GeoFormat.Wkb).Features[0].Geometry!;
+        var back = (Point) G.RoundtripStream(source, GeoFormat.Wkb).Features[0].Geometry!;
         await Assert.That(back.Coordinate.M).IsEqualTo(5d);
         await Assert.That(back.Coordinate.Z).IsNull();
     }
@@ -43,8 +43,8 @@ public class CoverageMopUpTests
              "arcs":[[[0,0],[1,1]]]}
             """;
         var feature = TopoJson.ReadString(topology).Children[0].Features[0];
-        await Assert.That((long)feature.Id!).IsEqualTo(9L);
-        var line = (LineString)feature.Geometry!;
+        await Assert.That((long) feature.Id!).IsEqualTo(9L);
+        var line = (LineString) feature.Geometry!;
         // arc reversed
         await Assert.That(line.Positions[0].X).IsEqualTo(1d);
     }
@@ -73,11 +73,11 @@ public class CoverageMopUpTests
         };
 
         var back = G.RoundtripStream(
-        [
-            line,
-            new Feature()
-        ],
-        GeoFormat.Gpx);
+            [
+                line,
+                new Feature()
+            ],
+            GeoFormat.Gpx);
         await Assert.That(back.Count).IsEqualTo(1);
         await Assert.That(back.ElementAt(0).Geometry).IsTypeOf<MultiLineString>();
         await Assert.That(back.ElementAt(0).Properties["description"]).IsEqualTo("d");
@@ -128,11 +128,11 @@ public class CoverageMopUpTests
         var png = MapRenderer.RenderPng(
             features,
             new()
-        {
-            Bounds = new Envelope(0, 0, 2, 2),
-            Width = 32,
-            Height = 32
-        });
+            {
+                Bounds = new Envelope(0, 0, 2, 2),
+                Width = 32,
+                Height = 32
+            });
         await Assert.That(png.Length).IsGreaterThan(8);
     }
 
@@ -290,7 +290,11 @@ public class CoverageMopUpTests
             Name = "data"
         };
         second.Add(new Feature(new Point(3, 4)));
-        var root = new FeatureCollection { first, second };
+        var root = new FeatureCollection
+        {
+            first,
+            second
+        };
         var topology = TopoJson.WriteString(root);
         // Second "data" must be disambiguated; first stays as "data".
         await Assert.That(topology).Contains("\"data_1\":");
@@ -313,7 +317,9 @@ public class CoverageMopUpTests
         stray.Add(new Feature(new LineString([new(0, 0), new(1, 1)])));
         var root = new FeatureCollection
         {
-            new Feature(new Point(9, 9)), waypoints, stray
+            new Feature(new Point(9, 9)),
+            waypoints,
+            stray
         };
 
         using var stream = new MemoryStream();
@@ -372,12 +378,85 @@ public class CoverageMopUpTests
         // ReSharper disable once MethodHasAsyncOverload
         reader.MoveToContent();
         var seen = 0;
-        Xml.ReadChildren(reader, () =>
-        {
-            seen++;
-            reader.Skip();
-        });
+        Xml.ReadChildren(
+            reader,
+            () =>
+            {
+                seen++;
+                reader.Skip();
+            });
 
         await Assert.That(seen).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task Dbf_parses_empty_logical_and_unparseable_numeric_as_null()
+    {
+        // A blank Logical field and a non-numeric Numeric field both decode to null, covering the
+        // empty-logical and unparseable-numeric branches of Dbf.ParseValue.
+        var bytes = BuildTwoFieldDbf(logical: " ", numeric: "***");
+
+        var (names, rows) = Dbf.Read(new MemoryStream(bytes));
+
+        await Assert.That(names).IsEquivalentTo(["FLAG", "NUM"]);
+        await Assert.That(rows[0][0]).IsNull();
+        await Assert.That(rows[0][1]).IsNull();
+    }
+
+    // Builds a single-record dBASE table with one Logical and one Numeric field holding the given cells.
+    static byte[] BuildTwoFieldDbf(string logical, string numeric)
+    {
+        const byte logicalLength = 1;
+        const byte numericLength = 3;
+
+        using var memory = new MemoryStream();
+        using var writer = new BinaryWriter(memory, Encoding.Latin1, leaveOpen: true);
+
+        // version
+        writer.Write((byte) 0x03);
+        // date
+        writer.Write(new byte[3]);
+        // record count
+        writer.Write((uint) 1);
+        // header: base + two field descriptors + terminator
+        writer.Write((ushort) (32 + 32 + 32 + 1));
+        // record length (incl deletion flag)
+        writer.Write((ushort) (1 + logicalLength + numericLength));
+        writer.Write(new byte[20]); // reserved
+
+        WriteField(writer, "FLAG", 'L', logicalLength);
+        WriteField(writer, "NUM", 'N', numericLength);
+        // field terminator
+        writer.Write((byte) 0x0D);
+        // not deleted
+        writer.Write((byte) 0x20);
+        WriteCell(writer, logical, logicalLength);
+        WriteCell(writer, numeric, numericLength);
+        // EOF
+        writer.Write((byte) 0x1A);
+        writer.Flush();
+        return memory.ToArray();
+    }
+
+    static void WriteField(BinaryWriter writer, string name, char type, byte length)
+    {
+        var nameBytes = new byte[11];
+        Encoding.Latin1.GetBytes(name).CopyTo(nameBytes, 0);
+        writer.Write(nameBytes);
+        writer.Write((byte) type);
+        // reserved / field data address
+        writer.Write(new byte[4]);
+        writer.Write(length);
+        // decimals
+        writer.Write((byte) 0);
+        // reserved
+        writer.Write(new byte[14]);
+    }
+
+    static void WriteCell(BinaryWriter writer, string value, byte length)
+    {
+        var buffer = new byte[length];
+        Encoding.Latin1.GetBytes(value).CopyTo(buffer, 0);
+        writer.Write(buffer);
     }
 }

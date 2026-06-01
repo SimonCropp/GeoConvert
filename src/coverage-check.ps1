@@ -19,14 +19,24 @@ foreach ($package in $coverage.coverage.packages.package)
     foreach ($class in $package.classes.class)
     {
         $file = $class.filename
-        if (-not $file -or $file -notmatch '[\\/]src[\\/]' -or $file -match '[\\/]Tests[\\/]')
+        if (-not $file)
+        {
+            continue
+        }
+
+        # Normalize separators and make the path relative to src/. Microsoft coverage emits absolute
+        # paths containing /src/; coverlet emits paths already relative to its <source> root (src/).
+        $relative = ($file -replace '\\', '/') -replace '^.*/src/', ''
+
+        # Scope to the shipped projects (GeoConvert + GeoConvert.Cli); excludes the test project etc.
+        if ($relative -notmatch '^GeoConvert(\.Cli)?/')
         {
             continue
         }
 
         foreach ($line in $class.lines.line)
         {
-            $key = "$file|$($line.number)"
+            $key = "$relative|$($line.number)"
             $hits = [int] $line.hits
             if (-not $lineHits.ContainsKey($key) -or $lineHits[$key] -lt $hits)
             {
@@ -47,7 +57,7 @@ foreach ($entry in $lineHits.GetEnumerator())
     else
     {
         $parts = $entry.Key -split '\|'
-        $name = $parts[0] -replace '.*[\\/]src[\\/]', ''
+        $name = $parts[0]
         if (-not $uncovered.ContainsKey($name)) { $uncovered[$name] = @() }
         $uncovered[$name] += [int] $parts[1]
     }

@@ -12,6 +12,8 @@ global using Microsoft.Extensions.Logging;
 global using Microsoft.JSInterop;
 global using Microsoft.Playwright;
 global using Bunit;
+global using GeoConvert.Web.Layout;
+global using Microsoft.AspNetCore.Components;
 global using TUnit.Core;
 global using TUnit.Assertions;
 global using TUnit.Assertions.Extensions;
