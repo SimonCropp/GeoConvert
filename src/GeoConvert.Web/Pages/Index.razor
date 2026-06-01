@@ -31,10 +31,10 @@
 
     @if (features is not null)
     {
-        @if (previewDataUrl is not null)
+        @if (isRendering || previewDataUrl is not null)
         {
             <div class="preview">
-                @if (isBusy)
+                @if (isRendering)
                 {
                     <div class="preview-busy">
                         <div class="spinner"></div>
@@ -45,7 +45,10 @@
                     <img src="@previewDataUrl" alt="Rendered preview of the uploaded map" />
                 }
             </div>
+        }
 
+        @if (previewDataUrl is not null)
+        {
             <div class="image-options">
                 <div class="format-selector">
                     <label for="projection-select">Map projection</label>
@@ -57,9 +60,13 @@
                     </select>
                 </div>
                 <div class="format-selector">
-                    <label for="max-dimension">Max dimension (px)</label>
-                    <input id="max-dimension" class="format-select" type="number" min="64" max="8192" step="64"
-                           value="@maxDimension" @onchange="OnMaxDimensionChanged" />
+                    <label for="max-dimension">Max dimension</label>
+                    <select id="max-dimension" class="format-select" value="@maxDimension" @onchange="OnMaxDimensionChanged">
+                        @foreach (var option in Dimensions)
+                        {
+                            <option value="@option.Value">@option.Label</option>
+                        }
+                    </select>
                 </div>
             </div>
         }
@@ -92,6 +99,15 @@
         (MapProjection.Goode, "Goode Homolosine"),
     ];
 
+    static readonly (int Value, string Label)[] Dimensions =
+    [
+        (512, "512 px"),
+        (1024, "1024 px"),
+        (2048, "2048 px"),
+        (4096, "4096 px"),
+        (8192, "8192 px"),
+    ];
+
     byte[]? sourceBytes;
     string? sourceName;
     FormatInfo? sourceFormat;
@@ -105,6 +121,7 @@
     MapProjection projection = MapProjection.Auto;
     int maxDimension = 2048;
     bool isBusy;
+    bool isRendering;
 
     FormatInfo? TargetInfo => ConversionService.Find(target);
 
@@ -158,6 +175,7 @@
         }
 
         isBusy = true;
+        isRendering = true;
         StateHasChanged();
         await Task.Delay(1);
         try
@@ -167,6 +185,7 @@
         finally
         {
             isBusy = false;
+            isRendering = false;
         }
     }
 
@@ -257,5 +276,6 @@
         featureCount = 0;
         previewDataUrl = null;
         isBusy = false;
+        isRendering = false;
     }
 }
