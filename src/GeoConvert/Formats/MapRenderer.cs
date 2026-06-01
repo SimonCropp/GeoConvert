@@ -73,7 +73,7 @@ public static class MapRenderer
                 "Cannot render PNG: the features is empty. Provide RenderOptions.Bounds.");
         }
 
-        if (options.Width <= 0)
+        if (options.MaxDimension <= 0 && options.Width <= 0)
         {
             throw new GeoConvertException("RenderOptions.Width must be positive.");
         }
@@ -667,10 +667,28 @@ public static class MapRenderer
             var boundsWidth = projectedBounds.Width > 0 ? projectedBounds.Width : 1;
             var boundsHeight = projectedBounds.Height > 0 ? projectedBounds.Height : 1;
 
-            Width = options.Width;
-            Height = options.Height > 0
-                ? options.Height
-                : Math.Max(1, (int)Math.Round(options.Width * boundsHeight / boundsWidth));
+            if (options.MaxDimension > 0)
+            {
+                // Fit-to-box: the longer projected axis lands on MaxDimension, the shorter is derived
+                // from the aspect ratio. Width/Height are ignored in this mode.
+                if (boundsWidth >= boundsHeight)
+                {
+                    Width = options.MaxDimension;
+                    Height = Math.Max(1, (int)Math.Round(options.MaxDimension * boundsHeight / boundsWidth));
+                }
+                else
+                {
+                    Height = options.MaxDimension;
+                    Width = Math.Max(1, (int)Math.Round(options.MaxDimension * boundsWidth / boundsHeight));
+                }
+            }
+            else
+            {
+                Width = options.Width;
+                Height = options.Height > 0
+                    ? options.Height
+                    : Math.Max(1, (int)Math.Round(options.Width * boundsHeight / boundsWidth));
+            }
 
             var drawWidth = Math.Max(1, Width - 2 * options.Padding);
             var drawHeight = Math.Max(1, Height - 2 * options.Padding);
