@@ -21,14 +21,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # global.json pins an SDK (currently a .NET 11 preview) with rollForward: latestMajor, which only
-      # rolls up — a 10.x SDK won't satisfy it. Install the pinned SDK from global.json, plus the 10.0
-      # runtime so the net10.0 test executable can run.
-      - name: Setup .NET
+      # The net10.0 test executable needs the .NET 10 runtime.
+      - name: Setup .NET 10
         uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '10.0.x'
-          global-json-file: global.json
+
+      # The repo's global.json pins a .NET 11 preview SDK (rollForward: latestMajor, allowPrerelease),
+      # so every dotnet command needs an SDK >= 11. The exact pinned build is often gone from the feed,
+      # but rollForward accepts any newer 11.x — so install the latest 11.0 preview by channel rather
+      # than via global-json-file (which would try to fetch that exact, missing build).
+      - name: Setup .NET 11 (preview, required by global.json)
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '11.0.x'
+          dotnet-quality: preview
 
       - name: Build tests (also publishes the Blazor app for snapshot tests)
         run: dotnet build src/GeoConvert.Web.Tests --configuration Release
