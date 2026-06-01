@@ -3,6 +3,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     
     <base href="/">
+    <!-- Establishes cross-origin isolation (SharedArrayBuffer) for the multithreaded WASM runtime.
+         Must run before blazor.webassembly.js so isolation is in place before the runtime boots. -->
+    <script src="coi.js"></script>
     <!-- Preload critical resources -->
     <link rel="preload" href="css/app.css" as="style">
     <link rel="preload" href="_framework/blazor.webassembly.js" as="script">
@@ -20,7 +23,7 @@
 <div class="converter"><div class="upload-panel"><label class="file-drop" for="map-file"><!--!--><span class="file-drop-icon">🗺️</span>
             <span class="file-drop-text"><!--!--><strong>Choose a map file</strong>
                     <!--!--><span>GeoJSON, TopoJSON, FlatGeobuf, KML, KMZ, GPX, WKT, WKB, CSV or GeoParquet</span></span><!--!-->
-            <!--!--><input id="map-file" class="file-input" type="file" _bl_2="" style="caret-color: transparent !important;"></label></div></div></div><!--!-->
+            <!--!--><input id="map-file" class="file-input" accept=".geojson,.topojson,.fgb,.kml,.kmz,.gpx,.wkt,.wkb,.csv,.parquet,.json,.geoparquet" type="file" _bl_2="" style="caret-color: transparent !important;"></label></div></div></div><!--!-->
 
 <!--!--><footer><p>Powered by <a href="https://github.com/Papyrine/GeoConvert" target="_blank">GeoConvert</a> — no data leaves your device</p></footer><!--!-->
         <!--!--></div>

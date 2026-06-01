@@ -30,6 +30,15 @@ public static class ConversionService
     public static IReadOnlyList<FormatInfo> WritableFormats { get; } =
         [.. AllFormats.Where(_ => _.CanWrite)];
 
+    /// <summary>
+    /// Value for a file input's <c>accept</c> attribute: every readable format's canonical extension plus
+    /// the aliases <see cref="GeoConverter"/> also detects (<c>.json</c> → GeoJSON, <c>.geoparquet</c> →
+    /// GeoParquet), so a file with one of those isn't filtered out. It's only a picker hint — a user can
+    /// still choose "all files", so <see cref="DetectReadable"/> validates the actual selection.
+    /// </summary>
+    public static string ReadableAccept { get; } =
+        string.Join(',', ReadableFormats.Select(_ => _.Extension).Concat([".json", ".geoparquet"]));
+
     /// <summary>Looks up the <see cref="FormatInfo"/> for a format, or null when it isn't browser-supported.</summary>
     public static FormatInfo? Find(GeoFormat format) =>
         AllFormats.FirstOrDefault(_ => _.Format == format);

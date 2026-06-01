@@ -15,6 +15,51 @@ public class ProgressTests
             Reports[^1];
     }
 
+    // Every stream codec must fire its per-feature progress callback on both read and write. Exercised
+    // here through the facade with a non-null reporter so the `progress?.Feature()` invocation (not just
+    // the null-check) is covered for each — coverlet, unlike the runtime coverage collector, only counts
+    // that line when the call actually runs.
+    [Test]
+    [Arguments(GeoFormat.GeoJson)]
+    [Arguments(GeoFormat.TopoJson)]
+    [Arguments(GeoFormat.FlatGeobuf)]
+    [Arguments(GeoFormat.Kml)]
+    [Arguments(GeoFormat.Kmz)]
+    [Arguments(GeoFormat.Gpx)]
+    [Arguments(GeoFormat.Wkt)]
+    [Arguments(GeoFormat.Wkb)]
+    [Arguments(GeoFormat.Csv)]
+    [Arguments(GeoFormat.GeoParquet)]
+    public async Task Stream_format_reports_feature_progress_both_ways(GeoFormat format)
+    {
+        using var stream = new MemoryStream();
+        var writeLog = new ProgressLog();
+        GeoConverter.Write(Sample.Mixed(), stream, format, writeLog);
+        await Assert.That(writeLog.Reports.Any(_ => _.Features > 0)).IsTrue();
+
+        stream.Position = 0;
+        var readLog = new ProgressLog();
+        var read = GeoConverter.Read(stream, format, readLog);
+        await Assert.That(read.Count).IsGreaterThan(0);
+        await Assert.That(readLog.Reports.Any(_ => _.Features > 0)).IsTrue();
+    }
+
+    // Sample.Mixed has no route (its line/polygon write as GPX tracks), so the <rte> read branch needs
+    // a sample with an explicit routes layer to cover its per-feature progress callback.
+    [Test]
+    public async Task Gpx_route_reports_feature_progress()
+    {
+        using var stream = new MemoryStream();
+        GeoConverter.Write(Sample.GpxLayered(), stream, GeoFormat.Gpx);
+
+        stream.Position = 0;
+        var readLog = new ProgressLog();
+        var read = GeoConverter.Read(stream, GeoFormat.Gpx, readLog);
+
+        await Assert.That(read.Count).IsGreaterThan(0);
+        await Assert.That(readLog.Reports.Any(_ => _.Features > 0)).IsTrue();
+    }
+
     [Test]
     public async Task Read_by_path_reports_reading_phase()
     {

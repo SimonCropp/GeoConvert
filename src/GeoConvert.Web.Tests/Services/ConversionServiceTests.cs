@@ -38,6 +38,28 @@ public class ConversionServiceTests
     }
 
     [Test]
+    public async Task ReadableAccept_OffersOnlyDetectableReadableExtensions()
+    {
+        var accept = ConversionService.ReadableAccept.Split(',');
+
+        // Every offered extension must actually resolve to a readable format (guards typos/drift).
+        foreach (var extension in accept)
+        {
+            await Assert.That(ConversionService.DetectReadable($"map{extension}")).IsNotNull();
+        }
+
+        // Every readable format's canonical extension must be offered.
+        foreach (var format in ConversionService.ReadableFormats)
+        {
+            await Assert.That(accept).Contains(format.Extension);
+        }
+
+        // The detection aliases are included so those files aren't filtered out.
+        await Assert.That(accept).Contains(".json");
+        await Assert.That(accept).Contains(".geoparquet");
+    }
+
+    [Test]
     public async Task Read_CountsFeatures()
     {
         var features = ConversionService.Read(Sample.GeoJsonBytes, GeoFormat.GeoJson);
@@ -99,52 +121,43 @@ public class ConversionServiceTests
     [Test]
     public async Task Read_ReportsProgress()
     {
-        var reports = new List<ConvertProgress>();
-        var progress = new Progress<ConvertProgress>(reports.Add);
+        var recorder = new Recorder();
+        ConversionService.Read(Sample.GeoJsonBytes, GeoFormat.GeoJson, recorder);
 
-        ConversionService.Read(Sample.GeoJsonBytes, GeoFormat.GeoJson, progress);
-
-        // Progress<T> posts to the captured context; pump the loop until the queued reports drain.
-        await WaitFor(() => reports.Count > 0);
-        await Assert.That(reports.All(_ => _.Phase == ProgressPhase.Reading)).IsTrue();
-        await Assert.That(reports[^1].Features).IsEqualTo(2L);
+        await Assert.That(recorder.Reports.All(_ => _.Phase == ProgressPhase.Reading)).IsTrue();
+        await Assert.That(recorder.Reports[^1].Features).IsEqualTo(2L);
     }
 
     [Test]
     public async Task Write_ReportsProgress()
     {
         var features = ConversionService.Read(Sample.GeoJsonBytes, GeoFormat.GeoJson);
-        var reports = new List<ConvertProgress>();
-        var progress = new Progress<ConvertProgress>(reports.Add);
+        var recorder = new Recorder();
+        ConversionService.Write(features, GeoFormat.GeoJson, recorder);
 
-        ConversionService.Write(features, GeoFormat.GeoJson, progress);
-
-        await WaitFor(() => reports.Count > 0);
-        await Assert.That(reports.All(_ => _.Phase == ProgressPhase.Writing)).IsTrue();
-        await Assert.That(reports[^1].FeatureTotal).IsEqualTo(2L);
+        await Assert.That(recorder.Reports.All(_ => _.Phase == ProgressPhase.Writing)).IsTrue();
+        await Assert.That(recorder.Reports[^1].FeatureTotal).IsEqualTo(2L);
     }
 
     [Test]
     public async Task RenderPng_ReportsProgress()
     {
         var features = ConversionService.Read(Sample.GeoJsonBytes, GeoFormat.GeoJson);
-        var reports = new List<ConvertProgress>();
-        var progress = new Progress<ConvertProgress>(reports.Add);
+        var recorder = new Recorder();
+        ConversionService.RenderPng(features, MapProjection.Auto, 256, recorder);
 
-        ConversionService.RenderPng(features, MapProjection.Auto, 256, progress);
-
-        await WaitFor(() => reports.Count > 0);
-        await Assert.That(reports[^1].FeatureTotal).IsEqualTo(2L);
+        await Assert.That(recorder.Reports[^1].FeatureTotal).IsEqualTo(2L);
     }
 
-    // Progress<T> raises its callback on the captured SynchronizationContext, so the reports arrive on
-    // a later turn of the message loop rather than synchronously inside the conversion call.
-    static async Task WaitFor(Func<bool> condition)
+    // A synchronous progress sink. The facade invokes IProgress.Report inline as it works, so every
+    // report is collected by the time the call returns. (Progress<T> instead marshals reports to a later
+    // turn of the synchronization context, which races assertions on the final report.)
+    sealed class Recorder : IProgress<ConvertProgress>
     {
-        for (var i = 0; i < 100 && !condition(); i++)
-        {
-            await Task.Delay(1);
-        }
+        public List<ConvertProgress> Reports { get; } = [];
+
+        public void Report(ConvertProgress value) =>
+            Reports.Add(value);
     }
 
     static string ToText(byte[] bytes) =>

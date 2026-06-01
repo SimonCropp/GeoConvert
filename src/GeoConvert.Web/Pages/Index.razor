@@ -20,7 +20,7 @@
                     <span>@sourceFormat?.DisplayName · @featureCount feature@(featureCount == 1 ? "" : "s")</span>
                 }
             </span>
-            <InputFile id="map-file" OnChange="OnFileSelected" class="file-input" />
+            <InputFile id="map-file" OnChange="OnFileSelected" class="file-input" accept="@ConversionService.ReadableAccept" />
         </label>
     </div>
 
@@ -126,7 +126,6 @@
         (8192, "8192 px"),
     ];
 
-    byte[]? sourceBytes;
     string? sourceName;
     FormatInfo? sourceFormat;
     FeatureCollection? features;
@@ -214,7 +213,6 @@
             using var memory = new MemoryStream();
             await stream.CopyToAsync(memory);
             var bytes = memory.ToArray();
-            sourceBytes = bytes;
 
             BeginPhase("Reading map…");
             features = await Task.Run(() => ConversionService.Read(bytes, detected.Format, progress));
@@ -336,7 +334,6 @@
     {
         errorMessage = null;
         issueUrl = null;
-        sourceBytes = null;
         sourceName = null;
         sourceFormat = null;
         features = null;
