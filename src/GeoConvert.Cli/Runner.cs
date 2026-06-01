@@ -34,6 +34,7 @@ public static class Runner
         Envelope? bounds = null;
         var width = 0;
         var height = 0;
+        var maxDimension = 0;
         var projection = MapProjection.Auto;
         string? labelProperty = null;
         double? labelSize = null;
@@ -80,6 +81,20 @@ public static class Runner
                     if (!TryParseSize(args[++i], out width, out height))
                     {
                         error.WriteLine("--size must be 'WIDTH' or 'WIDTHxHEIGHT'.");
+                        return 2;
+                    }
+
+                    break;
+                case "--max-dimension":
+                    if (i + 1 >= args.Length)
+                    {
+                        error.WriteLine("Missing value for --max-dimension.");
+                        return 2;
+                    }
+
+                    if (!int.TryParse(args[++i], NumberStyles.Integer, CultureInfo.InvariantCulture, out maxDimension) || maxDimension <= 0)
+                    {
+                        error.WriteLine("--max-dimension must be a positive integer (pixels).");
                         return 2;
                     }
 
@@ -255,6 +270,10 @@ public static class Runner
                 }
 
                 renderOptions.Height = height;
+                if (maxDimension > 0)
+                {
+                    renderOptions.MaxDimension = maxDimension;
+                }
                 if (labelProperty != null)
                 {
                     // Property lookup with a ToString() fallback so non-string scalars (int/long/double)
@@ -439,6 +458,9 @@ public static class Runner
               --to <format>          Force the output format.
               --bbox minX,minY,maxX,maxY   Extent to render (PNG output only).
               --size WIDTH[xHEIGHT]  Image size in pixels (PNG output only).
+              --max-dimension <pixels>  PNG only: cap the longer edge at this many pixels and derive
+                                     the shorter from the aspect ratio (fit within an N×N box).
+                                     Overrides --size when set.
               --projection <name>    Projection for PNG output: 'auto' (default — picks
                                      lambert for regional bounds, plate-carree for continental,
                                      goode for world), 'plate-carree', 'web-mercator', 'lambert'
@@ -469,6 +491,7 @@ public static class Runner
               geoconvert data.csv data.geojson --from csv
               geoconvert world.geojson europe.png --bbox -10,35,30,60 --size 1200x900
               geoconvert world.geojson world.png --projection web-mercator --size 1200
+              geoconvert world.geojson thumb.png --max-dimension 512
               geoconvert states.geojson states.png --projection lambert --size 1600
               geoconvert world.geojson world.png --projection goode --size 1600
               geoconvert cities.geojson cities.png --label name --label-size 18

@@ -34,7 +34,33 @@
         @if (previewDataUrl is not null)
         {
             <div class="preview">
-                <img src="@previewDataUrl" alt="Rendered preview of the uploaded map" />
+                @if (isBusy)
+                {
+                    <div class="preview-busy">
+                        <div class="spinner"></div>
+                    </div>
+                }
+                else
+                {
+                    <img src="@previewDataUrl" alt="Rendered preview of the uploaded map" />
+                }
+            </div>
+
+            <div class="image-options">
+                <div class="format-selector">
+                    <label for="projection-select">Map projection</label>
+                    <select id="projection-select" class="format-select" value="@projection" @onchange="OnProjectionChanged">
+                        @foreach (var option in Projections)
+                        {
+                            <option value="@option.Value">@option.Label</option>
+                        }
+                    </select>
+                </div>
+                <div class="format-selector">
+                    <label for="max-dimension">Max dimension (px)</label>
+                    <input id="max-dimension" class="format-select" type="number" min="64" max="8192" step="64"
+                           value="@maxDimension" @onchange="OnMaxDimensionChanged" />
+                </div>
             </div>
         }
 
@@ -43,7 +69,11 @@
                             Formats="ConversionService.WritableFormats"
                             Selected="target"
                             SelectedChanged="OnTargetChanged" />
-            <button class="convert-btn" @onclick="Download" disabled="@(features.Count == 0)">
+            <button class="convert-btn" @onclick="Download" disabled="@(features.Count == 0 || isBusy)">
+                @if (isBusy)
+                {
+                    <span class="btn-spinner"></span>
+                }
                 Download @TargetInfo?.DisplayName
             </button>
         </div>
@@ -52,6 +82,15 @@
 
 @code {
     const long MaxFileSize = 50 * 1024 * 1024;
+
+    static readonly (MapProjection Value, string Label)[] Projections =
+    [
+        (MapProjection.Auto, "Automatic"),
+        (MapProjection.PlateCarree, "Plate Carrée"),
+        (MapProjection.WebMercator, "Web Mercator"),
+        (MapProjection.Lambert, "Lambert Conformal Conic"),
+        (MapProjection.Goode, "Goode Homolosine"),
+    ];
 
     byte[]? sourceBytes;
     string? sourceName;
@@ -63,6 +102,9 @@
     string? issueUrl;
     string? userAgent;
     GeoFormat target = GeoFormat.Kml;
+    MapProjection projection = MapProjection.Auto;
+    int maxDimension = 2048;
+    bool isBusy;
 
     FormatInfo? TargetInfo => ConversionService.Find(target);
 
@@ -95,7 +137,7 @@
 
             features = ConversionService.Read(sourceBytes, detected.Format);
             featureCount = features.Count;
-            previewDataUrl = RenderPreview(features);
+            await RefreshPreviewAsync();
         }
         catch (Exception exception)
         {
@@ -104,16 +146,35 @@
         }
     }
 
-    static string? RenderPreview(FeatureCollection collection)
+    // Rendering a large map is CPU-bound and synchronous on the WASM thread, so it freezes the UI.
+    // Flip the busy flag and yield once (Task.Delay lets the browser paint the spinner) before the
+    // blocking render, so the user sees progress instead of a stalled page.
+    async Task RefreshPreviewAsync()
     {
-        if (collection.Count == 0)
+        if (features is null || features.Count == 0)
         {
-            return null;
+            previewDataUrl = null;
+            return;
         }
 
+        isBusy = true;
+        StateHasChanged();
+        await Task.Delay(1);
         try
         {
-            var png = ConversionService.Write(collection, GeoFormat.Png);
+            previewDataUrl = RenderPreview(features);
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    string? RenderPreview(FeatureCollection collection)
+    {
+        try
+        {
+            var png = ConversionService.RenderPng(collection, projection, maxDimension);
             return $"data:image/png;base64,{Convert.ToBase64String(png)}";
         }
         catch
@@ -129,6 +190,22 @@
         return Task.CompletedTask;
     }
 
+    async Task OnProjectionChanged(ChangeEventArgs args)
+    {
+        projection = Enum.Parse<MapProjection>((string) args.Value!);
+        await RefreshPreviewAsync();
+    }
+
+    async Task OnMaxDimensionChanged(ChangeEventArgs args)
+    {
+        if (int.TryParse((string?) args.Value, out var value) && value > 0)
+        {
+            maxDimension = value;
+        }
+
+        await RefreshPreviewAsync();
+    }
+
     async Task Download()
     {
         if (features is null || sourceFormat is null)
@@ -142,15 +219,24 @@
             return;
         }
 
+        isBusy = true;
+        StateHasChanged();
+        await Task.Delay(1);
         try
         {
-            var bytes = ConversionService.Write(features, info.Format);
+            var bytes = info.Format == GeoFormat.Png
+                ? ConversionService.RenderPng(features, projection, maxDimension)
+                : ConversionService.Write(features, info.Format);
             var baseName = Path.GetFileNameWithoutExtension(sourceName) ?? "map";
             await FileDownloadService.DownloadAsync($"{baseName}{info.Extension}", info.ContentType, bytes);
         }
         catch (Exception exception)
         {
             ReportError($"Could not convert to {info.DisplayName}", exception);
+        }
+        finally
+        {
+            isBusy = false;
         }
     }
 
@@ -170,5 +256,6 @@
         features = null;
         featureCount = 0;
         previewDataUrl = null;
+        isBusy = false;
     }
 }

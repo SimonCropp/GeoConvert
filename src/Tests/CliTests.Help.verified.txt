@@ -10,6 +10,9 @@ Options:
   --to <format>          Force the output format.
   --bbox minX,minY,maxX,maxY   Extent to render (PNG output only).
   --size WIDTH[xHEIGHT]  Image size in pixels (PNG output only).
+  --max-dimension <pixels>  PNG only: cap the longer edge at this many pixels and derive
+                         the shorter from the aspect ratio (fit within an N×N box).
+                         Overrides --size when set.
   --projection <name>    Projection for PNG output: 'auto' (default — picks
                          lambert for regional bounds, plate-carree for continental,
                          goode for world), 'plate-carree', 'web-mercator', 'lambert'
@@ -40,6 +43,7 @@ Examples:
   geoconvert data.csv data.geojson --from csv
   geoconvert world.geojson europe.png --bbox -10,35,30,60 --size 1200x900
   geoconvert world.geojson world.png --projection web-mercator --size 1200
+  geoconvert world.geojson thumb.png --max-dimension 512
   geoconvert states.geojson states.png --projection lambert --size 1600
   geoconvert world.geojson world.png --projection goode --size 1600
   geoconvert cities.geojson cities.png --label name --label-size 18

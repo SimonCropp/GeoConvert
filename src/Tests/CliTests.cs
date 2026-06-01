@@ -121,6 +121,17 @@ public class CliTests
     }
 
     [Test]
+    public async Task RendersPngWithMaxDimension()
+    {
+        using var directory = new TempDirectory();
+        var input = Path.Combine(directory, "in.geojson");
+        await File.WriteAllTextAsync(input, GeoJson.WriteString(Sample.Polygons()));
+        var output = Path.Combine(directory, "out.png");
+        var code = Runner.Run([input, output, "--max-dimension", "256"], new StringWriter(), new StringWriter());
+        await Assert.That(code).IsEqualTo(0);
+    }
+
+    [Test]
     [Arguments(new[] { "a", "b", "--from", "nope" }, 2)]
     [Arguments(new[] { "a", "b", "--from" }, 2)]
     [Arguments(new[] { "a", "b", "--to" }, 2)]
@@ -131,6 +142,9 @@ public class CliTests
     [Arguments(new[] { "a", "b", "--size", "axb" }, 2)]
     [Arguments(new[] { "a", "b", "--size", "10x0" }, 2)]
     [Arguments(new[] { "a", "b", "--size", "1x2x3" }, 2)]
+    [Arguments(new[] { "a", "b", "--max-dimension" }, 2)]
+    [Arguments(new[] { "a", "b", "--max-dimension", "0" }, 2)]
+    [Arguments(new[] { "a", "b", "--max-dimension", "abc" }, 2)]
     [Arguments(new[] { "a", "b", "--projection" }, 2)]
     [Arguments(new[] { "a", "b", "--projection", "moon" }, 2)]
     [Arguments(new[] { "a", "b", "--label" }, 2)]

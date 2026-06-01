@@ -64,6 +64,30 @@ public class ConversionServiceTests
     }
 
     [Test]
+    public async Task RenderPng_WithMaxDimension_CapsLongerEdge()
+    {
+        var features = ConversionService.Read(Sample.GeoJsonBytes, GeoFormat.GeoJson);
+
+        var png = ConversionService.RenderPng(features, MapProjection.PlateCarree, 256);
+
+        // PNG IHDR width/height are big-endian 32-bit ints at byte offsets 16 and 20.
+        var width = (png[16] << 24) | (png[17] << 16) | (png[18] << 8) | png[19];
+        var height = (png[20] << 24) | (png[21] << 16) | (png[22] << 8) | png[23];
+        await Assert.That(Math.Max(width, height)).IsEqualTo(256);
+    }
+
+    [Test]
+    public async Task RenderPng_WithoutMaxDimension_UsesDefaultSize()
+    {
+        var features = ConversionService.Read(Sample.GeoJsonBytes, GeoFormat.GeoJson);
+
+        var png = ConversionService.RenderPng(features, MapProjection.Auto, 0);
+
+        var width = (png[16] << 24) | (png[17] << 16) | (png[18] << 8) | png[19];
+        await Assert.That(width).IsEqualTo(2048);
+    }
+
+    [Test]
     public async Task Convert_RoundTripsThroughFlatGeobuf()
     {
         var fgb = ConversionService.Convert(Sample.GeoJsonBytes, GeoFormat.GeoJson, GeoFormat.FlatGeobuf);
