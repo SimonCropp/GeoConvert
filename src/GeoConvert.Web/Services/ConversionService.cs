@@ -72,6 +72,7 @@ public static class ConversionService
         var options = new RenderOptions
         {
             Projection = projection,
+            StrokeAutoScale = true
         };
         if (maxDimension > 0)
         {

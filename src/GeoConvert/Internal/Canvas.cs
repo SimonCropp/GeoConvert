@@ -162,9 +162,23 @@ sealed class Canvas : IDisposable
     /// outlines / polyline geometry so the whole output reads consistently. The trade-off is a
     /// 1-pixel-wide stroke blooms slightly into a ~1.5px soft band; on typical map scales the
     /// smoothness wins over the lost pixel sharpness.
+    /// <para>
+    /// Sub-pixel widths are coverage-compensated: the geometric radius can't shrink below half a
+    /// pixel (a line still has to land on the pixel grid), so a sub-1px stroke is drawn as a 1px
+    /// band with its alpha scaled down by the requested width. A 0.4px line therefore reads as a
+    /// faint hairline rather than a solid 1px stroke — which is what keeps a dense map (thousands
+    /// of tiny polygons whose borders all collapse onto the same pixels at a small canvas size)
+    /// from filling in to a solid black mass. The scale is linear in width and continuous at
+    /// width = 1, so any width ≥ 1 is left exactly as before.
+    /// </para>
     /// </summary>
     public void StrokeLine(double x0, double y0, double x1, double y1, double width, Rgba color)
     {
+        // Coverage compensation for sub-pixel strokes (see remarks): below 1px the line can't get
+        // geometrically thinner than the 0.5 radius floor, so fade its alpha by the width instead.
+        // Math.Min keeps width ≥ 1 at scale 1.0 — a no-op that leaves full-width output bit-identical.
+        var coverageScale = Math.Min(width, 1.0);
+        color = color with {A = (byte)(color.A * coverageScale)};
         var radius = Math.Max(width / 2, 0.5);
         // One extra pixel beyond the geometric radius gives room for the fractional-coverage
         // ramp at the outer edge of the stroke: below this distance coverage = 1, beyond it

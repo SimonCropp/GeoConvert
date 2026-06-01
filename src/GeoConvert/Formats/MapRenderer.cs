@@ -176,21 +176,36 @@ public static class MapRenderer
             (overrides?.StrokeWidth ?? options.StrokeWidth) * strokeMultiplier,
             (overrides?.PointRadius ?? options.PointRadius) * strokeMultiplier);
 
+    // Stroke-width multiplier curve. The multiplier halves for every two implicit zoom levels below
+    // the country-scale anchor and doubles for every two above it — base √2 per zoom level. That's a
+    // far steeper ramp than the tile-map ~1.15×/level convention, on purpose: a *static* render of a
+    // fixed dataset wants its strokes roughly proportional to the output's pixel density (halve the
+    // canvas → halve the stroke), so a thumbnail of a dense map reads as thin faint hairlines instead
+    // of a black mass, while a tightly-zoomed render gets substantial borders. The lower clamp is low
+    // enough that a whole-world thumbnail still thins right down (StrokeLine's coverage compensation
+    // then renders that as a faint hairline rather than nothing); the upper clamp caps street-level
+    // zooms before the stroke swallows the canvas.
+    const double strokeZoomBase = 1.4142135623730951; // √2
+    const int strokeZoomAnchor = 10;
+    const double strokeMultiplierMin = 0.1;
+    const double strokeMultiplierMax = 6;
+
     /// <summary>
     /// Derives a stroke-width multiplier from the canvas/bbox ratio — the static-render equivalent
     /// of tile-map zoom-aware styling. Uses the smaller of the horizontal and vertical
     /// pixels-per-degree (the axis that actually fits the rendered extent), converts to an
-    /// implicit zoom via the tile-map convention (zoom = log2(width-at-360° / 256)), then grows
-    /// the multiplier by 1.15× per zoom level with zoom 10 (country-scale) as the
-    /// multiplier-of-1 baseline. Clamped to [0.25, 6] so a degenerate bbox doesn't blow the
-    /// multiplier to infinity or zero.
+    /// implicit zoom via the tile-map convention (zoom = log2(width-at-360° / 256)), then scales the
+    /// multiplier by <see cref="strokeZoomBase"/> (√2) per zoom level with zoom
+    /// <see cref="strokeZoomAnchor"/> (country-scale) as the multiplier-of-1 baseline. Clamped to
+    /// [<see cref="strokeMultiplierMin"/>, <see cref="strokeMultiplierMax"/>] so a degenerate bbox
+    /// doesn't blow the multiplier to infinity or zero.
     /// </summary>
     static double ComputeStrokeMultiplier(Canvas canvas, Envelope bounds)
     {
         var pixelsPerDegree = Math.Min(canvas.Width / bounds.Width, canvas.Height / bounds.Height);
         var zoom = Math.Log2(pixelsPerDegree * 360.0 / 256);
-        var multiplier = Math.Pow(1.15, zoom - 10);
-        return Math.Clamp(multiplier, 0.25, 6);
+        var multiplier = Math.Pow(strokeZoomBase, zoom - strokeZoomAnchor);
+        return Math.Clamp(multiplier, strokeMultiplierMin, strokeMultiplierMax);
     }
 
     static void Draw(Canvas canvas, Geometry geometry, Projection projection, ResolvedStyle style)

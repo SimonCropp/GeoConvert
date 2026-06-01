@@ -59,22 +59,37 @@ public sealed class RenderOptions
     /// <summary>Fill color for polygons (typically semi-transparent).</summary>
     public Rgba Fill { get; set; } = new(70, 130, 180, 120);
 
+    /// <summary>
+    /// Base outline width in pixels for lines, polygon edges and point markers. This is the
+    /// magnitude, independent of <see cref="StrokeAutoScale"/>: with autoscale on (the default) it
+    /// is the weight at the country-scale anchor (implicit zoom ~10) and the rendered width scales
+    /// with zoom from there, so raising it gives heavier borders at every scale while still thinning
+    /// for thumbnails; with autoscale off it is the fixed pixel width at every scale.
+    /// </summary>
     public int StrokeWidth { get; set; } = 2;
 
+    /// <summary>
+    /// Base radius in pixels for point/multi-point markers. Like <see cref="StrokeWidth"/> this is
+    /// the base magnitude — <see cref="StrokeAutoScale"/> (on by default) scales it with zoom off
+    /// this anchor value; with autoscale off it is the fixed pixel radius at every scale.
+    /// </summary>
     public int PointRadius { get; set; } = 4;
 
     /// <summary>
-    /// When true, <see cref="StrokeWidth"/> and <see cref="PointRadius"/> are multiplied by an
-    /// implicit-zoom factor derived from the canvas/bbox ratio — so the same scene rendered at a
-    /// tighter bbox (or larger canvas) gets proportionally thicker strokes, the way tile-map
-    /// stylesheets thicken lines at higher zoom levels. The multiplier follows the web-map
-    /// convention of 1.15× growth per zoom level (~doubling every five zooms), anchored so a
-    /// country-scale view is the multiplier-of-1 baseline, and clamped to [0.25, 6] so degenerate
-    /// bboxes don't produce nonsensical extremes. Label size is intentionally NOT scaled — text
-    /// stays at fixed pixel sizes across zooms, the same convention every shipping web map uses.
-    /// Defaults to false (off) so existing snapshot output is unchanged; opt in per render.
+    /// When true (the default), <see cref="StrokeWidth"/> and <see cref="PointRadius"/> are
+    /// multiplied by an implicit-zoom factor derived from the canvas/bbox ratio — so the same scene
+    /// rendered at a tighter bbox (or larger canvas) gets proportionally thicker strokes, and a
+    /// thumbnail or whole-world view gets proportionally thinner ones. The multiplier scales by √2
+    /// per implicit zoom level (the stroke halves for every two levels below the country-scale
+    /// anchor, doubles for every two above), clamped to [0.1, 6] so degenerate bboxes don't produce
+    /// nonsensical extremes. This keeps strokes roughly proportional to the output's pixel density,
+    /// which is what stops a low-resolution render of a dense map (thousands of small polygons) from
+    /// collapsing into a solid black mass — the thinned-down borders render as faint hairlines via
+    /// the rasterizer's sub-pixel coverage compensation. Label size is intentionally NOT scaled —
+    /// text stays at fixed pixel sizes across zooms, the same convention every shipping web map uses.
+    /// Set to false for a fixed pixel <see cref="StrokeWidth"/> regardless of scale.
     /// </summary>
-    public bool StrokeAutoScale { get; set; }
+    public bool StrokeAutoScale { get; set; } = true;
 
     /// <summary>
     /// Per-layer style override. Invoked once for each <see cref="FeatureCollection"/> visited during
