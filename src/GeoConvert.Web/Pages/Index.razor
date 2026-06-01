@@ -210,20 +210,20 @@
         return Task.CompletedTask;
     }
 
-    async Task OnProjectionChanged(ChangeEventArgs args)
+    Task OnProjectionChanged(ChangeEventArgs args)
     {
         projection = Enum.Parse<MapProjection>((string) args.Value!);
-        await RefreshPreviewAsync();
+        return RefreshPreviewAsync();
     }
 
-    async Task OnMaxDimensionChanged(ChangeEventArgs args)
+    Task OnMaxDimensionChanged(ChangeEventArgs args)
     {
         if (int.TryParse((string?) args.Value, out var value) && value > 0)
         {
             maxDimension = value;
         }
 
-        await RefreshPreviewAsync();
+        return RefreshPreviewAsync();
     }
 
     async Task Download()

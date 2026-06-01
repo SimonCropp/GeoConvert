@@ -35,7 +35,7 @@ public class FormatSelectorTests : BunitTestContext
             .Add(_ => _.Selected, GeoFormat.Kml)
             .Add(_ => _.SelectedChanged, (GeoFormat format) => selected = format));
 
-        cut.Find("select").Change(nameof(GeoFormat.Gpx));
+        await EventHandlerDispatchExtensions.ChangeAsync(cut.Find("select"), nameof(GeoFormat.Gpx));
 
         await Assert.That(selected).IsEqualTo(GeoFormat.Gpx);
     }

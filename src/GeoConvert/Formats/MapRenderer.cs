@@ -9,7 +9,7 @@ public static class MapRenderer
 {
     // Standard Web Mercator latitude cutoff: ln(tan) blows up at ±90°, and ±85.0511° is where the
     // projected square world meets its longitudinal width — the convention every tile provider uses.
-    internal const double WebMercatorMaxLatitude = 85.05112877980659;
+    const double webMercatorMaxLatitude = 85.05112877980659;
 
     /// <summary>
     /// The conventional <see cref="RenderOptions.Bounds"/> for a Web Mercator world map: longitude spans
@@ -18,7 +18,7 @@ public static class MapRenderer
     /// under <see cref="MapProjection.WebMercator"/>; for any subregion just supply real data bounds.
     /// </summary>
     public static Envelope WebMercatorWorldBounds { get; } =
-        new(-180, -WebMercatorMaxLatitude, 180, WebMercatorMaxLatitude);
+        new(-180, -webMercatorMaxLatitude, 180, webMercatorMaxLatitude);
 
     public static byte[] RenderPng(FeatureCollection features, RenderOptions? options = null) =>
         RenderPng([features], options);
@@ -73,7 +73,7 @@ public static class MapRenderer
                 "Cannot render PNG: the features is empty. Provide RenderOptions.Bounds.");
         }
 
-        if (options.MaxDimension <= 0 && options.Width <= 0)
+        if (options is {MaxDimension: <= 0, Width: <= 0})
         {
             throw new GeoConvertException("RenderOptions.Width must be positive.");
         }
@@ -1068,7 +1068,7 @@ public static class MapRenderer
 
         static double ProjectWebMercatorY(double latitude)
         {
-            var clamped = Math.Clamp(latitude, -WebMercatorMaxLatitude, WebMercatorMaxLatitude);
+            var clamped = Math.Clamp(latitude, -webMercatorMaxLatitude, webMercatorMaxLatitude);
             var radians = clamped * Math.PI / 180;
             // Scale back to degree-equivalent units so the projected envelope reads in the same unit as
             // longitude — the downstream pixel math is scale-invariant either way, but this keeps the
