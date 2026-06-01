@@ -9,8 +9,12 @@ build_script:
     ./dotnet-install.ps1 -JSonFile global.json -Architecture x64 -InstallDir 'C:\Program Files\dotnet'
 # Build the library + CLI in Release (packs GeoConvert + GeoConvert.Cli nupkgs into nugets/)
 - dotnet build src --configuration Release
-# Run the test suite (TUnit executable), emitting a trx report and Cobertura coverage
-- pwsh: src/Tests/bin/Release/net11.0/Tests.exe --no-ansi --no-progress --report-trx --report-trx-filename unit.trx --results-directory TestResults --coverage --coverage-output-format cobertura --coverage-output unit.cobertura.xml
+# Run the test suite (TUnit executable), emitting a trx report and Cobertura coverage.
+# PowerShell does not surface a native command's non-zero exit code as its own, so check
+# $LASTEXITCODE explicitly — otherwise a failing test run would still pass the build.
+- pwsh: |
+    src/Tests/bin/Release/net11.0/Tests.exe --no-ansi --no-progress --report-trx --report-trx-filename unit.trx --results-directory TestResults --coverage --coverage-output-format cobertura --coverage-output unit.cobertura.xml
+    if ($LASTEXITCODE -ne 0) { throw "Test run failed (exit code $LASTEXITCODE)." }
 # Fail the build unless the shipped source is fully covered
 - pwsh: ./src/coverage-check.ps1 -Report TestResults/unit.cobertura.xml -Threshold 100
 on_finish:

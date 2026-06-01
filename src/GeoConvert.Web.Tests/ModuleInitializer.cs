@@ -4,7 +4,7 @@ static class ModuleInitializer
     public static void Initialize()
     {
         VerifyPlaywright.Initialize(installPlaywright: true);
-        VerifierSettings.UseSsimForPng();
+        VerifierSettings.UseSsimForPng(.7);
         VerifierSettings.InitializePlugins();
     }
 }

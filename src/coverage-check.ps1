@@ -54,7 +54,15 @@ foreach ($entry in $lineHits.GetEnumerator())
 }
 
 $total = $lineHits.Count
-$percent = if ($total -eq 0) { 100 } else { 100.0 * $covered / $total }
+if ($total -eq 0)
+{
+    # An empty report means coverage collection produced nothing (the shipped source is thousands of
+    # lines). Treat that as a failure rather than vacuously passing the gate.
+    Write-Error "No shipped-source coverage data found in $Report. Coverage collection likely failed."
+    exit 1
+}
+
+$percent = 100.0 * $covered / $total
 "Line coverage (shipped source): {0}/{1} = {2:N2}%" -f $covered, $total, $percent
 
 if ($percent -lt $Threshold)
