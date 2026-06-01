@@ -1236,12 +1236,12 @@ public class LabelTests
     public Task Render_snapshot_stroke_autoscale_world()
     {
         // Snapshot pinning the visual effect of StrokeAutoScale at a world-scale render — the
-        // multiplier should be well below 1 (zoom ~4 at 2048-wide is 5.5 zoom levels under the
-        // country-scale baseline, so 1.15^-5.5 ≈ 0.46). Compared to the existing world snapshots
-        // that use a fixed 2px StrokeWidth, this one should show noticeably thinner borders.
-        // A regression that reversed the formula's direction (e.g. 1.15^(10 - zoom) instead of
-        // 1.15^(zoom - 10)) would produce the opposite: thick borders at world scale, which
-        // would diff loudly against this baseline.
+        // multiplier should be well below 1 (a 2048-wide world view sits ~7 zoom levels under the
+        // country-scale baseline, and √2^-7 ≈ 0.09 clamps to the 0.1 floor). Compared to a fixed
+        // 2px StrokeWidth, this shows much thinner borders, rendered as faint hairlines by the
+        // sub-pixel coverage compensation. A regression that reversed the formula's direction
+        // (e.g. √2^(10 - zoom) instead of √2^(zoom - 10)) would produce the opposite: thick
+        // borders at world scale, which would diff loudly against this baseline.
         var features = GeoConverter.Read(ProjectFiles.world_geojson);
         var png = MapRenderer.RenderPng(
             features,
@@ -1291,36 +1291,37 @@ public class LabelTests
     }
 
     [Test]
-    public async Task StrokeAutoScale_off_leaves_strokes_unchanged()
+    public async Task StrokeAutoScale_on_by_default()
     {
-        // With the flag off (default), the rendered bytes must match a render that doesn't set
-        // the flag at all — autoscale is genuinely opt-in and the existing snapshot output is
-        // untouched.
-        var features = new FeatureCollection
+        // Autoscale is on by default, so a render that doesn't set the flag must match one that
+        // sets it explicitly true — and must differ from one that turns it off (the fixed-pixel
+        // path). This pins the default direction: a regression that flipped the default back to
+        // off would make the unset render match the off render instead.
+        static byte[] Render(bool? autoScale)
         {
-            new Feature(new LineString([new(-5, 0), new(5, 0)])),
-        };
-        var withFlag = MapRenderer.RenderPng(features, new()
-        {
-            Bounds = new(-10, -10, 10, 10),
-            Width = 200,
-            Height = 200,
-            Padding = 0,
-            Projection = MapProjection.PlateCarree,
-            StrokeWidth = 3,
-            StrokeAutoScale = false,
-        });
-        var withoutFlag = MapRenderer.RenderPng(features, new()
-        {
-            Bounds = new(-10, -10, 10, 10),
-            Width = 200,
-            Height = 200,
-            Padding = 0,
-            Projection = MapProjection.PlateCarree,
-            StrokeWidth = 3,
-        });
+            var options = new RenderOptions
+            {
+                Bounds = new(-10, -10, 10, 10),
+                Width = 200,
+                Height = 200,
+                Padding = 0,
+                Projection = MapProjection.PlateCarree,
+                StrokeWidth = 3,
+            };
+            if (autoScale is { } value)
+            {
+                options.StrokeAutoScale = value;
+            }
 
-        await Assert.That(withFlag.SequenceEqual(withoutFlag)).IsTrue();
+            return MapRenderer.RenderPng([new Feature(new LineString([new(-5, 0), new(5, 0)]))], options);
+        }
+
+        var unset = Render(null);
+        var explicitOn = Render(true);
+        var explicitOff = Render(false);
+
+        await Assert.That(unset.SequenceEqual(explicitOn)).IsTrue();
+        await Assert.That(unset.SequenceEqual(explicitOff)).IsFalse();
     }
 
     [Test]
@@ -1352,7 +1353,7 @@ public class LabelTests
     {
         // Reverse: oversized bbox (3600° span) at small canvas pushes the implicit zoom well
         // below 0, where the formula would shrink the multiplier toward 0. The clamp pins it at
-        // 0.25× so the stroke never vanishes entirely. Exercises the lower-clamp branch.
+        // 0.1× so the stroke never vanishes entirely. Exercises the lower-clamp branch.
         var features = new FeatureCollection
         {
             new Feature(new LineString([new(-100, 0), new(100, 0)])),
