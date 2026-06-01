@@ -4,11 +4,13 @@
 
 @code {
     ThemeType currentTheme = ThemeType.Light;
+    string? userAgent;
 
     protected override async Task OnInitializedAsync()
     {
         currentTheme = await ThemePreferenceService.GetSavedThemeAsync();
         await JSRuntime.InvokeVoidAsync("themeManager.applyTheme", currentTheme.ToString());
+        userAgent = await JSRuntime.InvokeAsync<string?>("appInfo.userAgent");
     }
 
     async Task HandleThemeChanged(ThemeType newTheme)
@@ -26,7 +28,15 @@
 </header>
 
 <div class="container">
-    @Body
+    <ErrorBoundary>
+        <ChildContent>
+            @Body
+        </ChildContent>
+        <ErrorContent Context="exception">
+            <ErrorPanel Message="@($"Something went wrong: {exception.Message}")"
+                        IssueUrl="@IssueLauncher.ForException("Unhandled error", exception, AppInfo.Environment(userAgent))" />
+        </ErrorContent>
+    </ErrorBoundary>
 </div>
 
 <footer>

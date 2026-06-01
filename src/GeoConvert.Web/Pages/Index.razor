@@ -1,5 +1,6 @@
 @page "/"
 @inject FileDownloadService FileDownloadService
+@inject IJSRuntime JsRuntime
 
 <PageTitle>GeoConvert — Map Format Converter</PageTitle>
 
@@ -23,9 +24,9 @@
         </label>
     </div>
 
-    @if (error is not null)
+    @if (errorMessage is not null)
     {
-        <div class="error" role="alert">@error</div>
+        <ErrorPanel Message="@errorMessage" IssueUrl="@issueUrl" />
     }
 
     @if (features is not null)
@@ -58,10 +59,15 @@
     FeatureCollection? features;
     int featureCount;
     string? previewDataUrl;
-    string? error;
+    string? errorMessage;
+    string? issueUrl;
+    string? userAgent;
     GeoFormat target = GeoFormat.Kml;
 
     FormatInfo? TargetInfo => ConversionService.Find(target);
+
+    protected override async Task OnInitializedAsync() =>
+        userAgent = await JsRuntime.InvokeAsync<string?>("appInfo.userAgent");
 
     async Task OnFileSelected(InputFileChangeEventArgs args)
     {
@@ -73,7 +79,8 @@
         var detected = ConversionService.DetectReadable(file.Name);
         if (detected is null)
         {
-            error = $"Can't read '{file.Name}'. Upload a GeoJSON, TopoJSON, FlatGeobuf, KML, KMZ, GPX, WKT, WKB, CSV or GeoParquet file.";
+            // User error rather than a bug, so no "report an issue" prompt.
+            errorMessage = $"Can't read '{file.Name}'. Upload a GeoJSON, TopoJSON, FlatGeobuf, KML, KMZ, GPX, WKT, WKB, CSV or GeoParquet file.";
             return;
         }
 
@@ -92,7 +99,7 @@
         }
         catch (Exception exception)
         {
-            error = $"Could not read the map: {exception.Message}";
+            ReportError("Could not read the map", exception);
             features = null;
         }
     }
@@ -143,13 +150,20 @@
         }
         catch (Exception exception)
         {
-            error = $"Could not convert to {info.DisplayName}: {exception.Message}";
+            ReportError($"Could not convert to {info.DisplayName}", exception);
         }
+    }
+
+    void ReportError(string action, Exception exception)
+    {
+        errorMessage = $"{action}: {exception.Message}";
+        issueUrl = IssueLauncher.ForException(action, exception, AppInfo.Environment(userAgent));
     }
 
     void Reset()
     {
-        error = null;
+        errorMessage = null;
+        issueUrl = null;
         sourceBytes = null;
         sourceName = null;
         sourceFormat = null;

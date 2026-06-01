@@ -30,6 +30,12 @@ window.fileDownload = {
     }
 };
 
+window.appInfo = {
+    userAgent: function () {
+        return navigator.userAgent;
+    }
+};
+
 window.themeManager = {
     applyTheme: function (themeName) {
         document.documentElement.setAttribute('data-theme', themeName.toLowerCase());

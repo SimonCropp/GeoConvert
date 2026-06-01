@@ -254,6 +254,20 @@ header p {
     border-radius: 8px;
 }
 
+.error-message {
+    margin: 0;
+}
+
+.error-report {
+    margin: 0.75rem 0 0;
+    font-size: 0.9rem;
+}
+
+.error-report a {
+    color: #842029;
+    font-weight: 600;
+}
+
 footer {
     text-align: center;
     padding: 1rem;

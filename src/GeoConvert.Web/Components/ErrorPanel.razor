@@ -1,0 +1,21 @@
+@code {
+    [Parameter]
+    public string Message { get; set; } = "";
+
+    // When set, the error came from an unexpected exception rather than user input, so we invite a bug
+    // report pre-filled at this GitHub "new issue" URL.
+    [Parameter]
+    public string? IssueUrl { get; set; }
+}
+
+<div class="error" role="alert">
+    <p class="error-message">@Message</p>
+    @if (IssueUrl is not null)
+    {
+        <p class="error-report">
+            This looks like a bug.
+            <a href="@IssueUrl" target="_blank" rel="noopener">Open a GitHub issue</a>
+            — the details are pre-filled for you.
+        </p>
+    }
+</div>
