@@ -27,6 +27,16 @@ public sealed class RenderOptions
     /// <summary>Image height in pixels. When 0, it is derived from <see cref="Width"/> and the aspect ratio.</summary>
     public int Height { get; set; }
 
+    /// <summary>
+    /// When positive, caps the image's <em>longer</em> edge at this many pixels and derives the shorter
+    /// edge from the projected aspect ratio — a fit-to-box that keeps the whole render within an
+    /// N×N square regardless of orientation. Whichever of width/height the data makes larger lands on
+    /// this value: a landscape extent caps its width, a portrait extent caps its height. When set, this
+    /// takes precedence over and ignores both <see cref="Width"/> and <see cref="Height"/>. Defaults to
+    /// 0 (off), so the default behaviour stays width-pinned.
+    /// </summary>
+    public int MaxDimension { get; set; }
+
     /// <summary>Empty margin, in pixels, kept around the content.</summary>
     public int Padding { get; set; } = 8;
 

@@ -61,6 +61,26 @@ public static class ConversionService
         return stream.ToArray();
     }
 
+    /// <summary>
+    /// Renders a PNG with caller-chosen layout. <paramref name="projection"/> selects the map
+    /// projection; <paramref name="maxDimension"/>, when positive, caps the image's longer edge at
+    /// that many pixels (the shorter edge follows the aspect ratio) — otherwise the renderer's default
+    /// size applies.
+    /// </summary>
+    public static byte[] RenderPng(FeatureCollection features, MapProjection projection, int maxDimension)
+    {
+        var options = new RenderOptions
+        {
+            Projection = projection,
+        };
+        if (maxDimension > 0)
+        {
+            options.MaxDimension = maxDimension;
+        }
+
+        return MapRenderer.RenderPng(features, options);
+    }
+
     public static byte[] Convert(byte[] input, GeoFormat from, GeoFormat to) =>
         Write(Read(input, from), to);
 }

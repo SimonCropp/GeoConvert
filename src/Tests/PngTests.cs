@@ -235,6 +235,57 @@ public class PngTests
     }
 
     [Test]
+    public async Task MaxDimension_caps_the_longer_edge()
+    {
+        // Fit-to-box: the longer projected axis lands on MaxDimension, the shorter is derived from the
+        // aspect ratio. PlateCarree is linear, so an 80°×10° landscape extent caps its width and a
+        // 10°×80° portrait extent caps its height — the other axis scales to 1/8 of the cap.
+        var features = new FeatureCollection
+        {
+            new Feature(new Point(0, 0))
+        };
+
+        static RenderOptions Build(Envelope bounds) => new()
+        {
+            Bounds = bounds,
+            MaxDimension = 400,
+            Padding = 0,
+            Projection = MapProjection.PlateCarree,
+        };
+
+        var (landscapeWidth, landscapeHeight, _) = Decode(MapRenderer.RenderPng(features, Build(new Envelope(0, 0, 80, 10))));
+        var (portraitWidth, portraitHeight, _) = Decode(MapRenderer.RenderPng(features, Build(new Envelope(0, 0, 10, 80))));
+
+        await Assert.That(landscapeWidth).IsEqualTo(400);
+        await Assert.That(landscapeHeight).IsEqualTo(50);
+        await Assert.That(portraitHeight).IsEqualTo(400);
+        await Assert.That(portraitWidth).IsEqualTo(50);
+    }
+
+    [Test]
+    public async Task MaxDimension_overrides_width_and_height()
+    {
+        // When MaxDimension is set it drives both axes, so Width/Height are ignored — even a Width of 0
+        // (which would otherwise be rejected) renders fine.
+        var features = new FeatureCollection
+        {
+            new Feature(new Point(0, 0))
+        };
+
+        var (width, _, _) = Decode(MapRenderer.RenderPng(features, new()
+        {
+            Bounds = new Envelope(0, 0, 80, 10),
+            Width = 0,
+            Height = 999,
+            MaxDimension = 320,
+            Padding = 0,
+            Projection = MapProjection.PlateCarree,
+        }));
+
+        await Assert.That(width).IsEqualTo(320);
+    }
+
+    [Test]
     public async Task WebMercator_clamps_polar_latitudes()
     {
         // ln(tan) at lat 90° is +∞. Anything past the ±85.0511° cutoff should clamp to the limit, so two
