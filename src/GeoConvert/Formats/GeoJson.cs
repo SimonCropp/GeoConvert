@@ -11,19 +11,22 @@ public static class GeoJson
         Indented = true
     };
 
-    public static FeatureCollection Read(Stream stream)
+    public static FeatureCollection Read(Stream stream) =>
+        Read(stream, null);
+
+    internal static FeatureCollection Read(Stream stream, ProgressReporter? progress)
     {
         using var document = JsonDocument.Parse(stream);
-        return Read(document.RootElement);
+        return Read(document.RootElement, progress);
     }
 
     public static FeatureCollection ReadString(string text)
     {
         using var document = JsonDocument.Parse(text);
-        return Read(document.RootElement);
+        return Read(document.RootElement, null);
     }
 
-    static FeatureCollection Read(JsonElement root)
+    static FeatureCollection Read(JsonElement root, ProgressReporter? progress)
     {
         var type = root.TryGetProperty("type", out var typeElement) ? typeElement.GetString() : null;
         var collection = new FeatureCollection();
@@ -35,18 +38,21 @@ public static class GeoJson
                     foreach (var feature in features.EnumerateArray())
                     {
                         collection.Add(ReadFeature(feature));
+                        progress?.Feature();
                     }
                 }
 
                 return collection;
             case "Feature":
                 collection.Add(ReadFeature(root));
+                progress?.Feature();
                 return collection;
             case null:
                 throw new GeoConvertException("GeoJSON root is missing a 'type' member.");
             default:
                 // A bare geometry object.
                 collection.Add(new Feature(ReadGeometry(root)));
+                progress?.Feature();
                 return collection;
         }
     }
@@ -177,20 +183,23 @@ public static class GeoJson
         return polygons;
     }
 
-    public static void Write(Stream stream, FeatureCollection collection)
+    public static void Write(Stream stream, FeatureCollection collection) =>
+        Write(stream, collection, null);
+
+    internal static void Write(Stream stream, FeatureCollection collection, ProgressReporter? progress)
     {
         using var writer = new Utf8JsonWriter(stream, writerOptions);
-        Write(writer, collection);
+        Write(writer, collection, progress);
     }
 
     public static string WriteString(FeatureCollection collection)
     {
         using var stream = new MemoryStream();
-        Write(stream, collection);
+        Write(stream, collection, null);
         return Encoding.UTF8.GetString(stream.GetBuffer(), 0, (int)stream.Length);
     }
 
-    static void Write(Utf8JsonWriter writer, FeatureCollection collection)
+    static void Write(Utf8JsonWriter writer, FeatureCollection collection, ProgressReporter? progress)
     {
         writer.WriteStartObject();
         writer.WriteString("type", "FeatureCollection");
@@ -198,6 +207,7 @@ public static class GeoJson
         foreach (var feature in collection)
         {
             WriteFeature(writer, feature);
+            progress?.Feature();
         }
 
         writer.WriteEndArray();

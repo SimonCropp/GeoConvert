@@ -34,7 +34,10 @@ public static class FlatGeobuf
 
     readonly record struct Column(string Name, byte Type);
 
-    public static FeatureCollection Read(Stream stream)
+    public static FeatureCollection Read(Stream stream) =>
+        Read(stream, null);
+
+    internal static FeatureCollection Read(Stream stream, ProgressReporter? progress)
     {
         // Buffer the whole stream into a MemoryStream's growable backing array and read straight from
         // that — the previous code copied the backing array out via ToArray(), doubling peak memory
@@ -59,7 +62,7 @@ public static class FlatGeobuf
 
         try
         {
-            return ReadCore(data, length);
+            return ReadCore(data, length, progress);
         }
         catch (GeoConvertException)
         {
@@ -73,7 +76,7 @@ public static class FlatGeobuf
         }
     }
 
-    static FeatureCollection ReadCore(byte[] data, int length)
+    static FeatureCollection ReadCore(byte[] data, int length, ProgressReporter? progress)
     {
         var position = 8;
         var header = ReadSizePrefixed(data, length, ref position);
@@ -99,6 +102,7 @@ public static class FlatGeobuf
         {
             var feature = ReadSizePrefixed(data, length, ref position);
             collection.Add(ReadFeature(feature, columns, fallbackType));
+            progress?.Feature();
         }
 
         return collection;
@@ -262,7 +266,10 @@ public static class FlatGeobuf
         return (int)(nodes * nodeItemSize);
     }
 
-    public static void Write(Stream stream, FeatureCollection features)
+    public static void Write(Stream stream, FeatureCollection features) =>
+        Write(stream, features, null);
+
+    internal static void Write(Stream stream, FeatureCollection features, ProgressReporter? progress)
     {
         var columns = BuildColumns(features);
         stream.Write(magic);
@@ -274,6 +281,7 @@ public static class FlatGeobuf
         foreach (var feature in features)
         {
             WriteFeature(builder, stream, feature, columns, propertyBuffer);
+            progress?.Feature();
         }
     }
 

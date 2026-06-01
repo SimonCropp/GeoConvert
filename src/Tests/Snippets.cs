@@ -92,6 +92,30 @@ static class Snippets
         #endregion
     }
 
+    public static void Progress()
+    {
+        #region Progress
+
+        // Read, Write and Convert each take an optional IProgress<ConvertProgress>. Convert reports the
+        // read half under ProgressPhase.Reading and the write half under ProgressPhase.Writing. Every
+        // report carries a feature count and a byte count; ConvertProgress.Fraction picks whichever
+        // total is known (features when writing, bytes when reading a seekable source) and returns null
+        // when neither is — an honest "indeterminate" rather than a fabricated percentage.
+        var progress = new Progress<ConvertProgress>(report =>
+        {
+            var percent = report.Fraction is { } fraction ? $"{fraction:P0}" : "?";
+            Console.WriteLine($"{report.Phase}: {report.Features} features ({percent})");
+        });
+
+        GeoConverter.Convert("countries.geojson", "countries.fgb", progress);
+
+        // PNG rendering reports through RenderOptions.Progress (one report per feature rasterised).
+        var features = GeoConverter.Read("countries.geojson");
+        MapRenderer.RenderPng(features, "world.png", new() { Progress = progress });
+
+        #endregion
+    }
+
     public static void RenderToPng()
     {
         #region RenderToPng

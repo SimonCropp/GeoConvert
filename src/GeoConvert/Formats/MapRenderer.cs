@@ -42,7 +42,7 @@ public static class MapRenderer
         options ??= new();
         var bounds = Validate(layers, options);
         using var memory = new MemoryStream();
-        Render(layers, memory, options, bounds);
+        RenderWithProgress(layers, memory, options, bounds);
         return memory.ToArray();
     }
 
@@ -54,14 +54,52 @@ public static class MapRenderer
         // but those are unrecoverable I/O errors where a partial file is the conventional signal.
         var bounds = Validate(layers, options);
         using var stream = File.Create(path);
-        Render(layers, stream, options, bounds);
+        RenderWithProgress(layers, stream, options, bounds);
     }
 
     public static void RenderPng(IReadOnlyList<FeatureCollection> layers, Stream stream, RenderOptions? options = null)
     {
         options ??= new();
         var bounds = Validate(layers, options);
-        Render(layers, stream, options, bounds);
+        RenderWithProgress(layers, stream, options, bounds);
+    }
+
+    // Used by GeoConverter when a PNG conversion is given a progress sink: the facade has already built
+    // the reporter (so the Writing phase is shared with the preceding read) and wrapped the stream for
+    // byte tracking, so render straight through rather than going via RenderOptions.Progress.
+    internal static void RenderPng(FeatureCollection features, Stream stream, ProgressReporter progress)
+    {
+        var layers = new[] { features };
+        var options = new RenderOptions();
+        var bounds = Validate(layers, options);
+        Render(layers, stream, options, bounds, progress);
+    }
+
+    // Honours RenderOptions.Progress for the public entry points: builds a Writing-phase reporter whose
+    // FeatureTotal is the whole layer set, wraps the stream so the encoded PNG bytes are tallied too,
+    // then renders. With no sink set it renders straight through with no per-feature bookkeeping.
+    static void RenderWithProgress(IReadOnlyList<FeatureCollection> layers, Stream stream, RenderOptions options, Envelope bounds)
+    {
+        if (options.Progress is { } sink)
+        {
+            var reporter = new ProgressReporter(sink, ProgressPhase.Writing, TotalFeatures(layers), null);
+            Render(layers, new ProgressStream(stream, reporter), options, bounds, reporter);
+        }
+        else
+        {
+            Render(layers, stream, options, bounds, null);
+        }
+    }
+
+    static long TotalFeatures(IReadOnlyList<FeatureCollection> layers)
+    {
+        long total = 0;
+        foreach (var layer in layers)
+        {
+            total += layer.Count;
+        }
+
+        return total;
     }
 
     static Envelope Validate(IReadOnlyList<FeatureCollection> layers, RenderOptions options)
@@ -92,7 +130,7 @@ public static class MapRenderer
         return bounds;
     }
 
-    static void Render(IReadOnlyList<FeatureCollection> layers, Stream stream, RenderOptions options, Envelope bounds)
+    static void Render(IReadOnlyList<FeatureCollection> layers, Stream stream, RenderOptions options, Envelope bounds, ProgressReporter? progress)
     {
         var projection = new Projection(bounds, options);
         using var canvas = new Canvas(projection.Width, projection.Height, options.Background);
@@ -129,7 +167,7 @@ public static class MapRenderer
 
         foreach (var layer in layers)
         {
-            DrawLayer(canvas, layer, projection, options, strokeMultiplier);
+            DrawLayer(canvas, layer, projection, options, strokeMultiplier, progress);
         }
 
         // Labels run after every geometry pass so they sit on top of all fills and strokes —
@@ -148,7 +186,7 @@ public static class MapRenderer
     // Pre-order: a layer paints its own features first, then recurses into its children. Source-over
     // blending means whatever paints last sits on top, so children naturally appear over their parent
     // — pick layer styles via RenderOptions.LayerStyle to keep them visually distinct.
-    static void DrawLayer(Canvas canvas, FeatureCollection layer, Projection projection, RenderOptions options, double strokeMultiplier)
+    static void DrawLayer(Canvas canvas, FeatureCollection layer, Projection projection, RenderOptions options, double strokeMultiplier, ProgressReporter? progress)
     {
         var style = Resolve(options.LayerStyle?.Invoke(layer), options, strokeMultiplier);
         foreach (var feature in layer.Features)
@@ -157,11 +195,15 @@ public static class MapRenderer
             {
                 Draw(canvas, geometry, projection, style);
             }
+
+            // One report per feature visited (geometry or not) so the running count reaches the
+            // FeatureTotal the reporter was seeded with. The label pass below doesn't re-report.
+            progress?.Feature();
         }
 
         foreach (var child in layer.Children)
         {
-            DrawLayer(canvas, child, projection, options, strokeMultiplier);
+            DrawLayer(canvas, child, projection, options, strokeMultiplier, progress);
         }
     }
 

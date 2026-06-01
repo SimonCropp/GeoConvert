@@ -16,11 +16,14 @@ public static class Gpx
 {
     const string ns = "http://www.topografix.com/GPX/1/1";
 
-    public static FeatureCollection Read(Stream stream)
+    public static FeatureCollection Read(Stream stream) =>
+        Read(stream, null);
+
+    internal static FeatureCollection Read(Stream stream, ProgressReporter? progress)
     {
         try
         {
-            return ReadCore(stream);
+            return ReadCore(stream, progress);
         }
         catch (GeoConvertException)
         {
@@ -32,7 +35,7 @@ public static class Gpx
         }
     }
 
-    static FeatureCollection ReadCore(Stream stream)
+    static FeatureCollection ReadCore(Stream stream, ProgressReporter? progress)
     {
         using var reader = Xml.CreateReader(stream);
         var collection = new FeatureCollection();
@@ -56,12 +59,15 @@ public static class Gpx
             {
                 case "wpt":
                     waypoints.Add(ReadWaypointFeature(reader));
+                    progress?.Feature();
                     break;
                 case "rte":
                     routes.Add(ReadRoute(reader));
+                    progress?.Feature();
                     break;
                 case "trk":
                     tracks.Add(ReadTrack(reader));
+                    progress?.Feature();
                     break;
                 default:
                     reader.Skip();
@@ -220,7 +226,10 @@ public static class Gpx
         return value;
     }
 
-    public static void Write(Stream stream, FeatureCollection features)
+    public static void Write(Stream stream, FeatureCollection features) =>
+        Write(stream, features, null);
+
+    internal static void Write(Stream stream, FeatureCollection features, ProgressReporter? progress)
     {
         using var writer = Xml.CreateWriter(stream);
         writer.WriteStartDocument();
@@ -235,12 +244,12 @@ public static class Gpx
         {
             foreach (var feature in features.Features)
             {
-                WriteFeature(writer, feature, category: null);
+                WriteFeature(writer, feature, category: null, progress);
             }
 
-            WriteCategoryChildren(writer, features, "waypoints");
-            WriteCategoryChildren(writer, features, "routes");
-            WriteCategoryChildren(writer, features, "tracks");
+            WriteCategoryChildren(writer, features, "waypoints", progress);
+            WriteCategoryChildren(writer, features, "routes", progress);
+            WriteCategoryChildren(writer, features, "tracks", progress);
 
             foreach (var child in features.Children)
             {
@@ -251,7 +260,7 @@ public static class Gpx
 
                 foreach (var feature in child)
                 {
-                    WriteFeature(writer, feature, category: null);
+                    WriteFeature(writer, feature, category: null, progress);
                 }
             }
         }
@@ -259,7 +268,7 @@ public static class Gpx
         {
             foreach (var feature in features)
             {
-                WriteFeature(writer, feature, category: null);
+                WriteFeature(writer, feature, category: null, progress);
             }
         }
 
@@ -270,7 +279,7 @@ public static class Gpx
     static bool IsCategoryLayer(FeatureCollection layer) =>
         layer.Name is "waypoints" or "routes" or "tracks";
 
-    static void WriteCategoryChildren(XmlWriter writer, FeatureCollection root, string category)
+    static void WriteCategoryChildren(XmlWriter writer, FeatureCollection root, string category, ProgressReporter? progress)
     {
         foreach (var child in root.Children)
         {
@@ -281,13 +290,16 @@ public static class Gpx
 
             foreach (var feature in child)
             {
-                WriteFeature(writer, feature, category);
+                WriteFeature(writer, feature, category, progress);
             }
         }
     }
 
-    static void WriteFeature(XmlWriter writer, Feature feature, string? category) =>
+    static void WriteFeature(XmlWriter writer, Feature feature, string? category, ProgressReporter? progress)
+    {
+        progress?.Feature();
         WriteGeometry(writer, feature.Geometry, feature, category);
+    }
 
     // Writes one geometry, carrying the owning feature so metadata (name/desc) is attached. A geometry
     // collection recurses, writing each member with the same feature metadata. The optional category

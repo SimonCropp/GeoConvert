@@ -17,13 +17,16 @@ public static class GeoParquet
     const string geometryColumnName = "geometry";
     const int defaultCodec = ParquetMetadata.CodecSnappy;
 
-    public static FeatureCollection Read(Stream stream)
+    public static FeatureCollection Read(Stream stream) =>
+        Read(stream, null);
+
+    internal static FeatureCollection Read(Stream stream, ProgressReporter? progress)
     {
         try
         {
             if (stream.CanSeek)
             {
-                return Parse(stream);
+                return Parse(stream, progress);
             }
 
             // Parquet's footer sits at the end of the file, so the reader has to seek; a forward-only
@@ -32,7 +35,7 @@ public static class GeoParquet
             using var memory = new MemoryStream();
             stream.CopyTo(memory);
             memory.Position = 0;
-            return Parse(memory);
+            return Parse(memory, progress);
         }
         catch (GeoConvertException)
         {
@@ -58,7 +61,7 @@ public static class GeoParquet
         return buffer;
     }
 
-    static FeatureCollection Parse(Stream stream)
+    static FeatureCollection Parse(Stream stream, ProgressReporter? progress)
     {
         var length = stream.Length;
         var trailer = length >= 12 ? ReadAt(stream, length - 8, 8) : null;
@@ -114,6 +117,7 @@ public static class GeoParquet
                 }
 
                 collection.Add(feature);
+                progress?.Feature();
             }
         }
 
@@ -316,6 +320,9 @@ public static class GeoParquet
     public static void Write(Stream stream, FeatureCollection features) =>
         Write(stream, features, defaultCodec, CompressionLevel.Optimal);
 
+    internal static void Write(Stream stream, FeatureCollection features, ProgressReporter? progress) =>
+        Write(stream, features, defaultCodec, CompressionLevel.Optimal, progress);
+
     /// <summary>
     /// Writes <paramref name="features"/> using the chosen <paramref name="compression"/> codec.
     /// <paramref name="gzipLevel"/> is only consulted when <paramref name="compression"/> is
@@ -338,7 +345,7 @@ public static class GeoParquet
         };
 
     // Internal so tests can probe each codec branch by its on-wire id without round-tripping the enum.
-    internal static void Write(Stream stream, FeatureCollection features, int codec, CompressionLevel gzipLevel)
+    internal static void Write(Stream stream, FeatureCollection features, int codec, CompressionLevel gzipLevel, ProgressReporter? progress = null)
     {
         var propertyColumns = BuildColumns(features);
         var rowCount = features.Count;
@@ -349,6 +356,9 @@ public static class GeoParquet
         var columns = new List<ParquetMetadata.Column>();
         if (rowCount > 0)
         {
+            // Report per-feature progress while writing the geometry column — it's the one column
+            // always present and walked exactly once over every feature, so the count lines up with
+            // FeatureTotal. The property columns re-walk the same features, so they pass null.
             columns.Add(WriteColumn(
                 memory,
                 geometryColumnName,
@@ -356,7 +366,8 @@ public static class GeoParquet
                 features,
                 feature => feature.Geometry is { } geometry ? Wkb.ToBytes(geometry) : null,
                 codec,
-                gzipLevel));
+                gzipLevel,
+                progress));
 
             foreach (var (name, type) in propertyColumns)
             {
@@ -414,7 +425,8 @@ public static class GeoParquet
         FeatureCollection features,
         Func<Feature, object?> selector,
         int codec,
-        CompressionLevel gzipLevel)
+        CompressionLevel gzipLevel,
+        ProgressReporter? progress = null)
     {
         var rowCount = features.Count;
         var definitions = new int[rowCount];
@@ -426,6 +438,7 @@ public static class GeoParquet
         var row = 0;
         foreach (var feature in features)
         {
+            progress?.Feature();
             var value = selector(feature);
             if (value == null)
             {
