@@ -59,8 +59,20 @@ public sealed class RenderOptions
     /// <summary>Fill color for polygons (typically semi-transparent).</summary>
     public Rgba Fill { get; set; } = new(70, 130, 180, 120);
 
+    /// <summary>
+    /// Base outline width in pixels for lines, polygon edges and point markers. This is the
+    /// magnitude, independent of <see cref="StrokeAutoScale"/>: with autoscale on (the default) it
+    /// is the weight at the country-scale anchor (implicit zoom ~10) and the rendered width scales
+    /// with zoom from there, so raising it gives heavier borders at every scale while still thinning
+    /// for thumbnails; with autoscale off it is the fixed pixel width at every scale.
+    /// </summary>
     public int StrokeWidth { get; set; } = 2;
 
+    /// <summary>
+    /// Base radius in pixels for point/multi-point markers. Like <see cref="StrokeWidth"/> this is
+    /// the base magnitude — <see cref="StrokeAutoScale"/> (on by default) scales it with zoom off
+    /// this anchor value; with autoscale off it is the fixed pixel radius at every scale.
+    /// </summary>
     public int PointRadius { get; set; } = 4;
 
     /// <summary>
