@@ -14,9 +14,15 @@ build_script:
 - pwsh: dotnet tool install --global coverlet.console --version 10.0.1
 # Run the test suite (TUnit executable) under Coverlet, emitting a trx report and Cobertura coverage.
 # Coverlet returns non-zero when the wrapped test run fails, so check $LASTEXITCODE to fail the build.
+# On CI, ProjectDefaults sets ContinuousIntegrationBuild=true (APPVEYOR), so the SDK's default SourceLink
+# rewrites embedded-PDB source paths to deterministic forms that don't exist on disk. Coverlet's default
+# "MissingAll" gate would then drop GeoConvert + GeoConvert.Cli (their local source is "missing"), leaving
+# only the test/third-party assemblies and an empty shipped-source report. --exclude-assemblies-without-sources
+# None keeps those modules instrumented; --use-source-link maps the deterministic paths to raw.githubusercontent
+# URLs (which contain /src/, so coverage-check.ps1 still scopes them correctly).
 - pwsh: |
     $env:PATH = "$env:USERPROFILE\.dotnet\tools;$env:PATH"
-    coverlet src/Tests/bin/Release/net11.0 --target dotnet --targetargs "src/Tests/bin/Release/net11.0/Tests.dll --no-ansi --no-progress --report-trx --report-trx-filename unit.trx --results-directory TestResults" --format cobertura --output TestResults/unit.cobertura.xml
+    coverlet src/Tests/bin/Release/net11.0 --target dotnet --targetargs "src/Tests/bin/Release/net11.0/Tests.dll --no-ansi --no-progress --report-trx --report-trx-filename unit.trx --results-directory TestResults" --format cobertura --output TestResults/unit.cobertura.xml --exclude-assemblies-without-sources None --use-source-link
     if ($LASTEXITCODE -ne 0) { throw "Test run / coverage failed (exit code $LASTEXITCODE)." }
 # Fail the build unless the shipped source is fully covered
 - pwsh: ./src/coverage-check.ps1 -Report TestResults/unit.cobertura.xml -Threshold 100
