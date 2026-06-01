@@ -164,8 +164,9 @@
     }
 
     // Rendering a large map is CPU-bound and synchronous on the WASM thread, so it freezes the UI.
-    // Flip the busy flag and yield once (Task.Delay lets the browser paint the spinner) before the
-    // blocking render, so the user sees progress instead of a stalled page.
+    // Flip the busy flag, then wait for the browser to actually paint the spinner (appInfo.paintThen)
+    // before the blocking render, so the user sees progress instead of a stalled page. A bare
+    // Task.Delay(1) flushes the DOM but the render starts before the spinner frame is composited.
     async Task RefreshPreviewAsync()
     {
         if (features is null || features.Count == 0)
@@ -177,7 +178,7 @@
         isBusy = true;
         isRendering = true;
         StateHasChanged();
-        await Task.Delay(1);
+        await JsRuntime.InvokeVoidAsync("appInfo.paintThen");
         try
         {
             previewDataUrl = RenderPreview(features);
@@ -240,7 +241,7 @@
 
         isBusy = true;
         StateHasChanged();
-        await Task.Delay(1);
+        await JsRuntime.InvokeVoidAsync("appInfo.paintThen");
         try
         {
             var bytes = info.Format == GeoFormat.Png
