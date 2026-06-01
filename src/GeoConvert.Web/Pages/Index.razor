@@ -1,0 +1,174 @@
+@page "/"
+@inject FileDownloadService FileDownloadService
+@inject IJSRuntime JsRuntime
+
+<PageTitle>GeoConvert — Map Format Converter</PageTitle>
+
+<div class="converter">
+    <div class="upload-panel">
+        <label class="file-drop" for="map-file">
+            <span class="file-drop-icon">🗺️</span>
+            <span class="file-drop-text">
+                @if (sourceName is null)
+                {
+                    <strong>Choose a map file</strong>
+                    <span>GeoJSON, TopoJSON, FlatGeobuf, KML, KMZ, GPX, WKT, WKB, CSV or GeoParquet</span>
+                }
+                else
+                {
+                    <strong>@sourceName</strong>
+                    <span>@sourceFormat?.DisplayName · @featureCount feature@(featureCount == 1 ? "" : "s")</span>
+                }
+            </span>
+            <InputFile id="map-file" OnChange="OnFileSelected" class="file-input" />
+        </label>
+    </div>
+
+    @if (errorMessage is not null)
+    {
+        <ErrorPanel Message="@errorMessage" IssueUrl="@issueUrl" />
+    }
+
+    @if (features is not null)
+    {
+        @if (previewDataUrl is not null)
+        {
+            <div class="preview">
+                <img src="@previewDataUrl" alt="Rendered preview of the uploaded map" />
+            </div>
+        }
+
+        <div class="convert-panel">
+            <FormatSelector Label="Convert to"
+                            Formats="ConversionService.WritableFormats"
+                            Selected="target"
+                            SelectedChanged="OnTargetChanged" />
+            <button class="convert-btn" @onclick="Download" disabled="@(features.Count == 0)">
+                Download @TargetInfo?.DisplayName
+            </button>
+        </div>
+    }
+</div>
+
+@code {
+    const long MaxFileSize = 50 * 1024 * 1024;
+
+    byte[]? sourceBytes;
+    string? sourceName;
+    FormatInfo? sourceFormat;
+    FeatureCollection? features;
+    int featureCount;
+    string? previewDataUrl;
+    string? errorMessage;
+    string? issueUrl;
+    string? userAgent;
+    GeoFormat target = GeoFormat.Kml;
+
+    FormatInfo? TargetInfo => ConversionService.Find(target);
+
+    protected override async Task OnInitializedAsync() =>
+        userAgent = await JsRuntime.InvokeAsync<string?>("appInfo.userAgent");
+
+    async Task OnFileSelected(InputFileChangeEventArgs args)
+    {
+        Reset();
+
+        var file = args.File;
+        sourceName = file.Name;
+
+        var detected = ConversionService.DetectReadable(file.Name);
+        if (detected is null)
+        {
+            // User error rather than a bug, so no "report an issue" prompt.
+            errorMessage = $"Can't read '{file.Name}'. Upload a GeoJSON, TopoJSON, FlatGeobuf, KML, KMZ, GPX, WKT, WKB, CSV or GeoParquet file.";
+            return;
+        }
+
+        sourceFormat = detected;
+
+        try
+        {
+            using var stream = file.OpenReadStream(MaxFileSize);
+            using var memory = new MemoryStream();
+            await stream.CopyToAsync(memory);
+            sourceBytes = memory.ToArray();
+
+            features = ConversionService.Read(sourceBytes, detected.Format);
+            featureCount = features.Count;
+            previewDataUrl = RenderPreview(features);
+        }
+        catch (Exception exception)
+        {
+            ReportError("Could not read the map", exception);
+            features = null;
+        }
+    }
+
+    static string? RenderPreview(FeatureCollection collection)
+    {
+        if (collection.Count == 0)
+        {
+            return null;
+        }
+
+        try
+        {
+            var png = ConversionService.Write(collection, GeoFormat.Png);
+            return $"data:image/png;base64,{Convert.ToBase64String(png)}";
+        }
+        catch
+        {
+            // Preview is best-effort; an unrenderable map (e.g. no spatial extent) just shows no image.
+            return null;
+        }
+    }
+
+    Task OnTargetChanged(GeoFormat format)
+    {
+        target = format;
+        return Task.CompletedTask;
+    }
+
+    async Task Download()
+    {
+        if (features is null || sourceFormat is null)
+        {
+            return;
+        }
+
+        var info = TargetInfo;
+        if (info is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var bytes = ConversionService.Write(features, info.Format);
+            var baseName = Path.GetFileNameWithoutExtension(sourceName) ?? "map";
+            await FileDownloadService.DownloadAsync($"{baseName}{info.Extension}", info.ContentType, bytes);
+        }
+        catch (Exception exception)
+        {
+            ReportError($"Could not convert to {info.DisplayName}", exception);
+        }
+    }
+
+    void ReportError(string action, Exception exception)
+    {
+        errorMessage = $"{action}: {exception.Message}";
+        issueUrl = IssueLauncher.ForException(action, exception, AppInfo.Environment(userAgent));
+    }
+
+    void Reset()
+    {
+        errorMessage = null;
+        issueUrl = null;
+        sourceBytes = null;
+        sourceName = null;
+        sourceFormat = null;
+        features = null;
+        featureCount = 0;
+        previewDataUrl = null;
+    }
+}
