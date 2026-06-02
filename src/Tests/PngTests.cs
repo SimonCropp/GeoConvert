@@ -210,6 +210,41 @@ public class PngTests
     }
 
     [Test]
+    public Task Render_Afghanistan()
+    {
+        // A real country map the way a consumer (MapBundle) ships one: the border polygon filled
+        // with an autoscaled outline, the populated-places layer stacked on top as labelled point
+        // markers. Country scale exercises the whole render stack at once — StrokeAutoScale on the
+        // fill/stroke, the gentler point-marker autoscale (city dots stay legible at this zoom
+        // instead of collapsing to near-invisible specks), and the point-label ring placement.
+        // Pinned to Lambert, the regional projection Auto resolves to for this bounds, so the
+        // snapshot is stable against future tweaks to the Auto heuristic.
+        var borders = GeoConverter.Read(ProjectFiles.afghanistan_borders_geojson);
+        var cities = GeoConverter.Read(ProjectFiles.afghanistan_cities_geojson);
+
+        var png = MapRenderer.RenderPng(
+            [borders, cities],
+            new()
+            {
+                Bounds = borders.GetBounds(),
+                Width = 1024,
+                Projection = MapProjection.Lambert,
+                Fill = new(232, 224, 206),
+                Stroke = new(120, 100, 70),
+                // Only the city points carry labels; the border polygon has no name to render.
+                Label = feature => feature.Geometry is Point && feature.Properties.TryGetValue("name", out var value)
+                    ? value as string
+                    : null,
+                // Dark dots for the cities; the border keeps the default brown outline above.
+                LayerStyle = layer => ReferenceEquals(layer, cities)
+                    ? new() { Stroke = new(60, 60, 60) }
+                    : null,
+            });
+
+        return Verify(png, "png");
+    }
+
+    [Test]
     public async Task WebMercator_stretches_high_latitudes_relative_to_plate_carree()
     {
         // Same bounds, derived height: in Web Mercator a 0–80° lat strip projects to roughly 14× the

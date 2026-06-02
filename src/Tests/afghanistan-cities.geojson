@@ -1,0 +1,467 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          63.1332996,
+          34.9830001
+        ]
+      },
+      "properties": {
+        "name": "Qala i Naw",
+        "population": 2997
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          65.2500006,
+          34.5167011
+        ]
+      },
+      "properties": {
+        "name": "Chaghcharan",
+        "population": 15000
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          64.3599996,
+          31.582998
+        ]
+      },
+      "properties": {
+        "name": "Lashkar Gah",
+        "population": 201546
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          61.8869975,
+          31.1120011
+        ]
+      },
+      "properties": {
+        "name": "Zaranj",
+        "population": 49851
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          65.8666986,
+          32.6332982
+        ]
+      },
+      "properties": {
+        "name": "Tarin Kowt",
+        "population": 10000
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          68.4167045,
+          32.8500002
+        ]
+      },
+      "properties": {
+        "name": "Zareh Sharan",
+        "population": 13737
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          71.1500046,
+          34.866
+        ]
+      },
+      "properties": {
+        "name": "Asadabad",
+        "population": 48400
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          69.5400036,
+          36.729999
+        ]
+      },
+      "properties": {
+        "name": "Taloqan",
+        "population": 64256
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          69.3333006,
+          35.0166961
+        ]
+      },
+      "properties": {
+        "name": "Mahmud-E Eraqi",
+        "population": 7407
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          70.1667005,
+          34.65
+        ]
+      },
+      "properties": {
+        "name": "Mehtar Lam",
+        "population": 17345
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          68.9667035,
+          33.9667021
+        ]
+      },
+      "properties": {
+        "name": "Baraki Barak",
+        "population": 22305
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          68.0400005,
+          36.2610001
+        ]
+      },
+      "properties": {
+        "name": "Aybak",
+        "population": 24000
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          68.7999966,
+          34.4500021
+        ]
+      },
+      "properties": {
+        "name": "Mayda Shahr",
+        "population": 35008
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          62.5917761,
+          34.4867696
+        ]
+      },
+      "properties": {
+        "name": "Karokh",
+        "population": 17484
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          65.7383024,
+          36.6579808
+        ]
+      },
+      "properties": {
+        "name": "Sheberghan",
+        "population": 93241
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          68.7011189,
+          35.951073
+        ]
+      },
+      "properties": {
+        "name": "Pol-e Khomri",
+        "population": 56369
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          66.8997302,
+          36.7501199
+        ]
+      },
+      "properties": {
+        "name": "Balkh",
+        "population": 179969
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          64.7700927,
+          35.9302216
+        ]
+      },
+      "properties": {
+        "name": "Meymaneh",
+        "population": 199795
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          65.1014937,
+          36.9316592
+        ]
+      },
+      "properties": {
+        "name": "Andkhvoy",
+        "population": 71730
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          66.8867594,
+          32.1122634
+        ]
+      },
+      "properties": {
+        "name": "Qalat",
+        "population": 12191
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          68.4178287,
+          33.5633118
+        ]
+      },
+      "properties": {
+        "name": "Ghazni",
+        "population": 141000
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          70.5792472,
+          37.1297608
+        ]
+      },
+      "properties": {
+        "name": "Feyzabad",
+        "population": 64704
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          68.8725297,
+          36.7279507
+        ]
+      },
+      "properties": {
+        "name": "Kondoz",
+        "population": 259809
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          70.4361035,
+          34.4415269
+        ]
+      },
+      "properties": {
+        "name": "Jalalabad",
+        "population": 597971
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          69.1679121,
+          35.0182617
+        ]
+      },
+      "properties": {
+        "name": "Charikar",
+        "population": 53676
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          69.2146276,
+          33.6000537
+        ]
+      },
+      "properties": {
+        "name": "Gardiz",
+        "population": 103601
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          67.82273157485362,
+          34.81333703893491
+        ]
+      },
+      "properties": {
+        "name": "Bamian",
+        "population": 61863
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          68.6992586,
+          36.1393303
+        ]
+      },
+      "properties": {
+        "name": "Baghlan",
+        "population": 218748
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          62.0968192,
+          32.3917296
+        ]
+      },
+      "properties": {
+        "name": "Farah",
+        "population": 73647
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          62.169993,
+          34.3300092
+        ]
+      },
+      "properties": {
+        "name": "Herat",
+        "population": 481009
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          67.100028,
+          36.6999937
+        ]
+      },
+      "properties": {
+        "name": "Mazar-i-Sharif",
+        "population": 458151
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          65.6949458,
+          31.6100202
+        ]
+      },
+      "properties": {
+        "name": "Kandahar",
+        "population": 715542
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          69.1813142,
+          34.5186361
+        ]
+      },
+      "properties": {
+        "name": "Kabul",
+        "population": 3277000
+      }
+    }
+  ]
+}

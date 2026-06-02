@@ -209,14 +209,25 @@ public static class MapRenderer
 
     // Collapses the user-facing LayerStyle (any subset of overrides) into the four concrete values the
     // rasterizer needs, falling back to RenderOptions defaults for each null property independently.
-    // The strokeMultiplier multiplies both StrokeWidth and PointRadius — it's 1.0 unless
-    // StrokeAutoScale is on, in which case it follows the zoom-derived factor from Render().
+    // StrokeWidth scales by the full zoom-derived strokeMultiplier; PointRadius scales by the gentler
+    // PointMultiplier (see remarks there). Both are 1.0 unless StrokeAutoScale is on.
     static ResolvedStyle Resolve(LayerStyle? overrides, RenderOptions options, double strokeMultiplier) =>
         new(
             overrides?.Stroke ?? options.Stroke,
             overrides?.Fill ?? options.Fill,
             (overrides?.StrokeWidth ?? options.StrokeWidth) * strokeMultiplier,
-            (overrides?.PointRadius ?? options.PointRadius) * strokeMultiplier);
+            (overrides?.PointRadius ?? options.PointRadius) * PointMultiplier(strokeMultiplier));
+
+    // Point markers scale more gently than line strokes. The √2 stroke ramp is deliberately steep so
+    // dense borders thin to faint hairlines at thumbnail/world scale (the whole point of the curve),
+    // but applying that same ramp to point radii shrinks city/town dots to near-invisible specks at
+    // country scale — where a dot still has to read as a dot. So split the difference: average the
+    // stroke multiplier with 1.0 (the un-scaled, fixed-pixel size), pulling the marker halfway back
+    // toward its base radius. At strokeMultiplier 1 (autoscale off, or exactly at the anchor zoom)
+    // this is a no-op, so fixed-pixel output stays bit-identical; below the anchor dots stay legible
+    // instead of vanishing, above it they still grow, just less aggressively than the borders.
+    static double PointMultiplier(double strokeMultiplier) =>
+        (strokeMultiplier + 1) / 2;
 
     // Stroke-width multiplier curve. The multiplier halves for every two implicit zoom levels below
     // the country-scale anchor and doubles for every two above it — base √2 per zoom level. That's a
