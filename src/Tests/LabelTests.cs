@@ -1188,6 +1188,26 @@ public class LabelTests
     }
 
     [Test]
+    public async Task Equal_priority_labels_render_independent_of_input_order()
+    {
+        // Two point labels colliding at the same anchor, both at the default (equal) priority — so
+        // the only thing deciding which one wins the preferred Imhof slot is the label sort order.
+        // Rendering the same two features in opposite input orders must produce byte-identical PNGs:
+        // label placement has to be a function of the features, not of the order a caller happened
+        // to enumerate them in. Before the deterministic tiebreaker the unstable List.Sort left
+        // equal-priority ties in input order, so reversing the input swapped the slot winner and the
+        // two renders diverged — exactly the non-determinism a caller hits when feature order comes
+        // from a per-process-randomised HashSet enumeration.
+        var alpha = new Feature(new Point(0, 0), new Dictionary<string, object?> { ["name"] = "AAA" });
+        var beta = new Feature(new Point(0, 0), new Dictionary<string, object?> { ["name"] = "BBB" });
+
+        var forward = MapRenderer.RenderPng(new FeatureCollection { alpha, beta }, LabelOptions());
+        var reversed = MapRenderer.RenderPng(new FeatureCollection { beta, alpha }, LabelOptions());
+
+        await Assert.That(forward.SequenceEqual(reversed)).IsTrue();
+    }
+
+    [Test]
     public async Task Layer_label_priority_overrides_options_default()
     {
         // Priority callback on a LayerStyle takes precedence over the RenderOptions-level one for

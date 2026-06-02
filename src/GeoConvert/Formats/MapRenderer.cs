@@ -360,12 +360,19 @@ public static class MapRenderer
             // property (population, label-rank, etc.) or capture a lookup table in the closure.
             // Without one, fall back to the default geometric rule: polygon area / line length /
             // points last, so on overlap the bigger feature anchors its label first. Greedy
-            // collision then drops the loser. List.Sort is a stable sort in .NET, so ties
-            // preserve file order — important so a uniformly-priority layer doesn't get its
-            // labels shuffled in ways the caller didn't ask for.
-            var priorityFn = style.Priority ?? (Func<Feature, double>)(f => LabelPriority(f.Geometry));
-            var sorted = new List<Feature>(layer.Features);
-            sorted.Sort((a, b) => priorityFn(b).CompareTo(priorityFn(a)));
+            // collision then drops the loser.
+            //
+            // Ties (equal priority) are broken by label text rather than by input order. Relying on
+            // a stable sort to "preserve file order" only yields a deterministic image if the caller
+            // always supplies features in the same order — and they often don't: feature order
+            // routinely comes from HashSet/Dictionary enumeration, which .NET randomises per process.
+            // Breaking ties on a value intrinsic to the feature makes placement a pure function of
+            // the features, so the same map renders byte-identically regardless of enumeration order.
+            var label = style.Label;
+            var priorityFn = style.Priority ?? (Func<Feature, double>)(_ => LabelPriority(_.Geometry));
+            var sorted = layer.Features
+                .OrderByDescending(priorityFn)
+                .ThenBy(_ => label(_) ?? "", StringComparer.Ordinal);
             foreach (var feature in sorted)
             {
                 if (feature.Geometry is not { } geometry)
