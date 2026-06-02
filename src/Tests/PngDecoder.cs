@@ -4,14 +4,14 @@
 // supported scenario we'd want a hardened decoder instead.
 static class PngDecoder
 {
-    const int Bpp = 4;
+    const int bpp = 4;
 
     // Given the inflated IDAT stream (filter-byte-prefixed rows) and the image dimensions,
     // reverses each row's filter and produces a flat width*height*bpp RGBA byte buffer.
     public static byte[] Reconstruct(byte[] rawBytes, int width, int height)
     {
-        var stride = width * Bpp;
-        var rgba = new byte[width * height * Bpp];
+        var stride = width * bpp;
+        var rgba = new byte[width * height * bpp];
 
         for (var y = 0; y < height; y++)
         {
@@ -28,14 +28,14 @@ static class PngDecoder
                     break;
                 case 1:
                     // Sub: add left neighbour (byte bpp positions earlier in this row).
-                    for (var i = 0; i < Bpp; i++)
+                    for (var i = 0; i < bpp; i++)
                     {
                         rgba[outStart + i] = rawBytes[filteredStart + i];
                     }
 
-                    for (var i = Bpp; i < stride; i++)
+                    for (var i = bpp; i < stride; i++)
                     {
-                        rgba[outStart + i] = (byte)(rawBytes[filteredStart + i] + rgba[outStart + i - Bpp]);
+                        rgba[outStart + i] = (byte)(rawBytes[filteredStart + i] + rgba[outStart + i - bpp]);
                     }
 
                     break;
@@ -50,15 +50,15 @@ static class PngDecoder
                     break;
                 case 3:
                     // Average: add floor((left + above) / 2). Out-of-bounds neighbours treated as 0.
-                    for (var i = 0; i < Bpp; i++)
+                    for (var i = 0; i < bpp; i++)
                     {
                         var above = y > 0 ? rgba[prevOutStart + i] : 0;
                         rgba[outStart + i] = (byte)(rawBytes[filteredStart + i] + above / 2);
                     }
 
-                    for (var i = Bpp; i < stride; i++)
+                    for (var i = bpp; i < stride; i++)
                     {
-                        int left = rgba[outStart + i - Bpp];
+                        int left = rgba[outStart + i - bpp];
                         var above = y > 0 ? rgba[prevOutStart + i] : 0;
                         rgba[outStart + i] = (byte)(rawBytes[filteredStart + i] + (left + above) / 2);
                     }
@@ -70,9 +70,9 @@ static class PngDecoder
                     // call in Png.cs.
                     for (var i = 0; i < stride; i++)
                     {
-                        var left = i >= Bpp ? rgba[outStart + i - Bpp] : 0;
+                        var left = i >= bpp ? rgba[outStart + i - bpp] : 0;
                         var above = y > 0 ? rgba[prevOutStart + i] : 0;
-                        var upperLeft = y > 0 && i >= Bpp ? rgba[prevOutStart + i - Bpp] : 0;
+                        var upperLeft = y > 0 && i >= bpp ? rgba[prevOutStart + i - bpp] : 0;
                         rgba[outStart + i] = (byte)(rawBytes[filteredStart + i] + PaethPredictor(left, above, upperLeft));
                     }
 

@@ -41,40 +41,42 @@ public static class Kml
     // Reads the children of an element (<kml>, <Document>, or <Folder>), populating `target` with
     // its placemarks, folders, name and description.
     static void ScanContainer(XmlReader reader, FeatureCollection target, bool isRoot, ProgressReporter? progress) =>
-        Xml.ReadChildren(reader, () =>
-        {
-            switch (reader.LocalName)
+        Xml.ReadChildren(
+            reader,
+            () =>
             {
-                case "Placemark":
-                    target.Add(ReadPlacemark(reader));
-                    progress?.Feature();
-                    break;
-                case "Folder":
-                    target.Children.Add(ReadContainer(reader, progress));
-                    break;
-                case "Document":
-                    if (isRoot)
-                    {
-                        // First Document under <kml> is the root layer itself, not a child.
-                        ScanContainer(reader, target, isRoot: false, progress);
-                    }
-                    else
-                    {
+                switch (reader.LocalName)
+                {
+                    case "Placemark":
+                        target.Add(ReadPlacemark(reader));
+                        progress?.Feature();
+                        break;
+                    case "Folder":
                         target.Children.Add(ReadContainer(reader, progress));
-                    }
+                        break;
+                    case "Document":
+                        if (isRoot)
+                        {
+                            // First Document under <kml> is the root layer itself, not a child.
+                            ScanContainer(reader, target, isRoot: false, progress);
+                        }
+                        else
+                        {
+                            target.Children.Add(ReadContainer(reader, progress));
+                        }
 
-                    break;
-                case "name":
-                    target.Name = reader.ReadElementContentAsString();
-                    break;
-                case "description":
-                    target.Properties["description"] = reader.ReadElementContentAsString();
-                    break;
-                default:
-                    reader.Skip();
-                    break;
-            }
-        });
+                        break;
+                    case "name":
+                        target.Name = reader.ReadElementContentAsString();
+                        break;
+                    case "description":
+                        target.Properties["description"] = reader.ReadElementContentAsString();
+                        break;
+                    default:
+                        reader.Skip();
+                        break;
+                }
+            });
 
     static FeatureCollection ReadContainer(XmlReader reader, ProgressReporter? progress)
     {
@@ -86,33 +88,35 @@ public static class Kml
     static Feature ReadPlacemark(XmlReader reader)
     {
         var feature = new Feature();
-        Xml.ReadChildren(reader, () =>
-        {
-            switch (reader.LocalName)
+        Xml.ReadChildren(
+            reader,
+            () =>
             {
-                case "name":
-                    feature.Properties["name"] = reader.ReadElementContentAsString();
-                    break;
-                case "description":
-                    feature.Properties["description"] = reader.ReadElementContentAsString();
-                    break;
-                case "ExtendedData":
-                    ReadExtendedData(reader, feature);
-                    break;
-                case "Point":
-                case "LineString":
-                case "LinearRing":
-                case "Polygon":
-                case "MultiGeometry":
-                    var geometry = ReadGeometry(reader);
-                    // first geometry wins
-                    feature.Geometry ??= geometry;
-                    break;
-                default:
-                    reader.Skip();
-                    break;
-            }
-        });
+                switch (reader.LocalName)
+                {
+                    case "name":
+                        feature.Properties["name"] = reader.ReadElementContentAsString();
+                        break;
+                    case "description":
+                        feature.Properties["description"] = reader.ReadElementContentAsString();
+                        break;
+                    case "ExtendedData":
+                        ReadExtendedData(reader, feature);
+                        break;
+                    case "Point":
+                    case "LineString":
+                    case "LinearRing":
+                    case "Polygon":
+                    case "MultiGeometry":
+                        var geometry = ReadGeometry(reader);
+                        // first geometry wins
+                        feature.Geometry ??= geometry;
+                        break;
+                    default:
+                        reader.Skip();
+                        break;
+                }
+            });
 
         return feature;
     }
@@ -460,11 +464,14 @@ public static class Kml
             builder.Append(position.X.ToString("R", CultureInfo.InvariantCulture));
             builder.Append(',');
             builder.Append(position.Y.ToString("R", CultureInfo.InvariantCulture));
-            if (position.Z is { } z)
+
+            if (position.Z is not { } z)
             {
-                builder.Append(',');
-                builder.Append(z.ToString("R", CultureInfo.InvariantCulture));
+                continue;
             }
+
+            builder.Append(',');
+            builder.Append(z.ToString("R", CultureInfo.InvariantCulture));
         }
 
         writer.WriteElementString("coordinates", ns, builder.ToString());

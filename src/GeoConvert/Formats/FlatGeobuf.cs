@@ -44,7 +44,7 @@ public static class FlatGeobuf
         // for no benefit.
         using var memory = new MemoryStream();
         stream.CopyTo(memory);
-        var length = (int)memory.Length;
+        var length = (int) memory.Length;
         var data = memory.GetBuffer();
 
         if (length < 8 ||
@@ -188,13 +188,14 @@ public static class FlatGeobuf
         var start = 0;
         for (var i = 0; i < endsLength; i++)
         {
-            var end = (int)table.GetUIntElement(geometryEnds, i);
+            var end = (int) table.GetUIntElement(geometryEnds, i);
             var ring = new List<Position>(end - start);
             for (var p = start; p < end; p++)
             {
-                ring.Add(new(
-                    table.GetDoubleElement(geometryXy, p * 2),
-                    table.GetDoubleElement(geometryXy, p * 2 + 1)));
+                ring.Add(
+                    new(
+                        table.GetDoubleElement(geometryXy, p * 2),
+                        table.GetDoubleElement(geometryXy, p * 2 + 1)));
             }
 
             rings.Add(ring);
@@ -217,7 +218,7 @@ public static class FlatGeobuf
                 columnBool => reader.ReadByte() != 0,
                 columnLong => reader.ReadInt64(),
                 columnDouble => reader.ReadDouble(),
-                _ => Encoding.UTF8.GetString(reader.ReadBytes((int)reader.ReadUInt32())),
+                _ => Encoding.UTF8.GetString(reader.ReadBytes((int) reader.ReadUInt32())),
             };
         }
     }
@@ -234,14 +235,14 @@ public static class FlatGeobuf
 
         var size = BinaryPrimitives.ReadUInt32LittleEndian(data.AsSpan(position, 4));
         var bufferStart = position + 4;
-        if (bufferStart + size > (uint)length)
+        if (bufferStart + size > (uint) length)
         {
             throw new IndexOutOfRangeException();
         }
 
         var rootOffset = BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(bufferStart, 4));
         var table = new FlatBufferTable(data, bufferStart + rootOffset);
-        position = bufferStart + (int)size;
+        position = bufferStart + (int) size;
         return table;
     }
 
@@ -249,7 +250,7 @@ public static class FlatGeobuf
     {
         // 4 doubles (bbox) + 1 ulong (offset)
         const int nodeItemSize = 40;
-        var size = nodeSize < 2 ? (ushort)2 : nodeSize;
+        var size = nodeSize < 2 ? (ushort) 2 : nodeSize;
         ulong nodes = 0;
         var levelCount = featureCount;
         while (true)
@@ -263,7 +264,7 @@ public static class FlatGeobuf
             levelCount = (levelCount + size - 1) / size;
         }
 
-        return (int)(nodes * nodeItemSize);
+        return (int) (nodes * nodeItemSize);
     }
 
     public static void Write(Stream stream, FeatureCollection features) =>
@@ -309,7 +310,7 @@ public static class FlatGeobuf
         builder.AddOffset(headerEnvelope, envelope);
         builder.AddByte(headerGeometryType, CommonGeometryType(features), 0);
         builder.AddOffset(headerColumns, columnsVector);
-        builder.AddULong(headerFeaturesCount, (ulong)features.Count, 0);
+        builder.AddULong(headerFeaturesCount, (ulong) features.Count, 0);
         // 0 => no spatial index
         builder.AddUShort(headerIndexNodeSize, 0, 16);
         builder.FinishSizePrefixed(builder.EndTable(), stream);
@@ -325,7 +326,7 @@ public static class FlatGeobuf
         EncodeProperties(feature, columns, propertyBuffer);
         if (propertyBuffer.Length > 0)
         {
-            propertiesOffset = builder.CreateByteVector(propertyBuffer.GetBuffer().AsSpan(0, (int)propertyBuffer.Length));
+            propertiesOffset = builder.CreateByteVector(propertyBuffer.GetBuffer().AsSpan(0, (int) propertyBuffer.Length));
         }
 
         builder.StartTable(3);
@@ -419,7 +420,7 @@ public static class FlatGeobuf
             var count = 0u;
             for (var i = 0; i < rings.Count; i++)
             {
-                count += (uint)rings[i].Count;
+                count += (uint) rings[i].Count;
                 ends[i] = count;
             }
 
@@ -454,11 +455,11 @@ public static class FlatGeobuf
                 continue;
             }
 
-            BinaryPrimitives.WriteUInt16LittleEndian(scratch, (ushort)i);
+            BinaryPrimitives.WriteUInt16LittleEndian(scratch, (ushort) i);
             switch (columns[i].Type)
             {
                 case columnBool:
-                    scratch[2] = (bool)value ? (byte)1 : (byte)0;
+                    scratch[2] = (bool) value ? (byte) 1 : (byte) 0;
                     destination.Write(scratch[..3]);
                     break;
                 case columnLong:
@@ -472,7 +473,7 @@ public static class FlatGeobuf
                 default:
                     var text = Scalars.Format(value);
                     var byteCount = Encoding.UTF8.GetByteCount(text);
-                    BinaryPrimitives.WriteUInt32LittleEndian(scratch[2..], (uint)byteCount);
+                    BinaryPrimitives.WriteUInt32LittleEndian(scratch[2..], (uint) byteCount);
                     destination.Write(scratch[..6]);
                     // ArrayPool keeps the allocation off the per-feature path while staying inside the
                     // no-3rd-party-deps rule. stackalloc here would be in a loop (CA2014).
@@ -551,7 +552,7 @@ public static class FlatGeobuf
                 continue;
             }
 
-            var fgbType = (byte)((int)geometry.Type + 1);
+            var fgbType = (byte) ((int) geometry.Type + 1);
             if (common is { } existing && existing != fgbType)
             {
                 // Unknown: each feature carries its own type

@@ -288,8 +288,8 @@ public class PngTests
             Projection = MapProjection.PlateCarree,
         };
 
-        var (landscapeWidth, landscapeHeight, _) = Decode(MapRenderer.RenderPng(features, Build(new Envelope(0, 0, 80, 10))));
-        var (portraitWidth, portraitHeight, _) = Decode(MapRenderer.RenderPng(features, Build(new Envelope(0, 0, 10, 80))));
+        var (landscapeWidth, landscapeHeight, _) = Decode(MapRenderer.RenderPng(features, Build(new(0, 0, 80, 10))));
+        var (portraitWidth, portraitHeight, _) = Decode(MapRenderer.RenderPng(features, Build(new(0, 0, 10, 80))));
 
         await Assert.That(landscapeWidth).IsEqualTo(400);
         await Assert.That(landscapeHeight).IsEqualTo(50);

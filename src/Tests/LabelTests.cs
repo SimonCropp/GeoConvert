@@ -42,7 +42,7 @@ public class LabelTests
         // glyph data covered. Non-space glyphs must each contribute at least one painted pixel;
         // space stays blank.
         var canvas = new Canvas(2400, 40, Rgba.White);
-        var text = new string(Enumerable.Range(0x20, 0x7E - 0x20 + 1).Select(_ => (char)_).ToArray());
+        var text = new string(Enumerable.Range(0x20, 0x7E - 0x20 + 1).Select(_ => (char) _).ToArray());
         StrokeFont.Render(canvas, text, 4, 28, 14, Rgba.Black, halo: null);
 
         var painted = NonBackgroundCount(LogicalPixels(canvas));
@@ -110,14 +110,14 @@ public class LabelTests
         // base letter to confirm the mark dispatched through DrawAt.
         var samples = new (string Bare, string Accented)[]
         {
-            ("a", "à"),   // grave
-            ("e", "é"),   // acute
-            ("o", "ô"),   // circumflex
-            ("n", "ñ"),   // tilde
-            ("u", "ü"),   // diaeresis
-            ("a", "å"),   // ring above
-            ("s", "š"),   // caron
-            ("c", "ç"),   // cedilla
+            ("a", "à"), // grave
+            ("e", "é"), // acute
+            ("o", "ô"), // circumflex
+            ("n", "ñ"), // tilde
+            ("u", "ü"), // diaeresis
+            ("a", "å"), // ring above
+            ("s", "š"), // caron
+            ("c", "ç"), // cedilla
         };
         foreach (var (bare, accented) in samples)
         {
@@ -261,12 +261,12 @@ public class LabelTests
         canvas.FillRect(10, 10, 30, 30, new(100, 150, 200));
 
         var inside = (20 * 40 + 20) * 4;
-        await Assert.That(canvas.Pixels[inside]).IsEqualTo((byte)100);
-        await Assert.That(canvas.Pixels[inside + 1]).IsEqualTo((byte)150);
-        await Assert.That(canvas.Pixels[inside + 2]).IsEqualTo((byte)200);
+        await Assert.That(canvas.Pixels[inside]).IsEqualTo((byte) 100);
+        await Assert.That(canvas.Pixels[inside + 1]).IsEqualTo((byte) 150);
+        await Assert.That(canvas.Pixels[inside + 2]).IsEqualTo((byte) 200);
 
         // Far corner: untouched white.
-        await Assert.That(canvas.Pixels[0]).IsEqualTo((byte)255);
+        await Assert.That(canvas.Pixels[0]).IsEqualTo((byte) 255);
     }
 
     [Test]
@@ -289,7 +289,7 @@ public class LabelTests
 
         // Bottom-right pixel sits inside the requested rect after clipping.
         var corner = (9 * 10 + 9) * 4;
-        await Assert.That(canvas.Pixels[corner]).IsEqualTo((byte)0);
+        await Assert.That(canvas.Pixels[corner]).IsEqualTo((byte) 0);
     }
 
     [Test]
@@ -303,10 +303,10 @@ public class LabelTests
 
         // Centre pixel: full coverage (distance 0 from centre, well under the inner-1.0 boundary).
         var centre = (10 * 20 + 10) * 4;
-        await Assert.That(canvas.Pixels[centre]).IsEqualTo((byte)200);
+        await Assert.That(canvas.Pixels[centre]).IsEqualTo((byte) 200);
 
         // Far corner: untouched white.
-        await Assert.That(canvas.Pixels[0]).IsEqualTo((byte)255);
+        await Assert.That(canvas.Pixels[0]).IsEqualTo((byte) 255);
     }
 
     [Test]
@@ -446,8 +446,8 @@ public class LabelTests
                 if (canvas.Pixels[index] != 255 || canvas.Pixels[index + 1] != 255 || canvas.Pixels[index + 2] != 255)
                 {
                     anyInk = true;
-                    await Assert.That(x).IsGreaterThanOrEqualTo((int)anchorX);
-                    await Assert.That(y).IsLessThan((int)anchorY);
+                    await Assert.That(x).IsGreaterThanOrEqualTo((int) anchorX);
+                    await Assert.That(y).IsLessThan((int) anchorY);
                 }
             }
         }
@@ -477,7 +477,7 @@ public class LabelTests
         var foundLeftOfAnchor = false;
         for (var y = 0; y < canvas.Height && !foundLeftOfAnchor; y++)
         {
-            for (var x = 0; x < (int)anchorX; x++)
+            for (var x = 0; x < (int) anchorX; x++)
             {
                 var index = (y * canvas.Width + x) * 4;
                 if (canvas.Pixels[index] != 255 || canvas.Pixels[index + 1] != 255 || canvas.Pixels[index + 2] != 255)
@@ -505,6 +505,7 @@ public class LabelTests
         {
             labeller.TryPlace("BLOCK_BLOCK_BLOCK", 200, y, 14, Rgba.Black, halo: null);
         }
+
         var initialPlacedCount = labeller.PlacedCount;
 
         var placed = labeller.TryPlace("YY", 200, 200, 14, Rgba.Black, halo: null, pointOffset: 6);
@@ -584,7 +585,10 @@ public class LabelTests
     {
         var features = new FeatureCollection
         {
-            new Feature(new Point(0, 0), new Dictionary<string, object?> { ["name"] = "ORIGIN" }),
+            new Feature(new Point(0, 0), new Dictionary<string, object?>
+            {
+                ["name"] = "ORIGIN"
+            }),
         };
         var options = LabelOptions();
         var pixels = Render(features, options);
@@ -802,7 +806,7 @@ public class LabelTests
     {
         var features = new FeatureCollection
         {
-            new Feature(new Point(0, 0)),  // no "name" property
+            new Feature(new Point(0, 0)), // no "name" property
         };
         var options = LabelOptions();
         var pixels = Render(features, options);
@@ -874,7 +878,10 @@ public class LabelTests
                 new(new Point(0, 0), Props("CHILD")),
             },
         };
-        var root = new FeatureCollection { Name = "root" };
+        var root = new FeatureCollection
+        {
+            Name = "root"
+        };
         root.Children.Add(child);
         var pixels = Render(root, LabelOptions());
         await Assert.That(LabelPixels(pixels)).IsGreaterThan(0);
@@ -930,7 +937,10 @@ public class LabelTests
         {
             new Feature(
                 new Polygon([[new(-80, -40), new(80, -40), new(80, 40), new(-80, 40), new(-80, -40)]]),
-                new Dictionary<string, object?> { ["name"] = "X" }),
+                new Dictionary<string, object?>
+                {
+                    ["name"] = "X"
+                }),
         };
         var options = new RenderOptions
         {
@@ -977,7 +987,10 @@ public class LabelTests
         };
         var options = LabelOptions();
         options.LabelKnockout = null;
-        options.LayerStyle = _ => new() { LabelKnockout = new(255, 200, 0) };
+        options.LayerStyle = _ => new()
+        {
+            LabelKnockout = new(255, 200, 0)
+        };
         var pixels = Render(features, options);
 
         var orangePixels = 0;
@@ -1026,8 +1039,8 @@ public class LabelTests
             new Feature(new Point(40, -40), Props("Århus")),
             new Feature(new Point(80, -60), Props("Plzeň")),
             new Feature(new Point(120, 60), Props("Curaçao")),
-            new Feature(new Point(120, 0), Props("Straße")),       // ß stays '?'
-            new Feature(new Point(160, -40), Props("こんにちは")),  // non-Latin falls back to '?'
+            new Feature(new Point(120, 0), Props("Straße")), // ß stays '?'
+            new Feature(new Point(160, -40), Props("こんにちは")), // non-Latin falls back to '?'
         };
         var options = new RenderOptions
         {
@@ -1138,8 +1151,16 @@ public class LabelTests
         // a regression that drops the callback or reverses the sort diffs visibly.
         var features = new FeatureCollection
         {
-            new Feature(new Point(0, 0), new Dictionary<string, object?> { ["name"] = "FIRST", ["rank"] = 1.0 }),
-            new Feature(new Point(0, 0), new Dictionary<string, object?> { ["name"] = "SECOND", ["rank"] = 99.0 }),
+            new Feature(new Point(0, 0), new Dictionary<string, object?>
+            {
+                ["name"] = "FIRST",
+                ["rank"] = 1.0
+            }),
+            new Feature(new Point(0, 0), new Dictionary<string, object?>
+            {
+                ["name"] = "SECOND",
+                ["rank"] = 99.0
+            }),
         };
         var options = LabelOptions();
         options.LabelPriority = _ => _.Properties.TryGetValue("rank", out var v) ? Convert.ToDouble(v) : 0;
@@ -1171,8 +1192,14 @@ public class LabelTests
         };
         var features = new FeatureCollection
         {
-            new Feature(new Polygon([[new(0, 0), new(1, 0), new(1, 1), new(0, 1), new(0, 0)]]), new Dictionary<string, object?> { ["name"] = "Big" }),
-            new Feature(new Polygon([[new(0, 0), new(1, 0), new(1, 1), new(0, 1), new(0, 0)]]), new Dictionary<string, object?> { ["name"] = "Small" }),
+            new Feature(new Polygon([[new(0, 0), new(1, 0), new(1, 1), new(0, 1), new(0, 0)]]), new Dictionary<string, object?>
+            {
+                ["name"] = "Big"
+            }),
+            new Feature(new Polygon([[new(0, 0), new(1, 0), new(1, 1), new(0, 1), new(0, 0)]]), new Dictionary<string, object?>
+            {
+                ["name"] = "Small"
+            }),
         };
 
         var options = LabelOptions();
@@ -1198,11 +1225,17 @@ public class LabelTests
         // equal-priority ties in input order, so reversing the input swapped the slot winner and the
         // two renders diverged — exactly the non-determinism a caller hits when feature order comes
         // from a per-process-randomised HashSet enumeration.
-        var alpha = new Feature(new Point(0, 0), new Dictionary<string, object?> { ["name"] = "AAA" });
-        var beta = new Feature(new Point(0, 0), new Dictionary<string, object?> { ["name"] = "BBB" });
+        var alpha = new Feature(new Point(0, 0), new Dictionary<string, object?>
+        {
+            ["name"] = "AAA"
+        });
+        var beta = new Feature(new Point(0, 0), new Dictionary<string, object?>
+        {
+            ["name"] = "BBB"
+        });
 
-        var forward = MapRenderer.RenderPng(new FeatureCollection { alpha, beta }, LabelOptions());
-        var reversed = MapRenderer.RenderPng(new FeatureCollection { beta, alpha }, LabelOptions());
+        var forward = MapRenderer.RenderPng([alpha, beta], LabelOptions());
+        var reversed = MapRenderer.RenderPng([beta, alpha], LabelOptions());
 
         await Assert.That(forward.SequenceEqual(reversed)).IsTrue();
     }
@@ -1220,7 +1253,13 @@ public class LabelTests
             Name = "background",
             Features =
             {
-                new(new Point(0, 0), new Dictionary<string, object?> { ["name"] = "L", ["w"] = 5.0 }),
+                new(
+                    new Point(0, 0),
+                    new Dictionary<string, object?>
+                    {
+                        ["name"] = "L",
+                        ["w"] = 5.0
+                    }),
             },
         };
         var upper = new FeatureCollection
@@ -1228,7 +1267,13 @@ public class LabelTests
             Name = "overlay",
             Features =
             {
-                new(new Point(0, 0), new Dictionary<string, object?> { ["name"] = "U", ["w"] = 50.0 }),
+                new(
+                    new Point(0, 0),
+                    new Dictionary<string, object?>
+                    {
+                        ["name"] = "U",
+                        ["w"] = 50.0
+                    }),
             },
         };
 
@@ -1417,8 +1462,15 @@ public class LabelTests
                 Fill = new(240, 235, 220),
                 Stroke = new(120, 120, 120),
                 StrokeWidth = 1,
-                Label = feature =>
-                    feature.Properties.TryGetValue("NAME", out var value) ? value as string : null,
+                Label = _ =>
+                {
+                    if (_.Properties.TryGetValue("NAME", out var value))
+                    {
+                        return value as string;
+                    }
+
+                    return null;
+                },
                 LabelSize = 22,
                 LabelColor = new(30, 30, 30),
                 LabelHalo = new(255, 255, 255, 220),
@@ -1463,7 +1515,9 @@ public class LabelTests
         var count = 0;
         for (var i = 0; i < pixels.Length; i += 4)
         {
-            if (pixels[i] != 255 || pixels[i + 1] != 255 || pixels[i + 2] != 255)
+            if (pixels[i] != 255 ||
+                pixels[i + 1] != 255 ||
+                pixels[i + 2] != 255)
             {
                 count++;
             }
@@ -1484,7 +1538,10 @@ public class LabelTests
         NameProps(name, key);
 
     static Dictionary<string, object?> NameProps(string name, string? key = null) =>
-        new() { [key ?? "name"] = name };
+        new()
+        {
+            [key ?? "name"] = name
+        };
 
     // Mirrors PngTests.Decode — kept local to avoid making PngTests' helpers public for a
     // test-only consumer.

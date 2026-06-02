@@ -53,7 +53,9 @@ public static class Gpx
         };
 
         reader.MoveToContent();
-        Xml.ReadChildren(reader, () =>
+        Xml.ReadChildren(
+            reader,
+            () =>
         {
             switch (reader.LocalName)
             {
@@ -277,7 +279,10 @@ public static class Gpx
     }
 
     static bool IsCategoryLayer(FeatureCollection layer) =>
-        layer.Name is "waypoints" or "routes" or "tracks";
+        layer.Name is
+            "waypoints" or
+            "routes" or
+            "tracks";
 
     static void WriteCategoryChildren(XmlWriter writer, FeatureCollection root, string category, ProgressReporter? progress)
     {
@@ -397,12 +402,14 @@ public static class Gpx
 
     static void WriteMetadata(XmlWriter writer, Feature feature)
     {
-        if (feature.Properties.TryGetValue("name", out var name) && name != null)
+        var properties = feature.Properties;
+
+        if (properties.TryGetValue("name", out var name) && name != null)
         {
             writer.WriteElementString("name", ns, Scalars.Format(name));
         }
 
-        if (feature.Properties.TryGetValue("description", out var description) && description != null)
+        if (properties.TryGetValue("description", out var description) && description != null)
         {
             writer.WriteElementString("desc", ns, Scalars.Format(description));
         }

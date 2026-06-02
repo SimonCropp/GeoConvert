@@ -153,7 +153,14 @@ public static class Csv
             };
             foreach (var key in keys)
             {
-                fields.Add(feature.Properties.TryGetValue(key, out var value) ? Scalars.Format(value) : string.Empty);
+                if (feature.Properties.TryGetValue(key, out var value))
+                {
+                    fields.Add(Scalars.Format(value));
+                }
+                else
+                {
+                    fields.Add(string.Empty);
+                }
             }
 
             AppendRow(builder, fields);
